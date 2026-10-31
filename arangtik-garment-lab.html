@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arangtik · Garment Lab</title>
+  <style>
+    :root {
+      --bg: #f6f6f3;
+      --surface: #ffffff;
+      --surface-soft: #f0f1ed;
+      --text: #20231f;
+      --muted: #777d75;
+      --line: #e4e6df;
+      --green: #176b55;
+      --green-dark: #105440;
+      --green-light: #e7f3ed;
+      --amber: #a36c22;
+      --amber-light: #fff4df;
+      --red: #b84040;
+      --shadow: 0 12px 36px rgba(28, 40, 32, .06);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      padding: 20px clamp(18px, 4vw, 56px); background: rgba(255,255,255,.82);
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px;
+      color: white; background: var(--green); font-size: 19px; font-weight: 800;
+      letter-spacing: -1px;
+    }
+    .brand-title { font-size: 17px; font-weight: 750; letter-spacing: -.35px; }
+    .brand-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .top-tag { padding: 8px 12px; border-radius: 999px; background: var(--green-light); color: var(--green); font-size: 12px; font-weight: 700; white-space: nowrap; }
+    main { max-width: 1180px; margin: 0 auto; padding: 38px 22px 56px; }
+    .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+    .eyebrow { color: var(--green); text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; font-weight: 800; margin-bottom: 10px; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 42px); letter-spacing: -1.45px; line-height: 1.12; }
+    .intro p { margin: 12px 0 0; color: var(--muted); max-width: 610px; font-size: 14px; }
+    .local-pill { color: #656d63; background: var(--surface); border: 1px solid var(--line); padding: 9px 12px; border-radius: 12px; font-size: 12px; white-space: nowrap; }
+    .mode-card, .workspace, .settings-card, .pipeline-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .mode-card { padding: 7px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 22px; }
+    .mode {
+      display: flex; align-items: flex-start; gap: 12px; text-align: left; padding: 16px;
+      border: 1px solid transparent; background: transparent; border-radius: 14px; color: var(--text);
+    }
+    .mode.active { background: var(--green-light); border-color: #cce4d8; }
+    .mode.disabled { cursor: not-allowed; opacity: .64; }
+    .mode-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border-radius: 12px; background: white; border: 1px solid var(--line); color: var(--green); font-size: 18px; }
+    .mode strong { display: block; font-size: 14px; margin: 1px 0 4px; }
+    .mode small { display: block; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .mode-status { display: inline-block; margin-top: 7px; font-size: 10px; letter-spacing: .35px; font-weight: 800; text-transform: uppercase; color: var(--green); }
+    .mode.disabled .mode-status { color: var(--amber); }
+    .workspace { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); overflow: hidden; }
+    .input-panel { padding: clamp(18px, 3vw, 30px); border-right: 1px solid var(--line); }
+    .result-panel { padding: clamp(18px, 3vw, 30px); min-width: 0; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+    .section-head h2 { margin: 0; font-size: 16px; letter-spacing: -.25px; }
+    .step { font-size: 11px; color: var(--muted); padding: 5px 8px; border-radius: 8px; background: var(--surface-soft); }
+    .dropzone {
+      min-height: 265px; border: 1.5px dashed #c9d0c7; border-radius: 16px; padding: 22px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+      background: #fbfcfa; transition: border-color .18s, background .18s; position: relative; overflow: hidden;
+    }
+    .dropzone.dragover { border-color: var(--green); background: var(--green-light); }
+    .upload-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 17px; background: var(--green-light); color: var(--green); font-size: 24px; margin-bottom: 14px; }
+    .dropzone h3 { font-size: 15px; margin: 0 0 6px; }
+    .dropzone p { margin: 0; font-size: 12px; color: var(--muted); max-width: 260px; }
+    .browse-btn { margin-top: 16px; padding: 10px 16px; border: 1px solid #c8d8cf; background: white; color: var(--green-dark); border-radius: 10px; font-size: 12px; font-weight: 750; }
+    .browse-btn:hover { background: var(--green-light); }
+    .file-note { font-size: 11px; color: var(--muted); margin-top: 12px; }
+    #fileInput { display: none; }
+    .file-info { display: none; margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+    .file-info.show { display: flex; }
+    .file-name { overflow-wrap: anywhere; font-weight: 650; }
+    .remove-file { border: 0; background: transparent; color: var(--muted); font-size: 18px; padding: 0 4px; }
+    .helper { margin-top: 18px; background: #f8f9f6; border: 1px solid var(--line); border-radius: 13px; padding: 13px 14px; display: flex; gap: 10px; }
+    .helper-icon { color: var(--green); font-size: 16px; }
+    .helper strong { display: block; font-size: 12px; margin-bottom: 3px; }
+    .helper span { display: block; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .primary-btn { width: 100%; margin-top: 18px; border: 0; padding: 13px 17px; border-radius: 12px; background: var(--green); color: white; font-weight: 750; font-size: 13px; display: flex; justify-content: center; align-items: center; gap: 9px; transition: background .18s, transform .18s; }
+    .primary-btn:hover:not(:disabled) { background: var(--green-dark); transform: translateY(-1px); }
+    .primary-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .settings-card { padding: 17px; margin-top: 18px; box-shadow: none; }
+    .settings-card label { display: block; font-size: 11px; font-weight: 750; color: #555d54; margin-bottom: 8px; }
+    .api-row { display: flex; gap: 8px; }
+    .api-row input { min-width: 0; flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; font-size: 11px; color: var(--text); outline: none; }
+    .api-row input:focus { border-color: #8ebaa5; box-shadow: 0 0 0 3px rgba(23,107,85,.08); }
+    .test-btn { background: white; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font-size: 11px; font-weight: 750; color: var(--green-dark); }
+    .api-help { margin: 8px 0 0; font-size: 10px; line-height: 1.5; color: var(--muted); }
+    .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .preview-card { min-width: 0; }
+    .preview-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 9px; font-size: 11px; font-weight: 750; }
+    .preview-tag { font-size: 9px; text-transform: uppercase; letter-spacing: .55px; color: var(--muted); font-weight: 800; }
+    .preview-box { height: clamp(220px, 27vw, 330px); display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fafbf9; position: relative; }
+    .checkerboard { background-color: #fff; background-image: linear-gradient(45deg,#edf0eb 25%,transparent 25%),linear-gradient(-45deg,#edf0eb 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#edf0eb 75%),linear-gradient(-45deg,transparent 75%,#edf0eb 75%); background-size: 18px 18px; background-position: 0 0,0 9px,9px -9px,-9px 0; }
+    .preview-box img { width: 100%; height: 100%; object-fit: contain; display: none; padding: 12px; }
+    .preview-box img.visible { display: block; }
+    .empty-preview { padding: 20px; text-align: center; color: #9aa097; }
+    .empty-preview .empty-icon { display: block; font-size: 24px; opacity: .75; margin-bottom: 9px; }
+    .empty-preview strong { display: block; font-size: 11px; color: #747b72; font-weight: 700; }
+    .empty-preview span { display: block; font-size: 10px; margin-top: 4px; }
+    .preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 1px 0; font-size: 10px; color: var(--muted); }
+    .download-btn { border: 1px solid #cbded2; border-radius: 9px; background: white; color: var(--green-dark); padding: 7px 9px; font-size: 10px; font-weight: 750; display: none; }
+    .download-btn.show { display: inline-block; }
+    .status { display: none; align-items: flex-start; gap: 10px; border: 1px solid var(--line); padding: 12px 13px; border-radius: 12px; margin-top: 18px; font-size: 11px; }
+    .status.show { display: flex; }
+    .status strong { display: block; font-size: 12px; margin-bottom: 2px; }
+    .status p { margin: 0; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+    .status.info { background: #f5f9f6; }
+    .status.error { background: #fff6f5; border-color: #f0d5d0; }
+    .status.error strong { color: var(--red); }
+    .status.success { background: var(--green-light); border-color: #cce4d8; }
+    .status.success strong { color: var(--green-dark); }
+    .status.warning { background: var(--amber-light); border-color: #f1dfbd; }
+    .pipeline-card { margin-top: 22px; padding: 22px; box-shadow: none; }
+    .pipeline-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .pipeline-title h2 { margin: 0; font-size: 15px; }
+    .pipeline-title span { font-size: 11px; color: var(--muted); }
+    .pipeline { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+    .pipeline-step { border: 1px solid var(--line); border-radius: 13px; padding: 14px 13px; background: #fcfdfa; }
+    .pipeline-num { color: var(--green); font-size: 10px; font-weight: 850; letter-spacing: .8px; }
+    .pipeline-step strong { display: block; font-size: 12px; margin-top: 7px; }
+    .pipeline-step p { margin: 5px 0 0; font-size: 10px; color: var(--muted); line-height: 1.5; }
+    .footer-note { margin-top: 17px; font-size: 11px; color: var(--muted); text-align: center; }
+    @media (max-width: 820px) {
+      .intro { align-items: flex-start; flex-direction: column; }
+      .workspace { grid-template-columns: 1fr; }
+      .input-panel { border-right: 0; border-bottom: 1px solid var(--line); }
+      .preview-box { height: 270px; }
+      .pipeline { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 520px) {
+      .topbar { padding: 15px 16px; }
+      .top-tag { display: none; }
+      main { padding: 27px 13px 36px; }
+      .mode-card { grid-template-columns: 1fr; }
+      .mode { padding: 13px; }
+      .preview-grid { grid-template-columns: 1fr; }
+      .preview-box { height: 280px; }
+      .pipeline { grid-template-columns: 1fr 1fr; }
+      .pipeline-title { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <div>
+          <div class="brand-title">arangtik <span style="font-weight:500;color:#7b8179">/ Garment Lab</span></div>
+          <div class="brand-subtitle">AI garment extraction · prototype</div>
+        </div>
+      </div>
+      <div class="top-tag">LOCAL TESTING WORKSPACE</div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div>
+          <div class="eyebrow">Model testing environment</div>
+          <h1>Extract a garment.<br />Inspect every edge.</h1>
+          <p>Test your clothing image against the Python API. Review the original and transparent output side by side before adding cloud storage or user accounts.</p>
+        </div>
+        <div class="local-pill">Phase 1 · Flow A</div>
+      </section>
+
+      <section class="mode-card" aria-label="Choose extraction flow">
+        <button class="mode active" id="flowAButton" type="button" aria-pressed="true">
+          <span class="mode-icon">▧</span>
+          <span><strong>Flow A · Single cloth photo</strong><small>Upload a shirt, dress, trouser or other garment photographed on its own.</small><span class="mode-status">Available for testing</span></span>
+        </button>
+        <button class="mode disabled" id="flowBButton" type="button" aria-pressed="false" title="Flow B will be implemented after Flow A is tested">
+          <span class="mode-icon">♙</span>
+          <span><strong>Flow B · Your own photo</strong><small>Separate garments from a full-body photo or mirror selfie.</small><span class="mode-status">Planned · not connected</span></span>
+        </button>
+      </section>
+
+      <section class="workspace">
+        <div class="input-panel">
+          <div class="section-head"><h2>Upload image</h2><span class="step">STEP 01</span></div>
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose a clothing image">
+            <div class="upload-icon">↑</div>
+            <h3>Drop your garment photo here</h3>
+            <p>Use a clear image where the whole garment is visible and not covered by another object.</p>
+            <button class="browse-btn" id="browseButton" type="button">Browse image</button>
+            <div class="file-note">JPG, PNG or WEBP · Maximum 15 MB</div>
+            <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" />
+          </div>
+          <div class="file-info" id="fileInfo"><span class="file-name" id="fileName"></span><button class="remove-file" id="removeFile" type="button" aria-label="Remove image">×</button></div>
+          <div class="helper">
+            <div class="helper-icon">ⓘ</div>
+            <div><strong>For the first accuracy test</strong><span>Start with one garment on a plain or uncluttered background. Keep the original image to compare lost fabric, edges and leftover background.</span></div>
+          </div>
+          <button class="primary-btn" id="extractButton" type="button" disabled><span>✦</span> Extract garment</button>
+
+          <div class="settings-card">
+            <label for="apiUrl">FastAPI endpoint</label>
+            <div class="api-row">
+              <input id="apiUrl" type="url" value="http://127.0.0.1:8000/api/v1/extract-garment" aria-label="FastAPI endpoint URL" />
+              <button class="test-btn" id="healthButton" type="button">Check API</button>
+            </div>
+            <p class="api-help">Expected: POST multipart/form-data with field <code>file</code>. The endpoint can return a PNG image directly or JSON containing a result image URL/base64.</p>
+          </div>
+        </div>
+
+        <div class="result-panel">
+          <div class="section-head"><h2>Image comparison</h2><span class="step">STEP 02</span></div>
+          <div class="preview-grid">
+            <div class="preview-card">
+              <div class="preview-title"><span>Original upload</span><span class="preview-tag">Input</span></div>
+              <div class="preview-box" id="originalBox">
+                <img id="originalPreview" alt="Original clothing upload preview" />
+                <div class="empty-preview" id="originalEmpty"><span class="empty-icon">▧</span><strong>Your image will appear here</strong><span>Choose an image to begin</span></div>
+              </div>
+              <div class="preview-meta"><span id="originalMeta">No image selected</span><span>Original</span></div>
+            </div>
+            <div class="preview-card">
+              <div class="preview-title"><span>Extracted garment</span><span class="preview-tag">Output · PNG</span></div>
+              <div class="preview-box checkerboard" id="resultBox">
+                <img id="resultPreview" alt="Extracted transparent garment preview" />
+                <div class="empty-preview" id="resultEmpty"><span class="empty-icon">✧</span><strong>Waiting for model output</strong><span>Transparent output appears here</span></div>
+              </div>
+              <div class="preview-meta"><span id="resultMeta">No output yet</span><button class="download-btn" id="downloadButton" type="button">Download PNG ↓</button></div>
+            </div>
+          </div>
+          <div class="status info show" id="statusBox" role="status" aria-live="polite">
+            <span>●</span><div><strong id="statusTitle">Ready to test</strong><p id="statusMessage">Choose an image. Once your FastAPI endpoint is running, click “Extract garment” to send it for processing.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pipeline-card">
+        <div class="pipeline-title"><h2>Flow A · Planned processing pipeline</h2><span>Model output should preserve the original garment</span></div>
+        <div class="pipeline">
+          <div class="pipeline-step"><div class="pipeline-num">STEP 01</div><strong>Receive image</strong><p>Validate image type and size in FastAPI.</p></div>
+          <div class="pipeline-step"><div class="pipeline-num">STEP 02</div><strong>Segment garment</strong><p>Generate a foreground mask with the selected model.</p></div>
+          <div class="pipeline-step"><div class="pipeline-num">STEP 03</div><strong>Clean & crop</strong><p>Refine edges, preserve alpha and center the garment.</p></div>
+          <div class="pipeline-step"><div class="pipeline-num">STEP 04</div><strong>Return transparent PNG</strong><p>Preview, download and inspect the output.</p></div>
+        </div>
+      </section>
+      <p class="footer-note">Prototype only · No image is uploaded to S3 or saved to a database by this page.</p>
+    </main>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const browseButton = document.getElementById('browseButton');
+    const extractButton = document.getElementById('extractButton');
+    const originalPreview = document.getElementById('originalPreview');
+    const resultPreview = document.getElementById('resultPreview');
+    const originalEmpty = document.getElementById('originalEmpty');
+    const resultEmpty = document.getElementById('resultEmpty');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const originalMeta = document.getElementById('originalMeta');
+    const resultMeta = document.getElementById('resultMeta');
+    const downloadButton = document.getElementById('downloadButton');
+    const apiUrl = document.getElementById('apiUrl');
+    const statusBox = document.getElementById('statusBox');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusMessage = document.getElementById('statusMessage');
+    let selectedFile = null;
+    let originalObjectUrl = null;
+    let resultObjectUrl = null;
+
+    function setStatus(type, title, message) {
+      statusBox.className = `status ${type} show`;
+      statusTitle.textContent = title;
+      statusMessage.textContent = message;
+    }
+    function formatBytes(bytes) {
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+    function clearResult() {
+      if (resultObjectUrl) URL.revokeObjectURL(resultObjectUrl);
+      resultObjectUrl = null;
+      resultPreview.removeAttribute('src');
+      resultPreview.classList.remove('visible');
+      resultEmpty.style.display = '';
+      downloadButton.classList.remove('show');
+      resultMeta.textContent = 'No output yet';
+    }
+    function setFile(file) {
+      if (!file) return;
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.type)) {
+        setStatus('error', 'Unsupported file type', 'Please choose a JPG, PNG or WEBP image.');
+        return;
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        setStatus('error', 'Image is too large', 'Please choose an image smaller than 15 MB.');
+        return;
+      }
+      selectedFile = file;
+      if (originalObjectUrl) URL.revokeObjectURL(originalObjectUrl);
+      originalObjectUrl = URL.createObjectURL(file);
+      originalPreview.src = originalObjectUrl;
+      originalPreview.classList.add('visible');
+      originalEmpty.style.display = 'none';
+      fileInfo.classList.add('show');
+      fileName.textContent = file.name;
+      originalMeta.textContent = `${formatBytes(file.size)} · ${file.type.replace('image/', '').toUpperCase()}`;
+      extractButton.disabled = false;
+      clearResult();
+      setStatus('info', 'Image ready', 'Click “Extract garment” to send this image to your FastAPI model.');
+    }
+    browseButton.addEventListener('click', (event) => { event.stopPropagation(); fileInput.click(); });
+    dropzone.addEventListener('click', (event) => { if (event.target !== browseButton) fileInput.click(); });
+    dropzone.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', () => { if (fileInput.files && fileInput.files[0]) setFile(fileInput.files[0]); });
+    ['dragenter', 'dragover'].forEach((eventName) => dropzone.addEventListener(eventName, (event) => { event.preventDefault(); dropzone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach((eventName) => dropzone.addEventListener(eventName, (event) => { event.preventDefault(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', (event) => { const file = event.dataTransfer && event.dataTransfer.files[0]; if (file) setFile(file); });
+    document.getElementById('removeFile').addEventListener('click', () => {
+      selectedFile = null;
+      fileInput.value = '';
+      if (originalObjectUrl) URL.revokeObjectURL(originalObjectUrl);
+      originalObjectUrl = null;
+      originalPreview.removeAttribute('src');
+      originalPreview.classList.remove('visible');
+      originalEmpty.style.display = '';
+      fileInfo.classList.remove('show');
+      originalMeta.textContent = 'No image selected';
+      extractButton.disabled = true;
+      clearResult();
+      setStatus('info', 'Ready to test', 'Choose an image. Once your FastAPI endpoint is running, click “Extract garment” to send it for processing.');
+    });
+
+    function pickImageValue(data) {
+      const candidates = [data.result_url, data.output_url, data.image_url, data.processed_image_url, data.flatLayPngUrl, data.result, data.image, data.result_base64, data.image_base64, data.png_base64];
+      return candidates.find((value) => typeof value === 'string' && value.length > 0) || null;
+    }
+    async function responseToImage(response) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.startsWith('image/')) return await response.blob();
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error('API response was neither an image nor valid JSON. Return a PNG or JSON with result_url/result_base64.'); }
+      if (!response.ok) throw new Error(data.detail || data.message || `API returned HTTP ${response.status}`);
+      const value = pickImageValue(data);
+      if (!value) throw new Error('JSON response has no result image. Expected result_url, output_url, image_url or result_base64.');
+      if (value.startsWith('data:image/')) {
+        const parts = value.split(',');
+        const mime = (parts[0].match(/data:(.*?);base64/) || [])[1] || 'image/png';
+        const binary = atob(parts[1]);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+      }
+      if (/^[A-Za-z0-9+/=\r\n]+$/.test(value) && value.length > 300 && !/^https?:\/\//i.test(value)) {
+        const binary = atob(value.replace(/\s/g, ''));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: 'image/png' });
+      }
+      const imageResponse = await fetch(new URL(value, apiUrl.value).toString());
+      if (!imageResponse.ok) throw new Error(`Could not load result image (HTTP ${imageResponse.status}).`);
+      return await imageResponse.blob();
+    }
+    extractButton.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      const endpoint = apiUrl.value.trim();
+      if (!endpoint) { setStatus('error', 'API URL is missing', 'Enter the FastAPI endpoint URL first.'); return; }
+      extractButton.disabled = true;
+      extractButton.innerHTML = '<span>◌</span> Processing image…';
+      setStatus('info', 'Sending image to FastAPI', 'The request is running. Processing time depends on the model and hardware.');
+      const startedAt = performance.now();
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile, selectedFile.name);
+        const response = await fetch(endpoint, { method: 'POST', body: formData });
+        if (!response.ok && !(response.headers.get('content-type') || '').startsWith('image/')) {
+          let message = `API returned HTTP ${response.status}`;
+          try { const errorData = await response.json(); message = errorData.detail || errorData.message || message; } catch (_) {}
+          throw new Error(message);
+        }
+        const resultBlob = await responseToImage(response);
+        if (!resultBlob.type.startsWith('image/')) throw new Error('API result is not an image. Please return a PNG or JPEG.');
+        if (resultObjectUrl) URL.revokeObjectURL(resultObjectUrl);
+        resultObjectUrl = URL.createObjectURL(resultBlob);
+        resultPreview.src = resultObjectUrl;
+        resultPreview.classList.add('visible');
+        resultEmpty.style.display = 'none';
+        downloadButton.classList.add('show');
+        resultMeta.textContent = `${formatBytes(resultBlob.size)} · ${resultBlob.type.replace('image/', '').toUpperCase()}`;
+        const seconds = ((performance.now() - startedAt) / 1000).toFixed(2);
+        setStatus('success', 'Processing completed', `Received image output in ${seconds}s. Inspect the garment edges and confirm the background is transparent before treating this result as accurate.`);
+      } catch (error) {
+        const message = error instanceof TypeError
+          ? 'Could not reach the API. Start FastAPI, confirm the endpoint URL and enable CORS for the page origin if required.'
+          : (error.message || 'An unexpected error occurred.');
+        setStatus('error', 'Extraction failed', message);
+      } finally {
+        extractButton.disabled = !selectedFile;
+        extractButton.innerHTML = '<span>✦</span> Extract garment';
+      }
+    });
+    downloadButton.addEventListener('click', () => {
+      if (!resultObjectUrl) return;
+      const link = document.createElement('a');
+      link.href = resultObjectUrl;
+      link.download = `arangtik-garment-${Date.now()}.png`;
+      document.body.appendChild(link); link.click(); link.remove();
+    });
+    document.getElementById('healthButton').addEventListener('click', async () => {
+      const base = apiUrl.value.trim().replace(/\/api\/v1\/extract-garment\/?$/, '').replace(/\/$/, '');
+      setStatus('info', 'Checking API…', `Trying ${base || apiUrl.value}/health`);
+      try {
+        const response = await fetch(`${base}/health`);
+        const body = await response.text();
+        if (!response.ok) throw new Error(`Health endpoint returned HTTP ${response.status}`);
+        setStatus('success', 'API is reachable', `GET /health returned HTTP ${response.status}: ${body.slice(0, 180)}`);
+      } catch (error) {
+        setStatus('error', 'API health check failed', error instanceof TypeError ? 'Could not reach /health. Make sure FastAPI is running and CORS is configured if needed.' : error.message);
+      }
+    });
+    document.getElementById('flowBButton').addEventListener('click', () => {
+      setStatus('warning', 'Flow B is planned for a later phase', 'First validate single-garment segmentation in Flow A. A person photo needs human parsing and separate handling for overlapping garments.');
+    });
+  </script>
+</body>
+</html>

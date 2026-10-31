@@ -1,0 +1,11 @@
+.venv/
+.venv*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.cache/
+models/
+*.log
+test_output/
+benchmark_output/
