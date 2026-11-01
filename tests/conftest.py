@@ -16,8 +16,10 @@ def mock_load_model():
     if flowa_app is None:
         yield None
         return
-    with patch("app.main.load_model", return_value=None) as mocked:
-        yield mocked
+    with patch("app.main.load_model", return_value=None) as m1, \
+         patch("app.main.load_segmenter_models", return_value=None) as m2, \
+         patch("app.main.load_inpainter_model", return_value=None) as m3:
+        yield (m1, m2, m3)
 
 
 @pytest.fixture

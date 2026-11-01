@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arangtik Garment AI · Batch Studio</title>
+  <style>
+    :root {
+      --bg: #0d1017;
+      --surface: #161b24;
+      --surface-elevated: #1f2633;
+      --border: #2a3344;
+      --border-light: #384459;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --primary-soft: rgba(16, 185, 129, 0.12);
+      --text: #f3f4f6;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --radius: 12px;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #10b981, #38bdf8);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 19px;
+      color: white;
+    }
+    .logo-text h1 {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .logo-text span {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge {
+      padding: 5px 11px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge-green {
+      background: var(--primary-soft);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #34d399;
+    }
+    main {
+      flex: 1;
+      max-width: 1560px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px 24px 50px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+    }
+    .mode-select-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .mode-btn {
+      background: var(--surface-elevated);
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      padding: 9px 12px;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+    .mode-btn.active {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+    .mode-btn strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    .mode-btn small {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+    .options-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .checkbox-label input {
+      accent-color: var(--primary);
+      width: 15px;
+      height: 15px;
+    }
+    select {
+      background: var(--surface-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+    /* Batch Action Toolbar */
+    .batch-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .batch-status-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex: 1;
+      min-width: 280px;
+    }
+    .progress-track {
+      flex: 1;
+      height: 8px;
+      background: var(--surface-elevated);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      max-width: 320px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #38bdf8);
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+    .btn-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .primary-btn {
+      background: var(--primary);
+      color: #03251a;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.15s ease;
+    }
+    .primary-btn:hover:not(:disabled) {
+      background: #34d399;
+      transform: translateY(-1px);
+    }
+    .primary-btn:disabled {
+      background: #252e3d;
+      color: #55657e;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .secondary-btn {
+      background: var(--surface-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+    }
+    .secondary-btn:hover:not(:disabled) {
+      background: var(--border);
+    }
+    /* Main Studio Workspace Grid */
+    .studio-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr 1fr;
+      gap: 16px;
+      min-height: 560px;
+    }
+    /* Column 1: Queue Sidebar */
+    .queue-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .queue-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-elevated);
+    }
+    .queue-header h3 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+    .queue-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 580px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: var(--surface-elevated);
+      border: 1.5px solid transparent;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .queue-item:hover {
+      background: #252e3e;
+    }
+    .queue-item.active {
+      border-color: var(--primary);
+      background: rgba(16, 185, 129, 0.08);
+    }
+    .queue-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #0d1017;
+      flex-shrink: 0;
+    }
+    .queue-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .queue-name {
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text);
+    }
+    .queue-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .pill-pending { background: #334155; color: #94a3b8; }
+    .pill-processing { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .pill-done { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .pill-error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .queue-remove-btn {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 15px;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .queue-remove-btn:hover {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    /* Dropzone within Queue when empty */
+    .queue-empty-dropzone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: 280px;
+      padding: 24px;
+      text-align: center;
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      margin: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .queue-empty-dropzone:hover, .queue-empty-dropzone.dragover {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+    /* Columns 2 & 3: Inspection panels */
+    .view-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .view-card-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-elevated);
+    }
+    .view-card-header h3 {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .view-card-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+      min-height: 440px;
+    }
+    .checkerboard-bg {
+      background-color: #141822;
+      background-image: 
+        linear-gradient(45deg, #0e1119 25%, transparent 25%),
+        linear-gradient(-45deg, #0e1119 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #0e1119 75%),
+        linear-gradient(-45deg, transparent 75%, #0e1119 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+    .preview-img {
+      max-width: 100%;
+      max-height: 440px;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .garment-tabs {
+      display: flex;
+      gap: 7px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .tab-btn {
+      background: var(--surface-elevated);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #03251a;
+      border-color: var(--primary);
+    }
+    .meta-badges {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .meta-badge {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 9px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .meta-badge strong {
+      color: var(--text);
+    }
+    .footer-api-info {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    code {
+      background: var(--surface-elevated);
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-family: monospace;
+      color: #38bdf8;
+    }
+    #fileInput { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-container">
+      <div class="logo-badge">A</div>
+      <div class="logo-text">
+        <h1>Arangtik Garment AI</h1>
+        <span>Batch Background Removal &bull; Flow A + B</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="badge badge-green"><span class="badge-dot"></span> Port 8000 Ready</span>
+      <a href="/docs" target="_blank" style="color: var(--accent); font-size: 13px; text-decoration: none; font-weight: 600;">API Specs ↗</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Pipeline Controls -->
+    <div class="panel">
+      <div class="mode-select-row">
+        <div class="mode-btn active" data-mode="auto" onclick="setMode('auto')">
+          <strong>⚡ Auto-Detect Pipeline</strong>
+          <small>Smart human detection $\rightarrow$ Worn vs Product</small>
+        </div>
+        <div class="mode-btn" data-mode="worn" onclick="setMode('worn')">
+          <strong>👗 Human Model (Flow B)</strong>
+          <small>SegFormer clothing parsing &amp; separation</small>
+        </div>
+        <div class="mode-btn" data-mode="isolated" onclick="setMode('isolated')">
+          <strong>👔 Flat-lay / Hanger (Flow A)</strong>
+          <small>BiRefNet Lite salient background removal</small>
+        </div>
+      </div>
+
+      <div class="options-row">
+        <div>
+          <label style="color: var(--text-muted); margin-right: 6px;">Target Garment Filter:</label>
+          <select id="targetGarmentSelect">
+            <option value="all">All Garments (Auto-Separate)</option>
+            <option value="upper_clothes">Upper Clothes (T-Shirt / Top / Shirt)</option>
+            <option value="pants">Pants / Jeans / Trousers</option>
+            <option value="dress">Dress / Gown / Anarkali</option>
+            <option value="skirt">Skirt / Lehenga</option>
+          </select>
+        </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="autoRepairCheck" checked />
+          <span>LaMa Inpainting (Repair Hand Occlusions)</span>
+        </label>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="autoStraightenCheck" checked />
+          <span>Auto-Deskew Tilt</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Batch Action Toolbar -->
+    <div class="batch-bar">
+      <div class="batch-status-group">
+        <strong id="batchCountText" style="font-size: 14px;">Queue: 0 images</strong>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <span id="batchProgressText" style="font-size: 12px; color: var(--text-muted);">0 / 0 completed</span>
+      </div>
+
+      <div class="btn-group">
+        <button class="secondary-btn" onclick="document.getElementById('fileInput').click()">
+          <span>➕</span> Select Multiple Images
+        </button>
+        <button id="processAllBtn" class="primary-btn" onclick="processAllBatch()" disabled>
+          <span>▶</span> Process All Images
+        </button>
+        <button id="downloadAllBtn" class="secondary-btn" onclick="downloadAllCleanGarments()" disabled>
+          <span>⬇</span> Download All Clean PNGs
+        </button>
+        <button class="secondary-btn" style="color: var(--text-muted);" onclick="clearAllQueue()">
+          Clear Queue
+        </button>
+      </div>
+    </div>
+
+    <!-- 3-Column Studio Workspace -->
+    <div class="studio-grid">
+      <!-- Column 1: Uploaded Images Queue Sidebar -->
+      <div class="queue-card">
+        <div class="queue-header">
+          <h3>Uploaded Images (<span id="queueBadgeCount">0</span>)</h3>
+          <span style="font-size: 11px; color: var(--text-muted);">Click to inspect</span>
+        </div>
+        <div class="queue-list" id="queueList">
+          <div class="queue-empty-dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
+            <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
+            <strong style="font-size: 13px;">Drag &amp; Drop Multiple Images</strong>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse multiple JPG, PNG, WEBP files</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: Selected Original Image -->
+      <div class="view-card">
+        <div class="view-card-header">
+          <h3>Original Selected Photo</h3>
+          <span id="selectedMeta" style="font-size: 12px; color: var(--text-muted);">No image selected</span>
+        </div>
+        <div class="view-card-body" id="inputViewBody">
+          <div id="noSelectionInputPlaceholder" style="text-align: center; color: var(--text-muted);">
+            <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">📷</div>
+            <p style="font-size: 13px;">Select an image from the queue to view here.</p>
+          </div>
+          <img id="selectedInputPreview" class="preview-img" style="display: none;" alt="Selected Input" />
+        </div>
+      </div>
+
+      <!-- Column 3: Normalized 1024x1024 Transparent 2D Cutout -->
+      <div class="view-card">
+        <div class="view-card-header">
+          <h3>Clean 1024&times;1024 Transparent PNG</h3>
+          <button id="downloadCurrentBtn" class="primary-btn" style="padding: 4px 10px; font-size: 12px; display: none;" onclick="downloadActiveGarment()">
+            ⬇ Download PNG
+          </button>
+        </div>
+        <div class="view-card-body checkerboard-bg" id="outputViewBody">
+          <div id="outputPlaceholder" style="text-align: center; color: var(--text-muted);">
+            <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
+            <p style="font-size: 13px;">Processed transparent garment will appear here.</p>
+          </div>
+
+          <div id="activeResultContainer" style="display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center;">
+            <div class="garment-tabs" id="garmentTabs"></div>
+            <img id="activeOutputPreview" class="preview-img" alt="2D Garment Cutout" />
+            <div class="meta-badges" id="metaBadges"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer info -->
+    <div class="footer-api-info">
+      <div>
+        <strong>External API Integration (Option 2):</strong>
+        Send multipart POST to <code>http://localhost:8000/api/v1/process-garment</code>
+      </div>
+      <div id="statusTelemetry">System Ready</div>
+    </div>
+  </main>
+
+  <!-- Multiple file input -->
+  <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp" onchange="handleFileSelect(event)" />
+
+  <script>
+    // State management
+    let fileQueue = []; // array of { id, file, objectUrl, status: 'pending'|'processing'|'done'|'error', result: null, errorMsg: null }
+    let selectedIndex = -1;
+    let selectedMode = 'auto';
+    let activeGarmentTab = 0;
+    let isProcessingBatch = false;
+
+    function setMode(mode) {
+      selectedMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+    }
+
+    function handleFileSelect(e) {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      addFilesToQueue(files);
+      e.target.value = ''; // Reset input to allow selecting same files again
+    }
+
+    function addFilesToQueue(files) {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      let addedCount = 0;
+
+      files.forEach(file => {
+        if (!allowed.includes(file.type)) return;
+        const item = {
+          id: Math.random().toString(36).substring(2, 9),
+          file: file,
+          objectUrl: URL.createObjectURL(file),
+          status: 'pending',
+          result: null,
+          errorMsg: null,
+        };
+        fileQueue.push(item);
+        addedCount++;
+      });
+
+      if (addedCount > 0 && selectedIndex === -1) {
+        selectedIndex = fileQueue.length - addedCount;
+      }
+
+      renderQueue();
+      updateBatchToolbar();
+      if (selectedIndex >= 0) {
+        displaySelectedItem(selectedIndex);
+      }
+    }
+
+    // Drag and drop support on the queue panel
+    const queueListEl = document.getElementById('queueList');
+    queueListEl.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    queueListEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files.length) {
+        addFilesToQueue(Array.from(e.dataTransfer.files));
+      }
+    });
+
+    function renderQueue() {
+      const listEl = document.getElementById('queueList');
+      const badgeCountEl = document.getElementById('queueBadgeCount');
+      badgeCountEl.textContent = fileQueue.length;
+
+      if (fileQueue.length === 0) {
+        listEl.innerHTML = `
+          <div class="queue-empty-dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
+            <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
+            <strong style="font-size: 13px;">Drag &amp; Drop Multiple Images</strong>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse multiple JPG, PNG, WEBP files</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      fileQueue.forEach((item, idx) => {
+        const isActive = idx === selectedIndex ? 'active' : '';
+        let pillClass = 'pill-pending';
+        let statusText = 'Pending';
+
+        if (item.status === 'processing') {
+          pillClass = 'pill-processing';
+          statusText = 'Processing...';
+        } else if (item.status === 'done') {
+          pillClass = 'pill-done';
+          const count = item.result && item.result.garments ? item.result.garments.length : 1;
+          statusText = `Done (${count} ${count > 1 ? 'items' : 'item'})`;
+        } else if (item.status === 'error') {
+          pillClass = 'pill-error';
+          statusText = 'Failed';
+        }
+
+        const sizeMB = (item.file.size / (1024 * 1024)).toFixed(1);
+
+        html += `
+          <div class="queue-item ${isActive}" onclick="selectQueueIndex(${idx})">
+            <img class="queue-thumb" src="${item.objectUrl}" alt="thumb" />
+            <div class="queue-info">
+              <div class="queue-name" title="${item.file.name}">${item.file.name}</div>
+              <div class="queue-meta">
+                <span>${sizeMB} MB</span>
+                <span class="status-pill ${pillClass}">${statusText}</span>
+              </div>
+            </div>
+            <button class="queue-remove-btn" onclick="removeQueueIndex(event, ${idx})" title="Remove">&times;</button>
+          </div>
+        `;
+      });
+
+      listEl.innerHTML = html;
+    }
+
+    function selectQueueIndex(idx) {
+      if (idx < 0 || idx >= fileQueue.length) return;
+      selectedIndex = idx;
+      activeGarmentTab = 0;
+      renderQueue();
+      displaySelectedItem(idx);
+    }
+
+    function removeQueueIndex(e, idx) {
+      e.stopPropagation();
+      if (isProcessingBatch) return;
+
+      const removed = fileQueue.splice(idx, 1)[0];
+      if (removed && removed.objectUrl) URL.revokeObjectURL(removed.objectUrl);
+
+      if (selectedIndex === idx) {
+        selectedIndex = fileQueue.length > 0 ? Math.min(idx, fileQueue.length - 1) : -1;
+      } else if (selectedIndex > idx) {
+        selectedIndex--;
+      }
+
+      renderQueue();
+      updateBatchToolbar();
+      if (selectedIndex >= 0) {
+        displaySelectedItem(selectedIndex);
+      } else {
+        resetInspectionViews();
+      }
+    }
+
+    function clearAllQueue() {
+      if (isProcessingBatch) return;
+      fileQueue.forEach(item => {
+        if (item.objectUrl) URL.revokeObjectURL(item.objectUrl);
+      });
+      fileQueue = [];
+      selectedIndex = -1;
+      renderQueue();
+      updateBatchToolbar();
+      resetInspectionViews();
+    }
+
+    function updateBatchToolbar() {
+      const count = fileQueue.length;
+      const completed = fileQueue.filter(i => i.status === 'done').length;
+      document.getElementById('batchCountText').textContent = `Queue: ${count} image${count !== 1 ? 's' : ''}`;
+      document.getElementById('batchProgressText').textContent = `${completed} / ${count} completed`;
+
+      const pct = count > 0 ? (completed / count) * 100 : 0;
+      document.getElementById('progressFill').style.width = `${pct}%`;
+
+      document.getElementById('processAllBtn').disabled = count === 0 || isProcessingBatch || completed === count;
+      document.getElementById('downloadAllBtn').disabled = completed === 0;
+    }
+
+    function displaySelectedItem(idx) {
+      const item = fileQueue[idx];
+      if (!item) return;
+
+      // Update Input Column
+      document.getElementById('noSelectionInputPlaceholder').style.display = 'none';
+      const inputImg = document.getElementById('selectedInputPreview');
+      inputImg.src = item.objectUrl;
+      inputImg.style.display = 'block';
+      document.getElementById('selectedMeta').textContent = `${item.file.name} (${(item.file.size / (1024*1024)).toFixed(2)} MB)`;
+
+      // Update Output Column
+      if (item.status === 'done' && item.result) {
+        renderActiveResult(item.result);
+      } else if (item.status === 'processing') {
+        document.getElementById('outputPlaceholder').innerHTML = `
+          <div style="font-size: 32px; margin-bottom: 8px;">⏳</div>
+          <p style="font-size: 13px; color: var(--accent);">Processing through AI Pipeline...</p>
+        `;
+        document.getElementById('outputPlaceholder').style.display = 'block';
+        document.getElementById('activeResultContainer').style.display = 'none';
+        document.getElementById('downloadCurrentBtn').style.display = 'none';
+      } else if (item.status === 'error') {
+        document.getElementById('outputPlaceholder').innerHTML = `
+          <div style="font-size: 32px; margin-bottom: 8px; color: var(--red);">⚠️</div>
+          <p style="font-size: 13px; color: var(--red);">${item.errorMsg || 'Processing failed'}</p>
+        `;
+        document.getElementById('outputPlaceholder').style.display = 'block';
+        document.getElementById('activeResultContainer').style.display = 'none';
+        document.getElementById('downloadCurrentBtn').style.display = 'none';
+      } else {
+        document.getElementById('outputPlaceholder').innerHTML = `
+          <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
+          <p style="font-size: 13px;">Pending processing. Click "Process All Images".</p>
+        `;
+        document.getElementById('outputPlaceholder').style.display = 'block';
+        document.getElementById('activeResultContainer').style.display = 'none';
+        document.getElementById('downloadCurrentBtn').style.display = 'none';
+      }
+    }
+
+    function renderActiveResult(result) {
+      if (!result.garments || result.garments.length === 0) {
+        document.getElementById('outputPlaceholder').innerHTML = '<p>No garments detected in this image.</p>';
+        document.getElementById('outputPlaceholder').style.display = 'block';
+        document.getElementById('activeResultContainer').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('outputPlaceholder').style.display = 'none';
+      document.getElementById('activeResultContainer').style.display = 'flex';
+      document.getElementById('downloadCurrentBtn').style.display = 'inline-flex';
+
+      // Setup tabs
+      const tabsEl = document.getElementById('garmentTabs');
+      tabsEl.innerHTML = '';
+
+      result.garments.forEach((g, gIdx) => {
+        const btn = document.createElement('button');
+        btn.className = `tab-btn ${gIdx === activeGarmentTab ? 'active' : ''}`;
+        btn.textContent = `${g.recognized_label} (${g.category})`;
+        btn.onclick = () => {
+          activeGarmentTab = gIdx;
+          renderActiveResult(result);
+        };
+        tabsEl.appendChild(btn);
+      });
+
+      const currentGarment = result.garments[activeGarmentTab] || result.garments[0];
+      document.getElementById('activeOutputPreview').src = currentGarment.output_png_url;
+
+      const badgesEl = document.getElementById('metaBadges');
+      badgesEl.innerHTML = `
+        <span class="meta-badge">Category: <strong>${currentGarment.category}</strong></span>
+        <span class="meta-badge">Straightened: <strong>${currentGarment.rotation_angle_deg}&deg;</strong></span>
+        <span class="meta-badge">LaMa Repaired: <strong>${currentGarment.repaired ? 'Yes' : 'No'}</strong></span>
+        <span class="meta-badge">Canvas: <strong>1024&times;1024 PNG</strong></span>
+      `;
+    }
+
+    function resetInspectionViews() {
+      document.getElementById('noSelectionInputPlaceholder').style.display = 'block';
+      document.getElementById('selectedInputPreview').style.display = 'none';
+      document.getElementById('selectedMeta').textContent = 'No image selected';
+      document.getElementById('outputPlaceholder').style.display = 'block';
+      document.getElementById('outputPlaceholder').innerHTML = `
+        <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
+        <p style="font-size: 13px;">Processed transparent garment will appear here.</p>
+      `;
+      document.getElementById('activeResultContainer').style.display = 'none';
+      document.getElementById('downloadCurrentBtn').style.display = 'none';
+    }
+
+    // Process a single item
+    async function processSingleItem(item) {
+      const formData = new FormData();
+      formData.append('file', item.file);
+      formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
+      formData.append('auto_repair', document.getElementById('autoRepairCheck').checked);
+      formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
+
+      let endpoint = '/api/v1/process-garment';
+      if (selectedMode === 'isolated') {
+        endpoint = '/api/v1/extract-isolated';
+      }
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+        throw new Error(err.detail || 'Inference error');
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('image/png')) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        return {
+          mode: 'isolated_product',
+          has_human: false,
+          execution_time_ms: 0,
+          garments_found: 1,
+          garments: [{
+            garment_id: 'isolated_0',
+            category: 'product',
+            recognized_label: 'Garment Cutout',
+            confidence: 0.99,
+            rotation_angle_deg: 0,
+            repaired: false,
+            output_png_url: url,
+          }]
+        };
+      } else {
+        return await res.json();
+      }
+    }
+
+    // Process all images sequentially
+    async function processAllBatch() {
+      if (fileQueue.length === 0 || isProcessingBatch) return;
+
+      isProcessingBatch = true;
+      const processBtn = document.getElementById('processAllBtn');
+      processBtn.disabled = true;
+      processBtn.innerHTML = '<span>◌</span> Processing Batch...';
+
+      for (let i = 0; i < fileQueue.length; i++) {
+        const item = fileQueue[i];
+        if (item.status === 'done') continue; // Skip already finished items
+
+        item.status = 'processing';
+        selectQueueIndex(i);
+        document.getElementById('statusTelemetry').textContent = `Processing ${i+1}/${fileQueue.length}: ${item.file.name}...`;
+
+        try {
+          const result = await processSingleItem(item);
+          item.result = result;
+          item.status = 'done';
+        } catch (err) {
+          item.status = 'error';
+          item.errorMsg = err.message;
+        }
+
+        renderQueue();
+        updateBatchToolbar();
+        displaySelectedItem(i);
+      }
+
+      isProcessingBatch = false;
+      processBtn.innerHTML = '<span>▶</span> Process All Images';
+      updateBatchToolbar();
+      document.getElementById('statusTelemetry').textContent = 'Batch processing complete!';
+    }
+
+    // Download individual garment
+    function downloadActiveGarment() {
+      const img = document.getElementById('activeOutputPreview');
+      if (!img.src) return;
+      const activeItem = fileQueue[selectedIndex];
+      const baseName = activeItem ? activeItem.file.name.replace(/\.[^/.]+$/, "") : 'garment';
+      const a = document.createElement('a');
+      a.href = img.src;
+      a.download = `${baseName}_1024x1024_transparent.png`;
+      a.click();
+    }
+
+    // Download all completed clean garments
+    async function downloadAllCleanGarments() {
+      const allGarments = [];
+      fileQueue.forEach(item => {
+        if (item.status === 'done' && item.result && item.result.garments) {
+          const baseName = item.file.name.replace(/\.[^/.]+$/, "");
+          item.result.garments.forEach(g => {
+            allGarments.push({
+              url: g.output_png_url,
+              name: `${baseName}_${g.category}_1024.png`,
+            });
+          });
+        }
+      });
+
+      if (allGarments.length === 0) {
+        alert('No clean garments available to download.');
+        return;
+      }
+
+      document.getElementById('statusTelemetry').textContent = `Downloading ${allGarments.length} files...`;
+
+      for (let i = 0; i < allGarments.length; i++) {
+        const g = allGarments[i];
+        const a = document.createElement('a');
+        a.href = g.url;
+        a.download = g.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        await new Promise(r => setTimeout(r, 300)); // 300ms delay between downloads
+      }
+
+      document.getElementById('statusTelemetry').textContent = `All ${allGarments.length} files downloaded!`;
+    }
+  </script>
+</body>
+</html>

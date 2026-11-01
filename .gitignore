@@ -9,3 +9,5 @@ models/
 *.log
 test_output/
 benchmark_output/
+outputs/*.png
+scripts/archive/

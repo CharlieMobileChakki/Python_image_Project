@@ -1,6 +1,34 @@
-fastapi>=0.115,<1.0
-uvicorn[standard]>=0.30,<1.0
+# =============================================================================
+# Arangtik Garment AI — Unified Production Requirements (Verified Working)
+# Python Version: 3.12 (CPU Optimized, Zero DLL Conflict)
+# =============================================================================
+
+# PyTorch Official CPU Wheels Repository
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- Web Framework, ASGI Server & API Tooling ---
+fastapi>=0.110.0,<1.0.0
+uvicorn[standard]>=0.28.0,<1.0.0
 python-multipart>=0.0.9
-python-dotenv>=1.0
-Pillow>=10.0
-rembg[cpu]>=2.0.85,<3.0
+python-dotenv>=1.0.0
+pydantic>=2.7.0
+
+# --- Image Processing, Computer Vision & Auto-Straightening ---
+Pillow>=10.0.0
+numpy==1.26.4
+scipy==1.17.1
+opencv-python-headless==4.11.0.86
+
+# --- Deep Learning, Transformers & Fashion Parsing (Flow B) ---
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
+transformers==4.44.2
+
+# --- ONNX Runtime & Seamless Fabric Inpainting Engine (LaMa FFC) ---
+onnxruntime>=1.18.0
+
+# --- Salient Background Removal Engine (Flow A: BiRefNet Lite) ---
+rembg==2.0.57
+
+# --- Hardware Diagnostics & Memory Telemetry ---
+psutil>=5.9.0
