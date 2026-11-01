@@ -9,6 +9,7 @@ from typing import Any
 os.environ["HF_HOME"] = r"D:\huggingface_cache"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
+import cv2
 import numpy as np
 import onnxruntime as ort
 from PIL import Image
@@ -124,8 +125,14 @@ def repair_garment_cutout(
     if (mask_crop > 0).sum() == 0:
         return cutout_rgba, 0.0
 
+    # Neutralize skin and unwanted object cues inside mask using surrounding fabric interpolation
+    crop_rgb_np = np.array(crop_rgba.convert("RGB"))
+    mask_bin = (mask_crop > 0).astype(np.uint8)
+    prefilled_rgb = cv2.inpaint(crop_rgb_np, mask_bin, 5, cv2.INPAINT_TELEA)
+    prefilled_im = Image.fromarray(prefilled_rgb, mode="RGB")
+
     # Execute LaMa on guaranteed 512x512 crop
-    lama_out_np, infer_ms = inpaint_patch_512(crop_rgba.convert("RGB"), mask_crop)
+    lama_out_np, infer_ms = inpaint_patch_512(prefilled_im, mask_crop)
 
     # 1. Bit-for-bit identity outside edit mask
     crop_rgba_np = np.array(crop_rgba)

@@ -1,0 +1,159 @@
+# STRICT DEVELOPMENT INSTRUCTIONS
+## Project: Arangtik Garment AI
+Workspace: `D:\my codes\python project`
+
+You must follow these instructions for every development task in this project.
+
+### 1. Inspect Before Writing Code
+
+Before making any changes:
+
+1. Inspect the complete existing project folder and file structure.
+2. Read the root `REQUIREMENTS.md` and all relevant requirement documents.
+3. Inspect the existing `requirements.txt`.
+4. Inspect the existing implementation files related to the requested task.
+5. Understand the existing application architecture, processing pipeline, APIs and frontend.
+6. Identify which existing files actually need modification.
+
+Never assume that a file, feature or implementation exists just because it was mentioned in an earlier report. Verify the actual workspace.
+
+### 2. Strict File and Folder Structure
+
+- Follow the existing project folder structure.
+- Use existing files and modules wherever possible.
+- Do not create unnecessary files or folders.
+- Do not create duplicate implementations.
+- Do not create additional configuration files without a genuine requirement.
+- Do not move or rename existing files without explicit approval.
+- Do not create temporary scripts in the project root.
+- Keep experimental scripts and outputs in their designated existing directories.
+- Do not create additional documentation files unless requested or genuinely necessary.
+
+### 3. No Unnecessary Code
+
+- Write only the code required for the requested functionality.
+- Do not add unrelated features.
+- Do not duplicate existing functions.
+- Do not introduce unnecessary abstractions, classes or helper modules.
+- Reuse existing utilities and functions.
+- Keep implementation simple, maintainable and consistent with the current codebase.
+- Avoid dead code, unused imports and unused variables.
+- Do not rewrite working code just to improve its style.
+
+### 4. Strict Dependency Protection
+
+This is a critical requirement.
+
+- Do not install new Python libraries.
+- Do not uninstall existing libraries.
+- Do not upgrade or downgrade package versions.
+- Do not modify `requirements.txt`.
+- Do not modify Python version or virtual environments.
+- Do not replace existing AI models or model weights.
+- Do not download additional pretrained models.
+- Do not introduce a new framework or technology without explicit approval.
+
+If a requested feature genuinely requires an unavailable dependency, stop and explain the requirement before making any dependency changes.
+
+### 5. Preserve Existing Functionality
+
+Existing working functionality must remain operational.
+
+- Do not modify Flow A or Flow B unnecessarily.
+- Do not change existing API contracts.
+- Do not break existing endpoints.
+- Do not change model initialization or inference logic without a specific requirement.
+- Do not change existing input/output formats.
+- Do not modify existing image processing behavior unless required by the task.
+- Maintain backward compatibility.
+
+### 6. Understand Before Integrating
+
+Before adding a feature:
+
+1. Check whether the functionality already exists.
+2. Identify the existing implementation.
+3. Determine whether it can be reused.
+4. Modify the smallest possible number of files.
+5. Avoid introducing another implementation for an existing capability.
+
+### 7. Testing Requirements
+
+After implementation:
+
+- Run relevant existing unit tests.
+- Run API tests where applicable.
+- Run existing end-to-end tests.
+- Test the actual requested functionality.
+- Verify existing functionality has not regressed.
+- Verify image output and transparency where relevant.
+- Check application logs for errors.
+- Report all failed and skipped tests honestly.
+
+Never report tests as passed without actually executing them.
+
+### 8. No Destructive Operations Without Approval
+
+Never automatically:
+
+- Delete files.
+- Delete folders.
+- Remove dependencies.
+- Remove model weights.
+- Overwrite benchmark results.
+- Delete existing datasets.
+- Rename or relocate existing project modules.
+
+If cleanup is requested, first identify the candidates, check their references and dependencies, and report the proposed changes before destructive operations.
+
+### 9. Development Workflow
+
+Follow this sequence for every task:
+
+**Step 1:** Inspect existing project.
+
+**Step 2:** Read relevant requirements.
+
+**Step 3:** Understand current implementation.
+
+**Step 4:** Identify minimum required changes.
+
+**Step 5:** Report the planned files to be modified.
+
+**Step 6:** Implement only the requested functionality.
+
+**Step 7:** Run relevant tests.
+
+**Step 8:** Verify existing functionality.
+
+**Step 9:** Report actual changes and test results.
+
+### 10. Final Development Report
+
+Every task must conclude with:
+
+- What was implemented.
+- Which existing files were modified.
+- Whether any new files were necessary.
+- Whether any dependencies changed.
+- Which tests were executed.
+- Actual test results.
+- Any errors or limitations.
+- Whether existing functionality remains operational.
+
+### FINAL RULE
+
+The existing project architecture, folder structure, requirements documents, dependencies and working implementations are the source of truth.
+
+Do not invent your own architecture.
+
+Do not add unnecessary code.
+
+Do not introduce unapproved technologies.
+
+Do not make unrelated improvements.
+
+**Inspect → Understand → Plan → Implement → Test → Report.**
+
+Work incrementally and modify only what the requested task requires.
+

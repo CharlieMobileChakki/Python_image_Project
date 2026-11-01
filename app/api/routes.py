@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import time
 from typing import Any
+import zipfile
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -23,7 +24,15 @@ router = APIRouter()
 
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
-PIPELINE_SEMAPHORE = asyncio.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "1"))))
+
+_semaphore: asyncio.Semaphore | None = None
+
+
+def get_semaphore() -> asyncio.Semaphore:
+    global _semaphore
+    if _semaphore is None:
+        _semaphore = asyncio.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "1"))))
+    return _semaphore
 
 
 async def validate_and_read_image(file: UploadFile) -> bytes:
@@ -61,7 +70,7 @@ async def process_garment_endpoint(
     """
     image_bytes = await validate_and_read_image(file)
     try:
-        async with PIPELINE_SEMAPHORE:
+        async with get_semaphore():
             result = await run_in_threadpool(
                 process_garment_pipeline,
                 image_bytes=image_bytes,
@@ -105,7 +114,7 @@ async def extract_isolated_endpoint(
     image_bytes = await validate_and_read_image(file)
     try:
         raw_img = Image.open(BytesIO(image_bytes)).convert("RGB")
-        async with PIPELINE_SEMAPHORE:
+        async with get_semaphore():
             cutout_rgba = await run_in_threadpool(extract_isolated_flow_a, raw_img)
             if auto_straighten:
                 angle = detect_rotation_angle(cutout_rgba)
@@ -131,6 +140,58 @@ async def get_output_image(filename: str) -> FileResponse:
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Requested garment image does not exist.")
     return FileResponse(path=file_path, media_type="image/png", filename=filename)
+
+
+@router.get("/download-batch-zip/{job_id}")
+async def download_batch_zip(job_id: str) -> Response:
+    """Download all extracted 1024x1024 transparent garment PNGs for a given job in a single ZIP archive."""
+    png_files = sorted(list(OUTPUT_DIR.glob(f"{job_id}_*.png")))
+    if not png_files:
+        raise HTTPException(status_code=404, detail="No extracted garments found for this job ID.")
+
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in png_files:
+            zf.write(p, arcname=p.name)
+
+    zip_bytes = zip_buf.getvalue()
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="arangtik_{job_id}_garments.zip"'},
+    )
+
+
+@router.post("/forward-downstream")
+async def forward_downstream_endpoint(
+    job_id: str = Form(..., description="Job ID of processed garments"),
+    target_api_url: str = Form(..., description="Destination API URL"),
+) -> Any:
+    """Forward all extracted garment PNGs in ONE single multipart request to a downstream API."""
+    import httpx
+    png_files = sorted(list(OUTPUT_DIR.glob(f"{job_id}_*.png")))
+    if not png_files:
+        raise HTTPException(status_code=404, detail="No extracted garments found for this job.")
+
+    files_payload = []
+    for p in png_files:
+        files_payload.append(("files[]", (p.name, p.read_bytes(), "image/png")))
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                target_api_url,
+                files=files_payload,
+                data={"job_id": job_id, "total_garments": str(len(png_files))},
+            )
+            return {
+                "success": resp.is_success,
+                "status_code": resp.status_code,
+                "forwarded_files_count": len(png_files),
+                "downstream_response": resp.json() if "application/json" in resp.headers.get("content-type", "") else resp.text,
+            }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Downstream forward failed: {exc}") from exc
 
 
 @router.get("/health", response_model=HealthResponse)

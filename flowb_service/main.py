@@ -21,7 +21,15 @@ from flowb_service.extraction import (
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "1")))
-PROCESS_SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+_semaphore: asyncio.Semaphore | None = None
+
+
+def get_semaphore() -> asyncio.Semaphore:
+    global _semaphore
+    if _semaphore is None:
+        _semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+    return _semaphore
 
 
 @asynccontextmanager
@@ -134,7 +142,7 @@ async def extract_garment_worn_endpoint(
 
     # 5. Execute extraction with semaphore protection
     try:
-        async with PROCESS_SEMAPHORE:
+        async with get_semaphore():
             result = await run_in_threadpool(
                 extract_garment_worn,
                 image_bytes=image_bytes,

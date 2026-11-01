@@ -8,6 +8,8 @@ from typing import Any
 from PIL import Image, ImageOps
 from rembg import new_session, remove
 
+from app.core.normalizer import detect_rotation_angle, normalize_to_1024, straighten_garment
+
 MODEL_NAME = os.getenv("REMBG_MODEL", "birefnet-general-lite").strip()
 OUTPUT_SIZE = int(os.getenv("OUTPUT_SIZE", "1024"))
 MAX_INPUT_EDGE = int(os.getenv("MAX_INPUT_EDGE", "2400"))
@@ -46,35 +48,20 @@ def _prepare_input(image_bytes: bytes) -> tuple[bytes, tuple[int, int]]:
 
 
 def _normalize_canvas(cutout_bytes: bytes) -> bytes:
-    """Tight-crop the alpha subject and center it on a transparent square canvas."""
+    """Tight-crop the alpha subject, auto-straighten tilt in backend, and center on 1024x1024 canvas."""
     try:
         cutout = Image.open(BytesIO(cutout_bytes)).convert("RGBA")
     except OSError as exc:
         raise RuntimeError("The segmentation model returned an unreadable image.") from exc
 
-    alpha = cutout.getchannel("A")
-    # Ignore extremely faint alpha noise when estimating the crop box.
-    threshold = alpha.point(lambda value: 255 if value > 8 else 0)
-    bbox = threshold.getbbox()
-    if bbox is None:
-        raise RuntimeError("No foreground garment was detected. Try a clearer photo with the full garment visible.")
+    # Auto-deskew tilt in backend
+    angle = detect_rotation_angle(cutout)
+    if abs(angle) > 0.5:
+        cutout = straighten_garment(cutout, angle)
 
-    cutout = cutout.crop(bbox)
-    if cutout.width < 2 or cutout.height < 2:
-        raise RuntimeError("The detected garment mask is too small to process.")
-
-    max_item_size = max(64, int(OUTPUT_SIZE * CANVAS_FILL_RATIO))
-    scale = min(max_item_size / cutout.width, max_item_size / cutout.height)
-    new_size = (max(1, round(cutout.width * scale)), max(1, round(cutout.height * scale)))
-    cutout = cutout.resize(new_size, Image.Resampling.LANCZOS)
-
-    canvas = Image.new("RGBA", (OUTPUT_SIZE, OUTPUT_SIZE), (0, 0, 0, 0))
-    x = (OUTPUT_SIZE - cutout.width) // 2
-    y = (OUTPUT_SIZE - cutout.height) // 2
-    canvas.alpha_composite(cutout, (x, y))
-
+    norm_1024 = normalize_to_1024(cutout, target_size=OUTPUT_SIZE, fill_ratio=CANVAS_FILL_RATIO)
     output = BytesIO()
-    canvas.save(output, format="PNG", optimize=True)
+    norm_1024.save(output, format="PNG", optimize=True)
     return output.getvalue()
 
 
