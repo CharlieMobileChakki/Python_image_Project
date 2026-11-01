@@ -15,3 +15,4 @@ for c, cnt in zip(classes, counts):
 
 scene_info = analyze_semantic_map(pred_map)
 print("\nScene Info Result:", scene_info)
+

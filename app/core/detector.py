@@ -70,19 +70,28 @@ def analyze_semantic_map(pred_map: np.ndarray) -> dict[str, Any]:
     leg_pixels = class_counts.get(12, 0) + class_counts.get(13, 0)
     human_pixels = sum(class_counts.get(cid, 0) for cid in HUMAN_BODY_CLASSES)
     human_pct = (human_pixels / total_pixels) * 100.0
-
+    face_pct = (face_pixels / total_pixels) * 100.0
+    hair_pct = (hair_pixels / total_pixels) * 100.0
+    arm_pct = (arm_pixels / total_pixels) * 100.0
+    leg_pct = (leg_pixels / total_pixels) * 100.0
 
     # Distinguish Person vs Mannequin vs Flat-lay
-    # A genuine human model has face, hair, or active arm/leg skin
-    if human_pixels <= 250:
+    # A genuine human model has coherent facial features, substantial hair, or active arm/leg skin
+    has_real_face = (face_pixels >= 700 and face_pct >= 0.35)
+    has_face_and_hair = (face_pixels >= 350 and hair_pixels >= 500 and (face_pct + hair_pct) >= 0.70)
+    has_real_arms = (arm_pixels >= 1000 and arm_pct >= 0.70)
+    has_real_legs = (leg_pixels >= 1200 and leg_pct >= 0.80)
+    has_large_human = (human_pixels >= 3000 and human_pct >= 2.0)
+
+    is_person = (has_real_face or has_face_and_hair or has_real_arms or has_real_legs or has_large_human)
+
+    if is_person:
+        scene_type = "person"
+        has_human = True
+    elif human_pixels <= 500 or (face_pixels == 0 and hair_pixels < 300 and arm_pixels < 300 and leg_pixels == 0):
+        # Product shot laid flat, table, hanger, or clean product photo
         scene_type = "flat_lay"
         has_human = False
-    elif face_pixels > 250 or hair_pixels > 350 or (arm_pixels > 650 and human_pct > 1.0) or (leg_pixels > 650 and human_pct > 1.0):
-        scene_type = "person"
-        has_human = True
-    elif face_pixels > 150 and hair_pixels > 200:
-        scene_type = "person"
-        has_human = True
     else:
         # Isolated mannequin stand, head-less torso form, or display fixture
         scene_type = "mannequin"

@@ -107,7 +107,12 @@ def compute_arm_occlusion_mask(
                     filtered_arms |= comp
             crossed_arms = filtered_arms
 
-    # 2. Internal transparent holes enclosed within the garment silhouette
+    # If there are no confirmed human arm/hand pixels crossing the garment, do not repair!
+    # Prevents artificial holes being carved into plackets, necklines, or embroidery on flat-lays or mannequins.
+    if not crossed_arms.any():
+        return np.zeros_like(garment_mask, dtype=np.uint8)
+
+    # 2. Internal transparent holes enclosed within the garment silhouette that touch crossed arms
     internal_holes = np.zeros_like(garment_mask, dtype=bool)
     if cutout_alpha is not None:
         contours, _ = cv2.findContours(
@@ -120,9 +125,11 @@ def compute_arm_occlusion_mask(
         candidate_holes = (filled_silhouette == 255) & (cutout_alpha < 30) & (~bg_mask)
         candidate_holes[:y_top_limit, :] = False
         candidate_holes[y_bot_limit:, :] = False
-        internal_holes = candidate_holes
+        # Must touch or be near crossed arm pixels
+        dilated_arms = cv2.dilate(crossed_arms.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+        internal_holes = candidate_holes & dilated_arms
 
-    # Union of genuine crossed arms and enclosed internal holes
+    # Union of genuine crossed arms and enclosed arm holes
     repair_mask = crossed_arms | internal_holes
     if repair_mask.sum() < 60:
         return np.zeros_like(garment_mask, dtype=np.uint8)
