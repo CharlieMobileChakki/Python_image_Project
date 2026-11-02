@@ -32,3 +32,6 @@ res_red = test_image("Red Party Dress on White Fur", "input images/red_dress_exa
 # 3. Orange Kurta Test (Chest Placket Preservation, No LaMa Hole)
 res_orange = test_image("Orange Embroidered Kurta", "input images/orange_kurta_exact.png")
 
+# 4. Nawab Model Test (Human Parsing: Kurta + Pajama extraction, Human Removal)
+res_nawab = test_image("Nawab Kurta Pajama Model", "scratch/nawab_kurta_pajama.png")
+

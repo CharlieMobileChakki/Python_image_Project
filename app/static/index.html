@@ -1048,11 +1048,9 @@
       formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
       formData.append('auto_repair', document.getElementById('autoRepairCheck').checked);
       formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
+      formData.append('mode_hint', selectedMode);
 
-      let endpoint = '/api/v1/process-garment';
-      if (selectedMode === 'isolated') {
-        endpoint = '/api/v1/extract-isolated';
-      }
+      const endpoint = '/api/v1/process-garment';
 
       const res = await fetch(endpoint, {
         method: 'POST',

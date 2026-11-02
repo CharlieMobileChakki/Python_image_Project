@@ -8,7 +8,7 @@ from typing import Any
 from PIL import Image, ImageOps
 from rembg import new_session, remove
 
-from app.core.normalizer import detect_rotation_angle, normalize_to_1024, straighten_garment
+from app.core.image_processing import detect_rotation_angle, normalize_to_1024, straighten_garment
 
 MODEL_NAME = os.getenv("REMBG_MODEL", "birefnet-general-lite").strip()
 OUTPUT_SIZE = int(os.getenv("OUTPUT_SIZE", "1024"))

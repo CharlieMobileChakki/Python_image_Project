@@ -1,143 +1,37 @@
 """Master Pipeline Orchestrator: Coordinates detection, segmentation, inpainting, and normalization."""
 from __future__ import annotations
 
-import base64
-from io import BytesIO
-import os
-from pathlib import Path
 import time
 from typing import Any
 import uuid
 
-import numpy as np
 import cv2
-from PIL import Image, ImageFilter, ImageOps
+import numpy as np
+from PIL import Image
 
-from app.core.detector import analyze_semantic_map, classify_outfit_structure, detect_multi_garment_layout
-from app.core.inpainter import repair_garment_cutout
-from app.core.normalizer import detect_rotation_angle, normalize_to_1024, straighten_garment
-from app.core.validator import validate_garment_background
-from app.core.segmenter import (
-    extract_garment_cutout_flow_b,
-    extract_garment_cutout_guided,
+from app.core.background_removal import (
     extract_isolated_flow_a,
-    run_segformer_inference,
+    validate_garment_background,
 )
-
-OUTPUT_DIR = Path("outputs")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def image_to_base64_data_uri(img_rgba: Image.Image) -> str:
-    """Convert PIL RGBA image to Base64 PNG data URI."""
-    buf = BytesIO()
-    img_rgba.save(buf, format="PNG", optimize=True)
-    b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{b64_str}"
-
-
-def compute_arm_occlusion_mask(
-    pred_map: np.ndarray,
-    garment_class_id: int | list[int] | tuple[int, ...],
-    cutout_alpha: np.ndarray | None = None,
-    arm_classes: tuple[int, ...] = (14, 15),
-    dilation_radius: int = 17,
-) -> np.ndarray:
-    """Detect regions where model's arms cut into or cross over garment fabric.
-
-    Strictly triggers ONLY for genuine human occlusions:
-    - Reconstructs fabric hidden by hands/arms crossing over the torso/garment body.
-    - Excludes arms resting outside on walls or hanging down in the background.
-    - Excludes background regions (Class 0), natural necklines, and bottom hemlines.
-    """
-    if isinstance(garment_class_id, (list, tuple)):
-        garment_mask = np.isin(pred_map, garment_class_id)
-    else:
-        garment_mask = (pred_map == garment_class_id)
-
-    arms_mask = np.isin(pred_map, arm_classes)
-    bg_mask = (pred_map == 0)
-
-    if garment_mask.sum() == 0 or (arms_mask.sum() < 100 and cutout_alpha is None):
-        return np.zeros_like(garment_mask, dtype=np.uint8)
-
-    H, W = pred_map.shape
-    garment_rows = np.any(garment_mask, axis=1)
-    if not np.any(garment_rows):
-        return np.zeros_like(garment_mask, dtype=np.uint8)
-
-    y_indices = np.where(garment_rows)[0]
-    y_min, y_max = y_indices[0], y_indices[-1]
-    garment_height = max(1, y_max - y_min)
-
-    # Protect natural neckline (top 10%) and natural hemline (bottom 5%)
-    y_top_limit = y_min + int(0.10 * garment_height)
-    y_bot_limit = y_max - int(0.05 * garment_height)
-
-    # 1. Arm regions genuinely crossing the garment torso/body
-    crossed_arms = np.zeros_like(garment_mask, dtype=bool)
-    if arms_mask.sum() > 0:
-        for y in range(y_top_limit, y_bot_limit):
-            row_g = np.where(garment_mask[y])[0]
-            row_a = np.where(arms_mask[y])[0]
-            if len(row_g) < 25 or len(row_a) == 0:
-                continue
-            g_left, g_right = row_g[0], row_g[-1]
-            # Arm pixel must be embedded horizontally inside the garment silhouette
-            in_torso = (row_a > (g_left + 15)) & (row_a < (g_right - 15))
-            valid_x = row_a[in_torso]
-            if len(valid_x) > 0:
-                crossed_arms[y, valid_x] = True
-
-        # Filter out arm components that touch external background over majority of perimeter
-        if crossed_arms.any():
-            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crossed_arms.astype(np.uint8))
-            kernel = np.ones((7, 7), np.uint8)
-            filtered_arms = np.zeros_like(crossed_arms, dtype=bool)
-            for i in range(1, num_labels):
-                if stats[i, cv2.CC_STAT_AREA] < 40:
-                    continue
-                comp = (labels == i)
-                dilated = cv2.dilate(comp.astype(np.uint8), kernel) > 0
-                ring = dilated & ~comp
-                bg_touch = (ring & bg_mask).sum()
-                total_ring = max(1, ring.sum())
-                # If arm component touches external background over >= 25%, it is an external limb
-                if (bg_touch / total_ring) < 0.25:
-                    filtered_arms |= comp
-            crossed_arms = filtered_arms
-
-    # If there are no confirmed human arm/hand pixels crossing the garment, do not repair!
-    # Prevents artificial holes being carved into plackets, necklines, or embroidery on flat-lays or mannequins.
-    if not crossed_arms.any():
-        return np.zeros_like(garment_mask, dtype=np.uint8)
-
-    # 2. Internal transparent holes enclosed within the garment silhouette that touch crossed arms
-    internal_holes = np.zeros_like(garment_mask, dtype=bool)
-    if cutout_alpha is not None:
-        contours, _ = cv2.findContours(
-            (cutout_alpha > 20).astype(np.uint8) * 255, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
-        )
-        filled_silhouette = np.zeros_like(cutout_alpha)
-        for c in contours:
-            cv2.drawContours(filled_silhouette, [c], -1, 255, -1)
-        # Internal void: strictly enclosed, NOT background, NOT in neckline or hemline
-        candidate_holes = (filled_silhouette == 255) & (cutout_alpha < 30) & (~bg_mask)
-        candidate_holes[:y_top_limit, :] = False
-        candidate_holes[y_bot_limit:, :] = False
-        # Must touch or be near crossed arm pixels
-        dilated_arms = cv2.dilate(crossed_arms.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
-        internal_holes = candidate_holes & dilated_arms
-
-    # Union of genuine crossed arms and enclosed arm holes
-    repair_mask = crossed_arms | internal_holes
-    if repair_mask.sum() < 60:
-        return np.zeros_like(garment_mask, dtype=np.uint8)
-
-    # Dilate slightly so LaMa seamlessly blends the boundary into surrounding intact fabric
-    mask_im = Image.fromarray((repair_mask.astype(np.uint8) * 255), mode="L")
-    dilated_mask = np.array(mask_im.filter(ImageFilter.MaxFilter(dilation_radius)))
-    return dilated_mask
+from app.core.garment_extraction import (
+    analyze_semantic_map,
+    classify_outfit_structure,
+    detect_multi_garment_layout,
+    extract_garment_cutout_guided,
+)
+from app.core.image_processing import (
+    detect_rotation_angle,
+    image_to_base64_data_uri,
+    load_image_bytes,
+    normalize_to_1024,
+    straighten_garment,
+)
+from app.core.inpainting import (
+    compute_arm_occlusion_mask,
+    repair_garment_cutout,
+)
+from app.core.person_parsing import run_segformer_inference
+from app.core.pipeline.pipeline_config import OUTPUT_DIR
 
 
 def process_garment_pipeline(
@@ -146,6 +40,7 @@ def process_garment_pipeline(
     auto_repair: bool = True,
     auto_straighten: bool = True,
     include_base64: bool = False,
+    mode_hint: str = "auto",
 ) -> dict[str, Any]:
     """Execute the end-to-end Arangtik Garment AI pipeline.
 
@@ -160,12 +55,7 @@ def process_garment_pipeline(
     job_id = uuid.uuid4().hex[:10]
 
     # Step 1: Ingest and validate image
-    try:
-        raw_image = Image.open(BytesIO(image_bytes))
-        image_rgb = ImageOps.exif_transpose(raw_image).convert("RGB")
-    except Exception as exc:
-        raise ValueError("Invalid or corrupted image format. Please upload a valid JPG, PNG, or WEBP.") from exc
-
+    image_rgb = load_image_bytes(image_bytes)
     orig_w, orig_h = image_rgb.size
 
     # Step 2: Extract high-resolution foreground boundary with BiRefNet Lite
@@ -174,19 +64,38 @@ def process_garment_pipeline(
     fg_alpha = np.array(fg_cutout.split()[3])
     fg_time_ms = round((time.perf_counter() - t_fg_start) * 1000, 2)
 
-    # Step 3: Check for Multiple Independent Garments in a single product/catalog image
-    is_multi, multi_comps = detect_multi_garment_layout(image_rgb, fg_alpha=fg_alpha)
+    # Step 3: Semantic scene analysis with SegFormer
+    t_seg_start = time.perf_counter()
+    pred_map, probs_tensor = run_segformer_inference(image_rgb)
+    scene_info = analyze_semantic_map(pred_map)
+    seg_time_ms = round((time.perf_counter() - t_seg_start) * 1000, 2)
+
+    has_human = scene_info["has_human"]
+    scene_type = scene_info.get("scene_type", "person" if has_human else "flat_lay")
+    detected_garments = scene_info["detected_garments"]
+
+    if mode_hint == "isolated":
+        has_human = False
+        scene_type = "flat_lay"
+    elif mode_hint == "worn":
+        has_human = True
+        scene_type = "person"
+
+    # Step 4: Check for Multiple Independent Garments in flat-lay / catalog images ONLY (never on human models)
+    is_multi = False
+    multi_comps: list[dict[str, Any]] = []
+    if not has_human and scene_type in {"flat_lay", "mannequin"}:
+        is_multi, multi_comps = detect_multi_garment_layout(image_rgb, fg_alpha=fg_alpha)
 
     processed_items: list[dict[str, Any]] = []
 
     if is_multi and len(multi_comps) >= 2:
-        # Multi-Garment Extraction Flow
+        # Multi-Garment Extraction Flow (Flat-lay / Catalog Grid only)
         mode = "multi_garment"
         scene_type = "multi_garment"
         outfit_mode = "mode_a_independent"
         ensemble_type = "multi_garment_collection"
         has_human = False
-        seg_time_ms = 0.0
 
         arr_rgb = np.array(image_rgb)
         total_multi_area = max(1, sum(c["area"] for c in multi_comps))
@@ -253,16 +162,6 @@ def process_garment_pipeline(
             })
 
     else:
-        # Step 4: Semantic scene analysis with SegFormer (for single garment or worn outfit)
-        t_seg_start = time.perf_counter()
-        pred_map, probs_tensor = run_segformer_inference(image_rgb)
-        scene_info = analyze_semantic_map(pred_map)
-        seg_time_ms = round((time.perf_counter() - t_seg_start) * 1000, 2)
-
-        has_human = scene_info["has_human"]
-        scene_type = scene_info.get("scene_type", "person" if has_human else "flat_lay")
-        detected_garments = scene_info["detected_garments"]
-
         # Step 5: Intelligent Outfit Structure Classification
         classification = classify_outfit_structure(
             pred_map=pred_map,
@@ -274,6 +173,10 @@ def process_garment_pipeline(
         outfit_mode = classification["outfit_mode"]
         ensemble_type = classification["ensemble_type"]
         planned_items = classification["planned_items"]
+
+        # For isolated product / flat-lay images without human, ensure single product is not split by edge noise
+        if not has_human and len(planned_items) > 1 and scene_type in {"flat_lay", "mannequin"}:
+            planned_items = [planned_items[0]]
 
         # Step 6: Execution based on outfit classification
         if planned_items:

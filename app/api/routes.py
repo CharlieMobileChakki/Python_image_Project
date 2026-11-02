@@ -15,10 +15,11 @@ from PIL import Image
 from starlette.concurrency import run_in_threadpool
 
 from app.api.schemas import HealthResponse, ProcessGarmentResponse
-from app.core.inpainter import is_inpainter_loaded, repair_garment_cutout
-from app.core.normalizer import detect_rotation_angle, normalize_to_1024, straighten_garment
+from app.core.background_removal import extract_isolated_flow_a
+from app.core.image_processing import detect_rotation_angle, normalize_to_1024, straighten_garment
+from app.core.inpainting import repair_garment_cutout
+from app.core.model_manager import are_models_loaded, is_inpainter_loaded
 from app.core.pipeline import OUTPUT_DIR, process_garment_pipeline
-from app.core.segmenter import are_models_loaded, extract_isolated_flow_a
 
 router = APIRouter()
 
@@ -58,6 +59,7 @@ async def process_garment_endpoint(
     auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
     response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
+    mode_hint: str = Form("auto", description="'auto', 'worn', or 'isolated'"),
 ) -> Any:
     """Master Unified Pipeline Endpoint (Option 2 Machine-to-Machine API).
 
@@ -78,6 +80,7 @@ async def process_garment_endpoint(
                 auto_repair=auto_repair,
                 auto_straighten=auto_straighten,
                 include_base64=include_base64,
+                mode_hint=mode_hint,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

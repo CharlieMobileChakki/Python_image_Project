@@ -26,8 +26,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app.api.routes import router as api_router
-from app.core.inpainter import load_inpainter_model
-from app.core.segmenter import extract_isolated_flow_a, load_segmenter_models
+from app.core.background_removal import extract_isolated_flow_a
+from app.core.model_manager import load_inpainter_model, load_segmenter_models
 from app.services.extraction import MODEL_NAME as FLOW_A_MODEL_NAME, extract_garment, load_model
 
 MODEL_NAME = FLOW_A_MODEL_NAME

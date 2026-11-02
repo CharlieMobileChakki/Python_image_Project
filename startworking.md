@@ -4152,3 +4152,65 @@ Fast Fourier Convolutions natively preserve the directional weave and local ligh
 
   
 Production Status: As instructed, all experiments remain strictly isolated in .venv-inpaint and benchmark_output/phase13/. No modifications were made to Flow A (app/) or Flow B (flowb_service/).
+
+
+
+
+Aapka sochna bilkul sahi aur practical hai! Agar aane wale API request me pehle se hi pata ho ki image with_human hai ya normal (product/flat-lay), toh hamara kaam aur bhi zyada fast, accurate aur 100% reliable ho jayega.
+
+Is flow ko hum bilkul smoothly follow karenge:
+
+1. Udhar se Request aane par kya data aayega?
+
+Caller API se hamare paas 2 cheezein aayengi:
+
+file: Garment ya Model ki image.
+image_type (Flag/Metadata):
+"normal" 
+→
+→ Flat-lay, Table, Hanger, Mannequin, ya Isolated Garment (Without Human).
+"with_human" 
+→
+→ Living Model ne kapda pehna hua hai.
+2. Hum apne Tools ko uske according kaise chalayenge?
+Case 1: Jab Type = "normal" (Product / Flat-lay / Mannequin)
+
+Isme insaan hai hi nahi, toh human parsing ya arm inpainting ki koi zarurat nahi hai:
+
+Tool Used: Flow A (BiRefNet Lite) + Multi-Garment Detector.
+Execution:
+SegFormer aur LaMa inpainting bypass ho jayenge.
+Background cleanly remove hoga, fabric edges, collar, golden placket, embroidery, neckline 100% intact aur solid rahenge (zero chance of holes).
+Agar ek photo me 10–12 kapde arranged hain, toh har piece alag-alag cut ho jayega.
+Speed: Super fast (0.3 – 0.6 second).
+Case 2: Jab Type = "with_human" (Model Wearing Clothes)
+
+Yaha model ki body aur haath kapde ke sath hain:
+
+Tool Used: Flow B (SegFormer B2 Human Parser) + BiRefNet Edge Snapping + LaMa Inpainter.
+Execution:
+SegFormer insaan ke face, arms, skin aur legs ko dress se cleanly separate karega.
+Agar model ke haath pet/waist par crossed hain, toh LaMa un haathon ko hata kar missing fabric texture reconstruct karega.
+Output transparent 1024×1024 garment PNG ban jayega.
+3. Data ko Sahi Karke Aage Kaise Bhejenge?
+
+Data process hone ke baad hamare paas 2 simple options hain:
+
+Option 1: Direct API Response (Caller ko wapis bhejna)
+
+Caller ko turant clean response chala jayega:
+total_garments: Kitne kapde extract hue.
+garments: List of 1024×1024 transparent PNG URLs / Base64.
+background_removal_status: "success" / confidence score.
+category: e.g. upper_clothes, dress, saree.
+
+Option 2: Forwarding to Downstream Server/Database (Aage pass karna)
+
+Agar aapko ye data direct aage kisi teesre server, CRM, ya storage API ko bhejna hai, toh hamara existing endpoint:
+/api/v1/forward-downstream
+Ye ek hi request me saare clean 1024×1024 transparent PNGs ko aage target API par forward kar deta hai.
+Summary
+Aapko koi logic manually change karne ki zarurat nahi hai.
+API me sirf ek simple parameter (image_type="normal" ya "with_human") pass hoga.
+System automatically correct tool pick karega aur data 1024×1024 transparent PNG me convert karke aage bhej dega.
+Agar kisi request me image_type nahi bhi aaya, toh hamara Auto-Detector khud smartly pehchan lega!
