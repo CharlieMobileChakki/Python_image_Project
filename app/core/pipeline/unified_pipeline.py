@@ -58,15 +58,182 @@ def process_garment_pipeline(
     image_rgb = load_image_bytes(image_bytes)
     orig_w, orig_h = image_rgb.size
 
-    # Step 2: Extract high-resolution foreground boundary with BiRefNet Lite
+    # Step 2: Background Removal with existing BiRefNet Lite model (Flow A engine)
     t_fg_start = time.perf_counter()
     fg_cutout = extract_isolated_flow_a(image_rgb)
     fg_alpha = np.array(fg_cutout.split()[3])
     fg_time_ms = round((time.perf_counter() - t_fg_start) * 1000, 2)
 
-    # Step 3: Semantic scene analysis with SegFormer
+    # -------------------------------------------------------------
+    # FLOW A: Pure Salient Background Removal (Flat-lay / Hanger)
+    # When mode_hint == "isolated", skip Person Parsing & Human Analysis completely.
+    # -------------------------------------------------------------
+    if mode_hint == "isolated":
+        # Check for multiple garments layout (e.g. 12 dresses catalog grid)
+        is_multi, multi_comps = detect_multi_garment_layout(image_rgb, fg_alpha=fg_alpha)
+        processed_items: list[dict[str, Any]] = []
+
+        if is_multi and len(multi_comps) >= 2:
+            # Multi-Garment Extraction Flow
+            arr_rgb = np.array(image_rgb)
+            total_multi_area = max(1, sum(c["area"] for c in multi_comps))
+
+            for idx, comp in enumerate(multi_comps):
+                g_id = f"garment_{idx+1:03d}"
+                c_mask = comp["comp_mask"]
+                c_soft = cv2.GaussianBlur(c_mask.astype(np.float32) * 255.0, (3, 3), 0.5)
+                g_alpha = np.clip(c_soft, 0, 255).astype(np.uint8)
+
+                x0, y0, x1, y1 = comp["bbox"]
+                pad = 8
+                cx0 = max(0, x0 - pad)
+                cy0 = max(0, y0 - pad)
+                cx1 = min(orig_w, x1 + pad)
+                cy1 = min(orig_h, y1 + pad)
+
+                sub_rgb = arr_rgb[cy0:cy1, cx0:cx1]
+                sub_a = g_alpha[cy0:cy1, cx0:cx1]
+                sub_rgba = Image.fromarray(np.dstack([sub_rgb, sub_a]), mode="RGBA")
+
+                angle_deg = 0.0
+                if auto_straighten:
+                    angle_deg = detect_rotation_angle(sub_rgba)
+                    if abs(angle_deg) > 0.5:
+                        sub_rgba = straighten_garment(sub_rgba, angle_deg)
+
+                normalized_1024 = normalize_to_1024(sub_rgba, target_size=1024, fill_ratio=0.82)
+                val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
+                final_cutout = val_res.get("refined_cutout", normalized_1024)
+
+                out_filename = f"{job_id}_{g_id}.png"
+                out_path = OUTPUT_DIR / out_filename
+                final_cutout.save(out_path, format="PNG", optimize=True)
+
+                b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
+                coverage_pct = round((comp["area"] / total_multi_area) * 100.0, 1)
+
+                processed_items.append({
+                    "garment_id": g_id,
+                    "category": comp["category"],
+                    "recognized_label": comp["label_name"],
+                    "image": out_filename,
+                    "confidence": val_res["confidence"],
+                    "coverage_percentage": coverage_pct,
+                    "priority": "first_priority",
+                    "is_fused": False,
+                    "rotation_angle_deg": angle_deg,
+                    "repaired": False,
+                    "repair_method": None,
+                    "width": 1024,
+                    "height": 1024,
+                    "image_dimensions": [1024, 1024],
+                    "output_png_url": f"/api/v1/outputs/{out_filename}",
+                    "output_png_base64": b64_data,
+                    "background_removal_status": val_res["status"],
+                    "background_removal_confidence": val_res["confidence"],
+                    "garment_preservation_status": val_res["preservation_status"],
+                    "validation_errors": val_res["validation_errors"],
+                })
+
+            mode = "multi_garment"
+            scene_type = "multi_garment"
+            outfit_mode = "mode_a_independent"
+            ensemble_type = "multi_garment_collection"
+
+        else:
+            # Single Product Flat-lay / Hanger background removal (BiRefNet Lite pure flow)
+            cutout_rgba = fg_cutout
+            angle_deg = 0.0
+            if auto_straighten:
+                angle_deg = detect_rotation_angle(cutout_rgba)
+                if abs(angle_deg) > 0.5:
+                    cutout_rgba = straighten_garment(cutout_rgba, angle_deg)
+
+            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
+            val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
+            final_cutout = val_res.get("refined_cutout", normalized_1024)
+
+            w, h = cutout_rgba.size
+            if h > w * 1.35:
+                cat_key = "dress"
+                cat_label = "Dress / Gown / Full Outfit"
+            elif h > w * 1.15:
+                cat_key = "pants"
+                cat_label = "Pants / Jeans"
+            else:
+                cat_key = "upper_clothes"
+                cat_label = "Top / Shirt / Garment"
+
+            out_filename = f"{job_id}_{cat_key}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", optimize=True)
+
+            b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
+
+            processed_items.append({
+                "garment_id": f"{cat_key}_0",
+                "category": cat_key,
+                "recognized_label": cat_label,
+                "image": out_filename,
+                "confidence": val_res["confidence"],
+                "coverage_percentage": 100.0,
+                "priority": "first_priority",
+                "is_fused": False,
+                "rotation_angle_deg": angle_deg,
+                "repaired": False,
+                "repair_method": None,
+                "width": 1024,
+                "height": 1024,
+                "image_dimensions": [1024, 1024],
+                "output_png_url": f"/api/v1/outputs/{out_filename}",
+                "output_png_base64": b64_data,
+                "background_removal_status": val_res["status"],
+                "background_removal_confidence": val_res["confidence"],
+                "garment_preservation_status": val_res["preservation_status"],
+                "validation_errors": val_res["validation_errors"],
+            })
+
+            mode = "isolated_product"
+            scene_type = "flat_lay"
+            outfit_mode = "mode_b_single_piece"
+            ensemble_type = "single_product"
+
+        total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        return {
+            "success": True,
+            "status": "success",
+            "job_id": job_id,
+            "mode": mode,
+            "has_human": False,
+            "scene_type": scene_type,
+            "outfit_mode": outfit_mode,
+            "execution_time_ms": total_time_ms,
+            "total_detected": len(processed_items),
+            "total_extracted": len(processed_items),
+            "total_background_removed": sum(1 for g in processed_items if g.get("background_removal_status") == "success"),
+            "total_partial": sum(1 for g in processed_items if g.get("background_removal_status") == "partial"),
+            "total_failed": sum(1 for g in processed_items if g.get("background_removal_status") == "failed"),
+            "garments_found": len(processed_items),
+            "garments": processed_items,
+            "diagnostics": {
+                "original_width": orig_w,
+                "original_height": orig_h,
+                "scene_type": scene_type,
+                "outfit_mode": outfit_mode,
+                "ensemble_type": ensemble_type,
+                "segmentation_time_ms": 0.0,
+                "foreground_time_ms": fg_time_ms,
+            },
+        }
+
+    # Step 3: Extract Person / Foreground Part
+    # Isolate the clean person/garment foreground so background clutter cannot contaminate downstream parsing
+    person_rgb = Image.new("RGB", image_rgb.size, (255, 255, 255))
+    person_rgb.paste(image_rgb, mask=Image.fromarray(fg_alpha))
+
+    # Step 4: Human Analysis & Person Parsing (Flow B SegFormer) on extracted person foreground
     t_seg_start = time.perf_counter()
-    pred_map, probs_tensor = run_segformer_inference(image_rgb)
+    pred_map, probs_tensor = run_segformer_inference(person_rgb, fg_alpha=fg_alpha)
     scene_info = analyze_semantic_map(pred_map)
     seg_time_ms = round((time.perf_counter() - t_seg_start) * 1000, 2)
 
@@ -74,10 +241,7 @@ def process_garment_pipeline(
     scene_type = scene_info.get("scene_type", "person" if has_human else "flat_lay")
     detected_garments = scene_info["detected_garments"]
 
-    if mode_hint == "isolated":
-        has_human = False
-        scene_type = "flat_lay"
-    elif mode_hint == "worn":
+    if mode_hint == "worn":
         has_human = True
         scene_type = "person"
 
@@ -190,9 +354,9 @@ def process_garment_pipeline(
                 coverage_pct = item.get("coverage_percentage", 100.0)
                 priority = item.get("priority", "first_priority")
 
-                # 6A. Confidence-Aware Mask Fusion with BiRefNet Lite boundary guidance
+                # 6A. Confidence-Aware Mask Fusion on extracted person foreground with BiRefNet Lite boundary guidance
                 cutout_rgba = extract_garment_cutout_guided(
-                    image_rgb=image_rgb,
+                    image_rgb=person_rgb,
                     probs_tensor=probs_tensor,
                     target_class_ids=target_cids,
                     foreground_cutout=fg_cutout,

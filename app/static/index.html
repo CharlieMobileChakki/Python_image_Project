@@ -741,6 +741,55 @@
       document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === mode);
       });
+
+      const repairCheck = document.getElementById('autoRepairCheck');
+      const targetSelect = document.getElementById('targetGarmentSelect');
+      const repairLabel = repairCheck ? repairCheck.closest('.checkbox-label') : null;
+      const targetLabel = targetSelect ? targetSelect.previousElementSibling : null;
+
+      if (mode === 'isolated') {
+        // Flow A: Pure Background Removal (BiRefNet Lite) - No Person Parsing
+        if (repairCheck) repairCheck.disabled = true;
+        if (repairLabel) {
+          repairLabel.style.opacity = '0.35';
+          repairLabel.style.pointerEvents = 'none';
+          repairLabel.title = 'Inpainting is disabled for Flat-lay / Hanger (Pure Background Removal)';
+        }
+        if (targetSelect) {
+          targetSelect.disabled = true;
+          targetSelect.style.opacity = '0.35';
+        }
+        if (targetLabel) targetLabel.style.opacity = '0.35';
+        document.getElementById('statusTelemetry').textContent = 'Mode: 👔 Flat-lay / Hanger (Flow A) - BiRefNet Lite Pure Background Removal (Zero Person Parsing)';
+      } else if (mode === 'worn') {
+        // Flow B: Human Model - SegFormer Person Parsing & Separation
+        if (repairCheck) repairCheck.disabled = false;
+        if (repairLabel) {
+          repairLabel.style.opacity = '1.0';
+          repairLabel.style.pointerEvents = 'auto';
+          repairLabel.title = '';
+        }
+        if (targetSelect) {
+          targetSelect.disabled = false;
+          targetSelect.style.opacity = '1.0';
+        }
+        if (targetLabel) targetLabel.style.opacity = '1.0';
+        document.getElementById('statusTelemetry').textContent = 'Mode: 👗 Human Model (Flow B) - SegFormer Person Parsing & Hand Occlusion Repair';
+      } else {
+        // Auto-Detect Mode
+        if (repairCheck) repairCheck.disabled = false;
+        if (repairLabel) {
+          repairLabel.style.opacity = '1.0';
+          repairLabel.style.pointerEvents = 'auto';
+          repairLabel.title = '';
+        }
+        if (targetSelect) {
+          targetSelect.disabled = false;
+          targetSelect.style.opacity = '1.0';
+        }
+        if (targetLabel) targetLabel.style.opacity = '1.0';
+        document.getElementById('statusTelemetry').textContent = 'Mode: ⚡ Auto-Detect Pipeline - Smart Human vs Product Branching';
+      }
     }
 
     function handleFileSelect(e) {
