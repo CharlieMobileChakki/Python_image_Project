@@ -105,8 +105,16 @@ def compute_arm_occlusion_mask(
     if repair_mask.sum() < 60:
         return np.zeros_like(garment_mask, dtype=np.uint8)
 
-    # Dilate slightly so LaMa seamlessly blends the boundary into surrounding intact fabric
-    mask_im = Image.fromarray((repair_mask.astype(np.uint8) * 255), mode="L")
-    dilated_mask = np.array(mask_im.filter(ImageFilter.MaxFilter(dilation_radius)))
+    # Tight boundary seam dilation (5px) to cover seam without over-expanding into intact fabric
+    seam_radius = min(dilation_radius, 5) if dilation_radius > 5 else dilation_radius
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (seam_radius, seam_radius))
+    dilated_mask = cv2.dilate(repair_mask.astype(np.uint8) * 255, kernel)
+
+    # Restrict strictly inside the filled garment silhouette (never spill into outer background)
+    if cutout_alpha is not None and "filled_silhouette" in locals():
+        dilated_mask[filled_silhouette == 0] = 0
+    dilated_mask[:y_top_limit, :] = 0
+    dilated_mask[y_bot_limit:, :] = 0
+
     return dilated_mask
 

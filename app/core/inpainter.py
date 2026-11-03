@@ -24,6 +24,8 @@ def repair_garment_cutout(
     cutout_rgba: Image.Image,
     inpaint_mask: np.ndarray,
     crop_box: tuple[int, int, int, int] | None = None,
+    *args,
+    **kwargs,
 ) -> tuple[Image.Image, float]:
     """Compatibility wrapper delegating to inpainting package while supporting mock patches on app.core.inpainter.inpaint_patch_512."""
     this_mod = sys.modules[__name__]
@@ -33,6 +35,8 @@ def repair_garment_cutout(
         inpaint_mask,
         crop_box=crop_box,
         inpaint_fn=patch_fn,
+        *args,
+        **kwargs,
     )
 
 

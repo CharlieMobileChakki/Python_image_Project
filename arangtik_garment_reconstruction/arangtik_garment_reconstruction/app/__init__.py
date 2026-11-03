@@ -1,0 +1,1 @@
+"""Arangtik Garment Reconstruction application."""

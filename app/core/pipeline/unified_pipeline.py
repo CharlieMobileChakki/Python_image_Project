@@ -377,7 +377,7 @@ def process_garment_pipeline(
                     )
                     notch_px = (notch_mask > 0).sum()
                     if 60 < notch_px < int(0.35 * garment_pixel_area):
-                        cutout_rgba, _ = repair_garment_cutout(cutout_rgba, notch_mask)
+                        cutout_rgba, _ = repair_garment_cutout(cutout_rgba, notch_mask, original_rgb=person_rgb)
                         repaired = True
                         repair_method = "lama_ffc_onnx"
 
