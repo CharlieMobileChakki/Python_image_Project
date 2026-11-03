@@ -1,0 +1,16 @@
+Test Case B: White Kerala Saree
+Image Dimensions: (3376, 6000)
+Target Garment: saree
+Engine Available: False (Missing required dependencies (diffusers).)
+Configured Device: cuda
+Inference Execution: FAIL
+Exception Type: RuntimeError
+Exception Message: SDXL Garment Reconstruction cannot be loaded: Missing required dependencies (diffusers).
+
+Full Traceback:
+Traceback (most recent call last):
+  File "D:\my codes\python project\scratch\run_sdxl_inference_test.py", line 161, in <module>
+    engine.load()
+  File "D:\my codes\python project\app\services\inpainting\garment_reconstruction.py", line 125, in load
+    raise RuntimeError(f"SDXL Garment Reconstruction cannot be loaded: {reason}")
+RuntimeError: SDXL Garment Reconstruction cannot be loaded: Missing required dependencies (diffusers).

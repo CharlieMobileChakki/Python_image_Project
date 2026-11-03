@@ -49,10 +49,11 @@ async def reconstruct_garment_endpoint(
     leaving the zero-overhead LaMa ONNX engine as primary.
     """
     engine = get_sdxl_reconstruction_engine()
-    if not engine.is_available():
+    is_avail, reason = engine.is_available()
+    if not is_avail:
         raise HTTPException(
             status_code=503,
-            detail="SDXL Garment Reconstruction is optional and unavailable in this environment (requires CUDA and diffusers package). Use default LaMa ONNX inpainting.",
+            detail=f"SDXL Garment Reconstruction is optional and unavailable in this environment ({reason}). Use default LaMa ONNX inpainting.",
         )
 
     try:
