@@ -54,12 +54,12 @@ def compute_arm_occlusion_mask(
                 continue
             g_left, g_right = row_g[0], row_g[-1]
             # Arm pixel must be embedded horizontally inside the garment silhouette
-            in_torso = (row_a > (g_left + 15)) & (row_a < (g_right - 15))
+            in_torso = (row_a >= g_left) & (row_a <= g_right)
             valid_x = row_a[in_torso]
             if len(valid_x) > 0:
                 crossed_arms[y, valid_x] = True
 
-        # Filter out arm components that touch external background over majority of perimeter
+        # Filter out arm components that are purely external limbs in the background
         if crossed_arms.any():
             num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crossed_arms.astype(np.uint8))
             kernel = np.ones((7, 7), np.uint8)
@@ -71,9 +71,10 @@ def compute_arm_occlusion_mask(
                 dilated = cv2.dilate(comp.astype(np.uint8), kernel) > 0
                 ring = dilated & ~comp
                 bg_touch = (ring & bg_mask).sum()
+                g_touch = (ring & garment_mask).sum()
                 total_ring = max(1, ring.sum())
-                # If arm component touches external background over >= 25%, it is an external limb
-                if (bg_touch / total_ring) < 0.25:
+                # Keep if embedded in torso OR substantially resting against/overlapping garment
+                if (bg_touch / total_ring) < 0.45 or g_touch > 40:
                     filtered_arms |= comp
             crossed_arms = filtered_arms
 
@@ -96,7 +97,7 @@ def compute_arm_occlusion_mask(
         candidate_holes[:y_top_limit, :] = False
         candidate_holes[y_bot_limit:, :] = False
         # Must touch or be near crossed arm pixels
-        dilated_arms = cv2.dilate(crossed_arms.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+        dilated_arms = cv2.dilate(crossed_arms.astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
         internal_holes = candidate_holes & dilated_arms
 
     # Union of genuine crossed arms and enclosed arm holes

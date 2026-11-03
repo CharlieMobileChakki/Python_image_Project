@@ -226,6 +226,24 @@ def classify_outfit_structure(
             }],
         }
 
+    if target_clean in {"suit", "salwar", "suit_salwar", "kurta_set", "ethnic", "ethnic_set"}:
+        fuse_classes = [cid for cid in [4, 7, 6, 17] if (pred_map == cid).sum() > 200]
+        if not fuse_classes:
+            fuse_classes = [4, 6]
+        return {
+            "outfit_mode": "mode_c_traditional_ensemble",
+            "ensemble_type": "suit_salwar",
+            "planned_items": [{
+                "key": "suit_salwar",
+                "label": "Suit / Salwar Kameez / Ethnic Ensemble",
+                "target_class_ids": fuse_classes,
+                "is_fused": True,
+                "coverage_percentage": 100.0,
+                "priority": "first_priority",
+                "status": "active",
+            }],
+        }
+
     # Presence flags across all detected classes
     has_upper = 4 in cids_present
     has_dress = 7 in cids_present
@@ -233,100 +251,37 @@ def classify_outfit_structure(
     has_pants = 6 in cids_present
     has_scarf = 17 in cids_present or (pred_map == 17).sum() > 500
 
-    # Check 1B: Kurta + Pajama, Shirt + Pants, T-Shirt + Jeans (Mode A Independent Garments)
-    # If pants/pajama are genuinely present alongside an upper garment/kurta, treat as independent pieces
-    pants_px = int((pred_map == 6).sum())
-    upper_px = int((pred_map == 4).sum())
-    has_real_pants = has_pants and (pants_px > 0.15 * max(1, upper_px) or (scene_type == "person" and pants_px > 600))
-
-    if has_real_pants and (has_upper or has_dress):
-        upper_cids = [4]
-        if has_dress and (pred_map == 7).sum() > 400:
-            upper_cids.append(7)  # Long kurta / tunic spanning bodice and hem
-        if has_scarf:
-            upper_cids.append(17)
-
-        total_combo_px = max(1, upper_px + pants_px)
-        upper_cov = round((upper_px / total_combo_px) * 100.0, 2)
-        pants_cov = round((pants_px / total_combo_px) * 100.0, 2)
-
-        def _calc_prio(cov: float) -> str:
-            if cov < GARMENT_PRIORITY_THRESHOLDS["low_priority"]:
-                return "ignore_below"
-            if cov < GARMENT_PRIORITY_THRESHOLDS["second_priority"]:
-                return "low_priority"
-            if cov < GARMENT_PRIORITY_THRESHOLDS["first_priority"]:
-                return "second_priority"
-            return "first_priority"
-
-        planned = []
-        if target_clean in {"all", "upper_clothes", "shirt", "top", "kurta"}:
-            planned.append({
-                "key": "upper_clothes",
-                "label": "T-Shirt / Top / Shirt" if "t-shirt" in target_clean or "shirt" in target_clean else "Kurta / Shirt / Top",
-                "target_class_ids": upper_cids,
-                "is_fused": len(upper_cids) > 1,
-                "coverage_percentage": upper_cov,
-                "priority": _calc_prio(upper_cov),
-                "status": "active",
-            })
-        if target_clean in {"all", "pants", "trousers", "pajama", "jeans"}:
-            planned.append({
-                "key": "pants",
-                "label": "Pants / Pajama / Trousers",
-                "target_class_ids": [6],
-                "is_fused": False,
-                "coverage_percentage": pants_cov,
-                "priority": _calc_prio(pants_cov),
-                "status": "active",
-            })
-        if not planned:
-            planned = [{
-                "key": "upper_clothes",
-                "label": "Kurta / Shirt / Top",
-                "target_class_ids": upper_cids,
-                "is_fused": len(upper_cids) > 1,
-                "coverage_percentage": upper_cov,
-                "priority": _calc_prio(upper_cov),
-                "status": "active",
-            }]
-
-        return {
-            "outfit_mode": "mode_a_independent",
-            "ensemble_type": "independent_wardrobe",
-            "planned_items": planned,
-        }
-
-    # Check 2: Automatic Saree Detection (Mode C)
-    # SegFormer splits a Saree into Upper-clothes (4, chest/pallu) and Dress (7, pleats/body).
-    # In reality, they are ONE physical garment.
-
     # Determine whether pants are primary bifurcated trousers (e.g. Jeans/Pants starting at the waist)
-    # vs secondary churidar/leggings peeking at the ankles underneath a full-length dress/kurta
+    # vs secondary salwar/churidar/palazzo peeking underneath a full-length dress/kurta/tunic
     is_dominant_pants = False
     if has_pants:
         pants_g = next((g for g in detected_garments if g["class_id"] == 6), None)
-        if pants_g:
-            pants_bbox = pants_g.get("bounding_box")
-            if not pants_bbox and (pred_map == 6).any():
-                ys_p, xs_p = np.where(pred_map == 6)
-                pants_bbox = [int(xs_p.min()), int(ys_p.min()), int(xs_p.max()), int(ys_p.max())]
-            if pants_bbox:
-                if pants_bbox[1] < 0.62 * pred_map.shape[0] and (pants_bbox[3] - pants_bbox[1]) > 0.25 * pred_map.shape[0]:
-                    is_dominant_pants = True
-            else:
+        pants_bbox = pants_g.get("bounding_box") if pants_g else None
+        if not pants_bbox and (pred_map == 6).any():
+            ys_p, xs_p = np.where(pred_map == 6)
+            pants_bbox = [int(xs_p.min()), int(ys_p.min()), int(xs_p.max()), int(ys_p.max())]
+        if pants_bbox:
+            # Dominant Western trousers start at or above waist level (< 60% of image height) and span > 28% of height
+            if pants_bbox[1] < 0.60 * pred_map.shape[0] and (pants_bbox[3] - pants_bbox[1]) > 0.28 * pred_map.shape[0]:
                 is_dominant_pants = True
+        else:
+            is_dominant_pants = True
 
-    if has_upper and has_dress and not is_dominant_pants:
-        # Saree or Full Continuous Dress/Anarkali
-        fuse_classes = [4, 7]
-        if has_skirt and (pred_map == 5).sum() > 800:
-            fuse_classes.append(5)
-        if has_scarf:
-            fuse_classes.append(17)
+    # Check 2: Coordinated Traditional Outfits (Mode C) - Saree, Suit-Salwar, 3-Piece Suit Set, Anarkali
+    # Whenever an outfit is an ethnic ensemble (kurta + salwar/palazzo, dress + drape, saree),
+    # it must be extracted as a SINGLE UNIFIED PIECE, never split into separate fragments.
+    is_ethnic_suit = (has_upper and has_dress) or (has_dress and has_pants) or (has_upper and has_scarf)
+    if is_ethnic_suit and not (is_dominant_pants and not has_dress and not has_scarf):
+        fuse_classes = [cid for cid in [4, 7, 6, 5, 17] if (pred_map == cid).sum() > 200]
+        if not fuse_classes:
+            fuse_classes = [4, 7]
 
-        # Classify as Saree if traditional drape/scarf or mannequin presentation
-        if has_scarf or scene_type == "mannequin":
+        if has_pants:
+            ensemble_type = "suit_salwar"
+            label = "Suit / Salwar Kameez / Ethnic Ensemble"
+            key = "suit_salwar"
+            mode = "mode_c_traditional_ensemble"
+        elif has_scarf or scene_type == "mannequin":
             ensemble_type = "saree"
             label = "Saree / Traditional Ensemble"
             key = "saree"
@@ -344,11 +299,73 @@ def classify_outfit_structure(
                 "key": key,
                 "label": label,
                 "target_class_ids": fuse_classes,
-                "is_fused": True,
+                "is_fused": len(fuse_classes) > 1,
                 "coverage_percentage": 100.0,
                 "priority": "first_priority",
                 "status": "active",
             }],
+        }
+
+    # Check 1B: Pure Western Independent Garments (Mode A: T-Shirt + Jeans, Shirt + Trousers)
+    # Only triggered when trousers start at the waist without long tunic/dress/dupatta
+    pants_px = int((pred_map == 6).sum())
+    upper_px = int((pred_map == 4).sum())
+    has_real_pants = has_pants and is_dominant_pants and (pants_px > 0.15 * max(1, upper_px) or (scene_type == "person" and pants_px > 600))
+
+    if has_real_pants and has_upper:
+        upper_cids = [4]
+        if has_scarf:
+            upper_cids.append(17)
+
+        total_combo_px = max(1, upper_px + pants_px)
+        upper_cov = round((upper_px / total_combo_px) * 100.0, 2)
+        pants_cov = round((pants_px / total_combo_px) * 100.0, 2)
+
+        def _calc_prio(cov: float) -> str:
+            if cov < GARMENT_PRIORITY_THRESHOLDS["low_priority"]:
+                return "ignore_below"
+            if cov < GARMENT_PRIORITY_THRESHOLDS["second_priority"]:
+                return "low_priority"
+            if cov < GARMENT_PRIORITY_THRESHOLDS["first_priority"]:
+                return "second_priority"
+            return "first_priority"
+
+        planned = []
+        if target_clean in {"all", "upper_clothes", "shirt", "top"}:
+            planned.append({
+                "key": "upper_clothes",
+                "label": "T-Shirt / Top / Shirt",
+                "target_class_ids": upper_cids,
+                "is_fused": len(upper_cids) > 1,
+                "coverage_percentage": upper_cov,
+                "priority": _calc_prio(upper_cov),
+                "status": "active",
+            })
+        if target_clean in {"all", "pants", "trousers", "jeans"}:
+            planned.append({
+                "key": "pants",
+                "label": "Pants / Jeans / Trousers",
+                "target_class_ids": [6],
+                "is_fused": False,
+                "coverage_percentage": pants_cov,
+                "priority": _calc_prio(pants_cov),
+                "status": "active",
+            })
+        if not planned:
+            planned = [{
+                "key": "upper_clothes",
+                "label": "T-Shirt / Top / Shirt",
+                "target_class_ids": upper_cids,
+                "is_fused": len(upper_cids) > 1,
+                "coverage_percentage": upper_cov,
+                "priority": _calc_prio(upper_cov),
+                "status": "active",
+            }]
+
+        return {
+            "outfit_mode": "mode_a_independent",
+            "ensemble_type": "independent_wardrobe",
+            "planned_items": planned,
         }
 
     # Check 2B: Mannequin full-length drape or product display (e.g. Saree, Sherwani, Gown)

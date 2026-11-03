@@ -37,13 +37,16 @@ def extract_garment_cutout_guided(
     target_probs = sum(probs_tensor[cid].numpy() for cid in target_class_ids)
     bg_prob = probs_tensor[0].numpy()
 
-    # Competing non-garment classes (shoes, face/neck, bare legs, arms/hands, opposing wardrobe items)
-    body_accessory_classes = [1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-    opposing_classes = [c for c in body_accessory_classes if c not in target_class_ids]
+    # Competing non-garment classes: separate true human body from accessories/wardrobe
+    human_body_classes = [2, 11, 12, 13, 14, 15]  # hair, face, legs, arms
+    accessory_classes = [1, 3, 8, 9, 10, 16]      # hat, glove, sunglasses, belt, socks, bag
+    
+    opp_body_classes = [c for c in human_body_classes if c not in target_class_ids]
+    opp_acc_classes = [c for c in accessory_classes if c not in target_class_ids]
     if 6 in target_class_ids and 4 not in target_class_ids:
-        opposing_classes.append(4)
+        opp_acc_classes.append(4)
     elif 4 in target_class_ids and 6 not in target_class_ids:
-        opposing_classes.append(6)
+        opp_acc_classes.append(6)
 
     # Check human presence
     is_human = (probs_tensor[11].numpy() > 0.25).any() or (probs_tensor[2].numpy() > 0.25).any()
@@ -59,19 +62,34 @@ def extract_garment_cutout_guided(
 
     alpha_uint8 = np.clip(alpha_float * 255.0, 0, 255).astype(np.uint8)
 
-    # Suppress pixels where background confidence is dominant (eliminates background leak, grid lines, and white borders)
-    alpha_uint8[bg_prob >= target_probs] = 0
+    # Check foreground presence from BiRefNet Lite
+    has_fg = foreground_cutout is not None
+    fg_alpha = np.array(foreground_cutout.split()[3]) if has_fg else None
+    is_fg = (fg_alpha > 50) if has_fg else np.ones_like(alpha_uint8, dtype=bool)
 
-    # Suppress pixels where a competing non-garment / body class has higher confidence
-    if opposing_classes:
-        opp_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opposing_classes])
-        alpha_uint8[opp_probs > target_probs] = 0
+    # Suppress background:
+    # If BiRefNet confirmed solid foreground, trust it unless SegFormer background is overwhelming
+    if has_fg:
+        alpha_uint8[(bg_prob >= target_probs) & ~is_fg] = 0
+    else:
+        alpha_uint8[bg_prob >= target_probs] = 0
+
+    # Rule B: Remove actual human body pixels (face, hair, arms, hands, legs)
+    if opp_body_classes:
+        body_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_body_classes])
+        # Body removal requires higher confidence than weak fabric boundary jitter
+        is_body = (body_probs > target_probs) & (body_probs >= 0.32)
+        alpha_uint8[is_body] = 0
+
+    # Suppress distinct non-garment accessories (sunglasses, bags, shoes)
+    if opp_acc_classes:
+        acc_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_acc_classes])
+        alpha_uint8[(acc_probs > target_probs) & (acc_probs >= 0.40)] = 0
 
     # 3. Foreground Boundary Recovery (using BiRefNet Lite when provided)
-    if foreground_cutout is not None:
-        fg_alpha = np.array(foreground_cutout.split()[3])
+    if has_fg:
         if not is_human:
-            # On mannequins and isolated products, BiRefNet captures the full garment drape (neckline, embroidery, straps, saree)
+            # On mannequins and isolated products, BiRefNet captures the full garment drape
             if (alpha_uint8 > 20).sum() > 200:
                 fg_bin = (fg_alpha > 20).astype(np.uint8)
                 n_labels, labels, _, _ = cv2.connectedComponentsWithStats(fg_bin)
@@ -91,6 +109,26 @@ def extract_garment_cutout_guided(
                 0,
             ).astype(np.uint8)
         alpha_uint8 = refined_alpha
+
+    # Rule E: Internal Void Healing for continuous garment fabric
+    # Eliminate unintended transparent voids enclosed by garment regions that lie within solid foreground
+    alpha_bin = (alpha_uint8 > 20).astype(np.uint8)
+    contours, hierarchy = cv2.findContours(alpha_bin, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    if hierarchy is not None and len(contours) > 1:
+        for i in range(len(contours)):
+            if hierarchy[0][i][3] >= 0:  # Enclosed internal void
+                area = cv2.contourArea(contours[i])
+                if area < 10000:
+                    hole_mask = np.zeros_like(alpha_uint8)
+                    cv2.drawContours(hole_mask, [contours[i]], -1, 255, -1)
+                    if opp_body_classes:
+                        body_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_body_classes])
+                        safe_to_heal = (hole_mask == 255) & is_fg & (body_probs < 0.35)
+                    else:
+                        safe_to_heal = (hole_mask == 255) & is_fg
+                    if safe_to_heal.any():
+                        heal_val = fg_alpha if has_fg else 255
+                        alpha_uint8 = np.where(safe_to_heal, heal_val, alpha_uint8).astype(np.uint8)
 
     # 4. Filter out disconnected noisy specks and non-garment props (tripod stands, plants, hangers)
     if min_component_area > 0 and (alpha_uint8 > 20).sum() > min_component_area:

@@ -78,11 +78,29 @@ def repair_garment_cutout(
         padded_mask = inpaint_mask
 
     if crop_box is None:
-        cx, cy = int(x_idxs.mean()), int(y_idxs.mean())
-        x0 = max(0, min(pad_w - 512, cx - 256))
-        y0 = max(0, min(pad_h - 512, cy - 256))
-        x1 = x0 + 512
-        y1 = y0 + 512
+        pad = 48
+        min_x = max(0, int(x_idxs.min()) - pad)
+        min_y = max(0, int(y_idxs.min()) - pad)
+        max_x = min(pad_w, int(x_idxs.max()) + 1 + pad)
+        max_y = min(pad_h, int(y_idxs.max()) + 1 + pad)
+
+        bw = max_x - min_x
+        bh = max_y - min_y
+
+        # If bounding box is smaller than 512 in any dimension, center-expand to 512 for rich context
+        if bw < 512 and pad_w >= 512:
+            cx = (min_x + max_x) // 2
+            x0 = max(0, min(pad_w - 512, cx - 256))
+            x1 = x0 + 512
+        else:
+            x0, x1 = min_x, max_x
+
+        if bh < 512 and pad_h >= 512:
+            cy = (min_y + max_y) // 2
+            y0 = max(0, min(pad_h - 512, cy - 256))
+            y1 = y0 + 512
+        else:
+            y0, y1 = min_y, max_y
     else:
         x0, y0, x1, y1 = crop_box
 
