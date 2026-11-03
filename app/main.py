@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
 from app.core.background_removal import extract_isolated_flow_a
 from app.core.model_manager import load_inpainter_model, load_segmenter_models
@@ -86,6 +87,7 @@ app.add_middleware(
 
 # Include core API router under /api/v1
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(reconstruction_router, prefix="/api/v1")
 
 # Mount outputs directory to serve generated 1024x1024 PNGs
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
