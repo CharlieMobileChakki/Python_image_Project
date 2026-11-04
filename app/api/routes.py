@@ -55,7 +55,7 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
 async def process_garment_endpoint(
     file: UploadFile = File(..., description="Input image of garment or worn model"),
     person_mode: str = Form("with_person", description="Execution mode: 'with_person' (Flow B: parsing + inpainting) or 'without_person' (Flow A: direct background removal)"),
-    has_human: bool | None = Form(None, description="Explicit boolean flag: True for with-person, False for without-person"),
+    has_human: str | bool | None = Form(None, description="Explicit flag: True/False or 'with_person'/'without_person'"),
     target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
     auto_repair: bool = Form(True, description="Enable LaMa fabric inpainting for occlusions in Flow B"),
     auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
@@ -72,13 +72,30 @@ async def process_garment_endpoint(
       garment extraction -> LaMa inpainting fabric repair -> 1024x1024 normalization.
     """
     image_bytes = await validate_and_read_image(file)
+
+    # Normalize boolean and string person flags
+    actual_has_human: bool | None = None
+    if has_human is not None:
+        if isinstance(has_human, bool):
+            actual_has_human = has_human
+        elif str(has_human).strip().lower() in ("false", "0", "no", "without_person", "isolated", "flat_lay"):
+            actual_has_human = False
+        elif str(has_human).strip().lower() in ("true", "1", "yes", "with_person", "worn"):
+            actual_has_human = True
+
+    # If person_mode or mode_hint explicitly specifies isolated / without_person, enforce Flow A
+    raw_mode = (person_mode or mode_hint or "").strip().lower()
+    if raw_mode in ("without_person", "without", "no_person", "isolated", "flat_lay", "product", "flow_a"):
+        actual_has_human = False
+        person_mode = "without_person"
+
     try:
         async with get_semaphore():
             result = await run_in_threadpool(
                 process_garment_pipeline,
                 image_bytes=image_bytes,
                 person_mode=person_mode,
-                has_human=has_human,
+                has_human=actual_has_human,
                 mode_hint=mode_hint,
                 target_garment=target_garment,
                 auto_repair=auto_repair,

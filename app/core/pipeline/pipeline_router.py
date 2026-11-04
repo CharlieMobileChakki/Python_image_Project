@@ -34,16 +34,10 @@ def resolve_execution_flow(
     Returns:
         'without_person' (Flow A) or 'with_person' (Flow B).
     """
-    # 1. Direct boolean flag if explicitly provided
-    if has_human is False:
-        return ExecutionFlow.FLOW_A_WITHOUT_PERSON.value
-    if has_human is True:
-        return ExecutionFlow.FLOW_B_WITH_PERSON.value
-
-    # 2. String representation inspection
+    # 1. String representation inspection (covers both person_mode and legacy mode_hint)
     raw_mode = (person_mode or mode_hint or "").strip().lower()
 
-    # Flow A keywords (Without Person)
+    # Flow A keywords (Without Person / Flat-lay / Product)
     if raw_mode in {
         "without_person",
         "without",
@@ -59,7 +53,13 @@ def resolve_execution_flow(
     }:
         return ExecutionFlow.FLOW_A_WITHOUT_PERSON.value
 
-    # Flow B keywords (With Person)
+    # 2. Direct boolean flag if explicitly provided
+    if has_human is False:
+        return ExecutionFlow.FLOW_A_WITHOUT_PERSON.value
+    if has_human is True:
+        return ExecutionFlow.FLOW_B_WITH_PERSON.value
+
+    # Flow B keywords (With Person / Model Worn)
     if raw_mode in {
         "with_person",
         "with",

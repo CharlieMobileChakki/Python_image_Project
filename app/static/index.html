@@ -86,8 +86,31 @@
       </div>
 
       <div class="stepwise-grid">
-        <!-- STEP 1: HUMAN PARSING -->
-        <div class="step-card">
+        <!-- FLOW A: PURE BACKGROUND REMOVAL (Active when Flat-lay / Hanger is selected) -->
+        <div id="flowACard" class="step-card" style="display: none; grid-column: 1 / -1; border-color: #a7f3d0; background: #f0fdf4;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+            <div>
+              <div class="step-card-header">
+                <span class="step-number" style="background: #059669; color: #fff;">FLOW A</span>
+                <h3 style="color: #065f46;">Direct Product Cutout (BiRefNet Lite)</h3>
+              </div>
+              <p class="step-desc" style="margin-top: 6px; color: #047857; font-size: 13px;">
+                Designed for Flat-lay, Ghost Mannequin, Hanger, and Catalog Product Photos.
+                Bypasses Person Parsing completely to deliver a clean 1024×1024 transparent studio cutout in ~2 seconds.
+              </p>
+            </div>
+            <span class="engine-tier-tag tag-ready" style="white-space: nowrap;">Zero Person Parsing &bull; ~2s</span>
+          </div>
+          <div class="step-actions" style="margin-top: 10px;">
+            <button id="runFlowABtn" class="primary-btn" style="background: linear-gradient(135deg, #059669, #0284c7); padding: 8px 18px;" onclick="runFlowABackgroundRemoval()">
+              <span>⚡</span> Run Background Removal (Flow A)
+            </button>
+            <span id="flowAStatus" class="step-status-pill pill-idle">Ready for direct cutout</span>
+          </div>
+        </div>
+
+        <!-- STEP 1: HUMAN PARSING (Active when Model Worn is selected) -->
+        <div id="step1Card" class="step-card">
           <div>
             <div class="step-card-header">
               <span class="step-number">STEP 1</span>
@@ -103,8 +126,8 @@
           </div>
         </div>
 
-        <!-- STEP 2: INPAINTING & GENERATION ENGINES -->
-        <div class="step-card">
+        <!-- STEP 2: INPAINTING & GENERATION ENGINES (Active when Model Worn is selected) -->
+        <div id="step2Card" class="step-card">
           <div>
             <div class="step-card-header">
               <span class="step-number step-number-purple">STEP 2</span>
@@ -312,18 +335,33 @@
     }
 
     function setMode(mode) {
-      selectedMode = mode;
+      if (mode === 'without_person' || mode === 'isolated' || mode === 'flow_a') {
+        selectedMode = 'without_person';
+      } else {
+        selectedMode = 'with_person';
+      }
+
       document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === mode);
+        const bMode = btn.dataset.mode;
+        const isMatch = (selectedMode === 'without_person' && (bMode === 'without_person' || bMode === 'isolated')) ||
+                        (selectedMode === 'with_person' && (bMode === 'with_person' || bMode === 'worn'));
+        btn.classList.toggle('active', isMatch);
       });
 
+      const flowACard = document.getElementById('flowACard');
+      const step1Card = document.getElementById('step1Card');
+      const step2Card = document.getElementById('step2Card');
       const repairCheck = document.getElementById('autoRepairCheck');
       const targetSelect = document.getElementById('targetGarmentSelect');
       const repairLabel = repairCheck ? repairCheck.closest('.checkbox-label') : null;
       const targetLabel = targetSelect ? targetSelect.previousElementSibling : null;
 
-      if (mode === 'isolated') {
-        // Flow A: Pure Background Removal (BiRefNet Lite) - No Person Parsing
+      if (selectedMode === 'without_person') {
+        // Flow A: Direct Background Removal (BiRefNet Lite) - Zero Person Parsing
+        if (flowACard) flowACard.style.display = 'block';
+        if (step1Card) step1Card.style.display = 'none';
+        if (step2Card) step2Card.style.display = 'none';
+
         if (repairCheck) repairCheck.disabled = true;
         if (repairLabel) {
           repairLabel.style.opacity = '0.35';
@@ -335,23 +373,13 @@
           targetSelect.style.opacity = '0.35';
         }
         if (targetLabel) targetLabel.style.opacity = '0.35';
-        document.getElementById('statusTelemetry').textContent = 'Mode: 👔 Flat-lay / Hanger (Flow A) - BiRefNet Lite Pure Background Removal (Zero Person Parsing)';
-      } else if (mode === 'worn') {
-        // Flow B: Human Model - SegFormer Person Parsing & Separation
-        if (repairCheck) repairCheck.disabled = false;
-        if (repairLabel) {
-          repairLabel.style.opacity = '1.0';
-          repairLabel.style.pointerEvents = 'auto';
-          repairLabel.title = '';
-        }
-        if (targetSelect) {
-          targetSelect.disabled = false;
-          targetSelect.style.opacity = '1.0';
-        }
-        if (targetLabel) targetLabel.style.opacity = '1.0';
-        document.getElementById('statusTelemetry').textContent = 'Mode: 👗 Human Model (Flow B) - SegFormer Person Parsing & Hand Occlusion Repair';
+        document.getElementById('statusTelemetry').textContent = 'Mode: 👔 Flat-lay / Hanger (Flow A) — BiRefNet Lite Pure Background Removal (Zero Person Parsing)';
       } else {
-        // Auto-Detect Mode
+        // Flow B: Human Model - SegFormer Person Parsing & Fabric Repair
+        if (flowACard) flowACard.style.display = 'none';
+        if (step1Card) step1Card.style.display = 'block';
+        if (step2Card) step2Card.style.display = 'block';
+
         if (repairCheck) repairCheck.disabled = false;
         if (repairLabel) {
           repairLabel.style.opacity = '1.0';
@@ -363,7 +391,7 @@
           targetSelect.style.opacity = '1.0';
         }
         if (targetLabel) targetLabel.style.opacity = '1.0';
-        document.getElementById('statusTelemetry').textContent = 'Mode: ⚡ Auto-Detect Pipeline - Smart Human vs Product Branching';
+        document.getElementById('statusTelemetry').textContent = 'Mode: 👗 Model Worn (Flow B) — SegFormer Person Parsing & Fabric Repair';
       }
     }
 
@@ -802,6 +830,58 @@
           downloadBtn.style.display = 'none';
         }
         return;
+      }
+    }
+
+    async function runFlowABackgroundRemoval() {
+      if (selectedIndex < 0 || !fileQueue[selectedIndex]) {
+        alert("Please select or upload an image first!");
+        return;
+      }
+      const item = fileQueue[selectedIndex];
+      const btn = document.getElementById('runFlowABtn');
+      const pill = document.getElementById('flowAStatus');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span>◌</span> Removing Background...';
+      pill.className = 'step-status-pill pill-running';
+      pill.textContent = 'Removing background (Flow A)...';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', item.file);
+        formData.append('person_mode', 'without_person');
+        formData.append('has_human', 'false');
+        formData.append('mode_hint', 'without_person');
+        formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
+        formData.append('response_format', 'json');
+
+        const res = await fetch('/api/v1/process-garment', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          throw new Error(err.detail || 'Background removal failed');
+        }
+
+        const data = await res.json();
+        item.result = data;
+        item.status = 'done';
+        pill.className = 'step-status-pill pill-success';
+        pill.textContent = `✓ Cutout Ready (${Math.round(data.execution_time_ms)}ms)`;
+
+        renderQueue();
+        updateBatchToolbar();
+        displaySelectedItem(selectedIndex);
+        switchComparativeTab('auto');
+      } catch (err) {
+        pill.className = 'step-status-pill pill-error';
+        pill.textContent = 'Failed';
+        alert('Flow A error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>⚡</span> Run Background Removal (Flow A)';
       }
     }
 

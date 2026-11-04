@@ -1,0 +1,258 @@
+{
+  "info": {
+    "_postman_id": "arangtik-garment-ai-v1",
+    "name": "Arangtik Garment AI - Master API",
+    "description": "Collection for testing Arangtik Garment AI: Flow A (without person) and Flow B (with person) garment extraction and inpainting.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. System Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Check server readiness, active models (BiRefNet Lite, SegFormer B2, LaMa ONNX), and hardware environment (CPU / CUDA GPU)."
+      }
+    },
+    {
+      "name": "2. Flow A - Without Person (Fast Background Removal to 1024x1024)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "description": "Upload garment photo (JPG, PNG, WEBP) without person (flat-lay, mannequin, hanger)"
+            },
+            {
+              "key": "person_mode",
+              "value": "without_person",
+              "type": "text",
+              "description": "Explicit Flow A: pure background removal without human parsing"
+            },
+            {
+              "key": "has_human",
+              "value": "false",
+              "type": "text",
+              "description": "Explicit boolean flag"
+            },
+            {
+              "key": "auto_straighten",
+              "value": "true",
+              "type": "text",
+              "description": "Automatically deskew tilted garments"
+            },
+            {
+              "key": "response_format",
+              "value": "json",
+              "type": "text",
+              "description": "json for metadata and output URLs"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/process-garment",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "process-garment"
+          ]
+        },
+        "description": "FLOW A: Normal garment (flat-lay, hanger, product photo). Bypasses SegFormer parsing. Outputs clean 1024x1024 transparent PNG in ~2s."
+      }
+    },
+    {
+      "name": "3. Flow B - With Person (Model Worn: Parsing + LaMa Inpaint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "description": "Upload model-worn garment photo (JPG, PNG, WEBP)"
+            },
+            {
+              "key": "person_mode",
+              "value": "with_person",
+              "type": "text",
+              "description": "Explicit Flow B: SegFormer Clothes Parsing + LaMa fabric repair"
+            },
+            {
+              "key": "has_human",
+              "value": "true",
+              "type": "text",
+              "description": "Explicit boolean flag"
+            },
+            {
+              "key": "target_garment",
+              "value": "all",
+              "type": "text",
+              "description": "Target filter: all, upper_clothes, pants, dress, skirt, saree"
+            },
+            {
+              "key": "auto_repair",
+              "value": "true",
+              "type": "text",
+              "description": "Enable LaMa FFC inpainting for arm/hand/prop occlusions"
+            },
+            {
+              "key": "auto_straighten",
+              "value": "true",
+              "type": "text",
+              "description": "Auto deskew tilt"
+            },
+            {
+              "key": "response_format",
+              "value": "json",
+              "type": "text",
+              "description": "json for metadata and output URLs"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/process-garment",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "process-garment"
+          ]
+        },
+        "description": "FLOW B: Garment worn by human model. Executes background isolation, SegFormer B2 clothes parsing, boundary snapping, and LaMa inpainting."
+      }
+    },
+    {
+      "name": "4. Flow A / B - Direct PNG Image Download Mode",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "description": "Upload garment photo"
+            },
+            {
+              "key": "person_mode",
+              "value": "without_person",
+              "type": "text"
+            },
+            {
+              "key": "response_format",
+              "value": "image_direct",
+              "type": "text",
+              "description": "Returns binary image/png directly instead of JSON"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/process-garment",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "process-garment"
+          ]
+        },
+        "description": "Direct image mode: Returns the 1024x1024 PNG binary stream directly with Content-Type: image/png."
+      }
+    },
+    {
+      "name": "5. Download Output 1024x1024 PNG",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/outputs/:filename",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "outputs",
+            ":filename"
+          ],
+          "variable": [
+            {
+              "key": "filename",
+              "value": "bb8bcfee1b_pants.png",
+              "description": "Filename returned in garment output JSON (e.g. {job_id}_{category}.png)"
+            }
+          ]
+        },
+        "description": "Download the transparent 1024x1024 PNG generated by any job."
+      }
+    },
+    {
+      "name": "6. Download Batch ZIP Archive",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/download-batch-zip/:job_id",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "download-batch-zip",
+            ":job_id"
+          ],
+          "variable": [
+            {
+              "key": "job_id",
+              "value": "bb8bcfee1b",
+              "description": "Job ID returned in process-garment response"
+            }
+          ]
+        },
+        "description": "Download all extracted garments for a given job bundled in a single ZIP archive."
+      }
+    }
+  ]
+}
