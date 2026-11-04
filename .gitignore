@@ -11,3 +11,6 @@ test_output/
 benchmark_output/
 outputs/*.png
 scripts/archive/
+scratch/
+.u2net/
+*.onnx

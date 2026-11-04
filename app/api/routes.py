@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response
 from PIL import Image
 from starlette.concurrency import run_in_threadpool
 
-from app.api.schemas import HealthResponse, ProcessGarmentResponse
+from app.schemas import HealthResponse, ProcessGarmentResponse
 from app.core.background_removal import extract_isolated_flow_a
 from app.core.image_processing import detect_rotation_angle, normalize_to_1024, straighten_garment
 from app.core.inpainting import repair_garment_cutout
@@ -197,21 +197,5 @@ async def forward_downstream_endpoint(
         raise HTTPException(status_code=502, detail=f"Downstream forward failed: {exc}") from exc
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """System health check and loaded AI model status."""
-    seg_status = are_models_loaded()
-    lama_status = is_inpainter_loaded()
-    return HealthResponse(
-        status="ok",
-        service="arangtik-garment-ai",
-        models_loaded={
-            **seg_status,
-            "lama_inpainter": lama_status,
-        },
-        hardware={
-            "cpu_cores": os.cpu_count(),
-            "device": "cpu",
-        },
-    )
+
 

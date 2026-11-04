@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="sparkleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Smooth rounded square background -->
+  <rect width="64" height="64" rx="16" fill="url(#brandGrad)"/>
+  
+  <!-- Subtle inner glow border -->
+  <rect x="1.5" y="1.5" width="61" height="61" rx="14.5" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+
+  <!-- Fashion Hanger / Garment Silhouette -->
+  <!-- Hook -->
+  <path d="M32 17 C29 17 27 19.5 27 22.5 C27 25 29 27 32 27.5 L32 30" 
+        stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+  
+  <!-- Hanger Shoulders & Bar -->
+  <path d="M14 43 L32 30 L50 43 C49 46 47 46 45 46 L19 46 C17 46 15 46 14 43 Z" 
+        fill="rgba(255, 255, 255, 0.95)" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+        
+  <!-- Neck cut notch -->
+  <path d="M28 33 L32 37 L36 33" stroke="url(#brandGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- AI Sparkle Star (top right) -->
+  <path d="M47 13 Q47 19 41 19 Q47 19 47 25 Q47 19 53 19 Q47 19 47 13 Z" 
+        fill="#ffffff"/>
+  <circle cx="47" cy="19" r="1.5" fill="#fef08a"/>
+</svg>
+

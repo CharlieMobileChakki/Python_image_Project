@@ -6,9 +6,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.core.detector import analyze_semantic_map
-from app.core.normalizer import detect_rotation_angle, normalize_to_1024, straighten_garment
-from app.core.inpainter import repair_garment_cutout
+from app.core.garment_extraction import (
+    analyze_semantic_map,
+    check_garment_physical_continuity,
+    classify_outfit_structure,
+    detect_multi_garment_layout,
+)
+from app.core.image_processing import (
+    detect_rotation_angle,
+    normalize_to_1024,
+    straighten_garment,
+)
+from app.core.inpainting import (
+    compute_arm_occlusion_mask,
+    repair_garment_cutout,
+)
+from app.core.background_removal import validate_garment_background
 
 
 @pytest.fixture
@@ -85,7 +98,7 @@ def test_repair_handles_image_width_under_512():
 
     # Mock inpaint_patch_512 to verify padding and crop logic
     dummy_out = np.zeros((512, 512, 3), dtype=np.uint8)
-    with patch("app.core.inpainter.inpaint_patch_512", return_value=(dummy_out, 10.0)) as mock_inpaint:
+    with patch("app.core.inpainting.lama_inpainter.inpaint_patch_512", return_value=(dummy_out, 10.0)) as mock_inpaint:
         repaired, _ = repair_garment_cutout(img, mask)
         assert repaired.size == (365, 600)
         # Check that the patch sent to inpaint_patch_512 was strictly 512x512
@@ -116,20 +129,12 @@ def test_compute_arm_occlusion_mask_detects_crossed_arms_and_holes():
 
 
 def test_health_endpoint(api_client: TestClient):
-    """GET /health returns HTTP 200 and system readiness."""
+    """GET /health returns HTTP 200, system readiness, and model status."""
     res = api_client.get("/health")
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "ok"
     assert "arangtik" in data["service"]
-
-
-def test_api_v1_health_endpoint(api_client: TestClient):
-    """GET /api/v1/health returns detailed model loaded status."""
-    res = api_client.get("/api/v1/health")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["status"] == "ok"
     assert "models_loaded" in data
 
 
@@ -149,7 +154,6 @@ def test_process_garment_rejects_empty_file(api_client: TestClient):
 
 def test_classify_outfit_saree_fused_ensemble():
     """Saree with both upper_clothes and dress must be fused into one complete ensemble."""
-    from app.core.detector import classify_outfit_structure
     pred_map = np.zeros((800, 500), dtype=np.uint8)
     pred_map[100:400, 150:350] = 4  # Pallu / upper
     pred_map[350:750, 100:400] = 7  # Pleats / dress
@@ -173,7 +177,6 @@ def test_classify_outfit_saree_fused_ensemble():
 
 def test_classify_outfit_lehenga_fused_ensemble():
     """Lehenga with choli, skirt, and dupatta must be fused into one complete ensemble."""
-    from app.core.detector import classify_outfit_structure
     pred_map = np.zeros((800, 500), dtype=np.uint8)
     pred_map[100:300, 180:320] = 4  # Choli
     pred_map[350:750, 100:400] = 5  # Skirt
@@ -198,7 +201,6 @@ def test_classify_outfit_lehenga_fused_ensemble():
 
 def test_classify_outfit_mode_a_independent_priorities():
     """Multiple independent garments (T-Shirt + Jeans) must calculate exact coverage and priorities."""
-    from app.core.detector import classify_outfit_structure
     pred_map = np.zeros((800, 500), dtype=np.uint8)
     pred_map[100:400, 150:350] = 4  # T-Shirt (60,000 px)
     pred_map[400:750, 150:350] = 6  # Jeans (70,000 px)
@@ -226,7 +228,6 @@ def test_classify_outfit_mode_a_independent_priorities():
 
 def test_scene_type_mannequin_vs_person():
     """analyze_semantic_map distinguishes between real human models, mannequins, and flat-lay."""
-    from app.core.detector import analyze_semantic_map
 
     # 1. Real human model (Face + Arms)
     map_human = np.zeros((300, 300), dtype=np.uint8)
@@ -267,7 +268,6 @@ def test_arm_occlusion_skips_when_no_arms():
 
 def test_garment_physical_continuity_layered_kurti_gown():
     """Continuous gown/kurti with high vertical overlap is flagged is_continuous=True."""
-    from app.core.detector import check_garment_physical_continuity
     pred_map = np.zeros((1000, 600), dtype=np.uint8)
     # Upper kurti: y in [200, 700], central bodice & overlay
     pred_map[200:700, 250:350] = 4
@@ -284,7 +284,6 @@ def test_garment_physical_continuity_layered_kurti_gown():
 
 def test_garment_physical_continuity_independent_shirt_mini_skirt():
     """Independent shirt and separate mini skirt with low overlap and gap is flagged is_continuous=False."""
-    from app.core.detector import check_garment_physical_continuity
     pred_map = np.zeros((1000, 600), dtype=np.uint8)
     # Shirt: y in [200, 400]
     pred_map[200:400, 220:380] = 4
@@ -299,7 +298,6 @@ def test_garment_physical_continuity_independent_shirt_mini_skirt():
 
 def test_classify_outfit_continuous_gown_without_scarf():
     """Continuous gown (e.g. ladies-dresses.jpg) without scarf must be classified as Mode B single piece."""
-    from app.core.detector import classify_outfit_structure
     pred_map = np.zeros((1200, 800), dtype=np.uint8)
     pred_map[220:990, 240:650] = 4  # Kurti/bodice
     pred_map[430:1180, 100:550] = 5  # Skirt
@@ -334,7 +332,6 @@ def test_arm_occlusion_ignores_arm_on_wall():
 
 def test_detect_multi_garment_layout():
     """detect_multi_garment_layout must identify multiple independent garments on product catalog images."""
-    from app.core.detector import detect_multi_garment_layout
     # Create image with 3 distinct square garments on white background
     img = Image.new("RGB", (600, 600), (255, 255, 255))
     arr = np.array(img)
@@ -353,7 +350,6 @@ def test_detect_multi_garment_layout():
 
 def test_validator_detects_clean_vs_under_extracted():
     """validate_garment_background must verify clean transparent 1024x1024 cutouts."""
-    from app.core.validator import validate_garment_background
     # Clean 1024x1024 garment
     im = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
     for y in range(150, 850):

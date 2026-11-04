@@ -3,7 +3,7 @@ import os
 sys.path.insert(0, ".")
 
 print("=== Testing SDXL Model Loading Attempt ===")
-from app.services.inpainting.garment_reconstruction import GarmentReconstructionEngine
+from app.experimental.sdxl_reconstruction import GarmentReconstructionEngine
 
 engine = GarmentReconstructionEngine()
 print("engine.is_available():", engine.is_available())

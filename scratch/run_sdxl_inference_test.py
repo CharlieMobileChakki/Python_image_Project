@@ -15,13 +15,11 @@ TEST_DIR.mkdir(parents=True, exist_ok=True)
 print(f"=== SDXL + IP-Adapter Actual Inference Test Suite ===")
 print(f"Test output directory: {TEST_DIR.resolve()}\n")
 
-from app.services.inpainting.reconstruction_utils import (
+from app.experimental.sdxl_reconstruction import (
     extract_garment_reference_crop,
     prepare_mask,
     validate_repair_mask,
     composite_garment,
-)
-from app.services.inpainting.garment_reconstruction import (
     get_sdxl_reconstruction_engine,
     GarmentReconstructionEngine,
 )

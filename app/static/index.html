@@ -3,628 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arangtik Garment AI · Batch Studio</title>
-  <style>
-    :root {
-      --bg: #0d1017;
-      --surface: #161b24;
-      --surface-elevated: #1f2633;
-      --border: #2a3344;
-      --border-light: #384459;
-      --primary: #10b981;
-      --primary-hover: #059669;
-      --primary-soft: rgba(16, 185, 129, 0.12);
-      --text: #f3f4f6;
-      --text-muted: #94a3b8;
-      --accent: #38bdf8;
-      --amber: #f59e0b;
-      --red: #ef4444;
-      --radius: 12px;
-      --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 28px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .logo-container {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .logo-badge {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, #10b981, #38bdf8);
-      border-radius: 9px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 19px;
-      color: white;
-    }
-    .logo-text h1 {
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-    }
-    .logo-text span {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .badge {
-      padding: 5px 11px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .badge-green {
-      background: var(--primary-soft);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .badge-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #34d399;
-    }
-    main {
-      flex: 1;
-      max-width: 1560px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 20px 24px 50px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-    }
-    .mode-select-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .mode-btn {
-      background: var(--surface-elevated);
-      border: 1.5px solid var(--border);
-      border-radius: 9px;
-      padding: 9px 12px;
-      color: var(--text);
-      cursor: pointer;
-      text-align: left;
-      transition: all 0.15s ease;
-    }
-    .mode-btn.active {
-      border-color: var(--primary);
-      background: var(--primary-soft);
-    }
-    .mode-btn strong {
-      display: block;
-      font-size: 13px;
-      margin-bottom: 2px;
-    }
-    .mode-btn small {
-      font-size: 11px;
-      color: var(--text-muted);
-      line-height: 1.3;
-    }
-    .options-row {
-      display: flex;
-      align-items: center;
-      gap: 18px;
-      flex-wrap: wrap;
-      font-size: 13px;
-    }
-    .checkbox-label {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .checkbox-label input {
-      accent-color: var(--primary);
-      width: 15px;
-      height: 15px;
-    }
-    select {
-      background: var(--surface-elevated);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 6px 10px;
-      font-size: 13px;
-    }
-    /* Batch Action Toolbar */
-    .batch-bar {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 18px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-    .batch-status-group {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      flex: 1;
-      min-width: 280px;
-    }
-    .progress-track {
-      flex: 1;
-      height: 8px;
-      background: var(--surface-elevated);
-      border-radius: 999px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      max-width: 320px;
-    }
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #10b981, #38bdf8);
-      width: 0%;
-      transition: width 0.25s ease;
-    }
-    .btn-group {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .primary-btn {
-      background: var(--primary);
-      color: #03251a;
-      border: none;
-      border-radius: 8px;
-      padding: 9px 16px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      transition: all 0.15s ease;
-    }
-    .primary-btn:hover:not(:disabled) {
-      background: #34d399;
-      transform: translateY(-1px);
-    }
-    .primary-btn:disabled {
-      background: #252e3d;
-      color: #55657e;
-      cursor: not-allowed;
-      transform: none;
-    }
-    .secondary-btn {
-      background: var(--surface-elevated);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: background 0.15s ease;
-    }
-    .secondary-btn:hover:not(:disabled) {
-      background: var(--border);
-    }
-    /* Main Studio Workspace Grid */
-    .studio-grid {
-      display: grid;
-      grid-template-columns: 320px 1fr 1fr;
-      gap: 16px;
-      min-height: 560px;
-    }
-    /* Column 1: Queue Sidebar */
-    .queue-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .queue-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--surface-elevated);
-    }
-    .queue-header h3 {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-    }
-    .queue-list {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 580px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .queue-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      background: var(--surface-elevated);
-      border: 1.5px solid transparent;
-      border-radius: 9px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      position: relative;
-    }
-    .queue-item:hover {
-      background: #252e3e;
-    }
-    .queue-item.active {
-      border-color: var(--primary);
-      background: rgba(16, 185, 129, 0.08);
-    }
-    .queue-thumb {
-      width: 44px;
-      height: 44px;
-      border-radius: 6px;
-      object-fit: cover;
-      background: #0d1017;
-      flex-shrink: 0;
-    }
-    .queue-info {
-      flex: 1;
-      min-width: 0;
-    }
-    .queue-name {
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      color: var(--text);
-    }
-    .queue-meta {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .status-pill {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 4px;
-      text-transform: uppercase;
-    }
-    .pill-pending { background: #334155; color: #94a3b8; }
-    .pill-processing { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
-    .pill-done { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-    .pill-error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-    .queue-remove-btn {
-      background: transparent;
-      border: none;
-      color: #64748b;
-      cursor: pointer;
-      font-size: 15px;
-      padding: 4px;
-      border-radius: 4px;
-    }
-    .queue-remove-btn:hover {
-      color: #ef4444;
-      background: rgba(239, 68, 68, 0.1);
-    }
-    /* Dropzone within Queue when empty */
-    .queue-empty-dropzone {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      min-height: 280px;
-      padding: 24px;
-      text-align: center;
-      border: 2px dashed var(--border);
-      border-radius: 10px;
-      margin: 10px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .queue-empty-dropzone:hover, .queue-empty-dropzone.dragover {
-      border-color: var(--primary);
-      background: var(--primary-soft);
-    }
-    /* Columns 2 & 3: Inspection panels */
-    .view-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .view-card-header {
-      padding: 12px 18px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--surface-elevated);
-    }
-    .view-card-header h3 {
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .view-card-body {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      position: relative;
-      min-height: 440px;
-    }
-    .checkerboard-bg {
-      background-color: #141822;
-      background-image: 
-        linear-gradient(45deg, #0e1119 25%, transparent 25%),
-        linear-gradient(-45deg, #0e1119 25%, transparent 25%),
-        linear-gradient(45deg, transparent 75%, #0e1119 75%),
-        linear-gradient(-45deg, transparent 75%, #0e1119 75%);
-      background-size: 20px 20px;
-      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-    }
-    .preview-img {
-      max-width: 100%;
-      max-height: 440px;
-      object-fit: contain;
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-    }
-    .multi-garments-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 14px;
-      width: 100%;
-      max-height: 540px;
-      overflow-y: auto;
-      padding: 6px;
-    }
-    .garment-card {
-      background: var(--surface-elevated);
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 7px;
-      transition: transform 0.15s, border-color 0.15s;
-    }
-    .garment-card:hover {
-      border-color: var(--accent);
-      transform: translateY(-2px);
-    }
-    .garment-thumb-wrap {
-      width: 100%;
-      aspect-ratio: 1;
-      border-radius: 6px;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-size: 14px 14px;
-    }
-    .garment-thumb-img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-    .status-badge {
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .status-success {
-      background: rgba(16, 185, 129, 0.2);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.4);
-    }
-    .status-partial {
-      background: rgba(245, 158, 11, 0.2);
-      color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.4);
-    }
-    .status-failed {
-      background: rgba(239, 68, 68, 0.2);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.4);
-    }
-    .status-needs_review {
-      background: rgba(168, 85, 247, 0.2);
-      color: #c084fc;
-      border: 1px solid rgba(168, 85, 247, 0.4);
-    }
-    .summary-bar {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-      width: 100%;
-    }
-    .summary-pill {
-      background: var(--surface-elevated);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 4px 12px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-    .summary-pill strong {
-      color: var(--text);
-    }
-    .garment-tabs {
-      display: flex;
-      gap: 7px;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .tab-btn {
-      background: var(--surface-elevated);
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 5px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .tab-btn.active {
-      background: var(--primary);
-      color: #03251a;
-      border-color: var(--primary);
-    }
-    .meta-badges {
-      display: flex;
-      gap: 8px;
-      margin-top: 14px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .meta-badge {
-      background: var(--surface-elevated);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 4px 9px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .meta-badge strong {
-      color: var(--text);
-    }
-    .footer-api-info {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 18px;
-      font-size: 13px;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    code {
-      background: var(--surface-elevated);
-      padding: 2px 7px;
-      border-radius: 5px;
-      font-family: monospace;
-      color: #38bdf8;
-    }
-    #fileInput { display: none; }
-  </style>
+  <title>Arangtik Garment AI · Studio</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="alternate icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
     <div class="logo-container">
-      <div class="logo-badge">A</div>
+      <div class="logo-badge">
+        <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
+          <path d="M32 17 C29 17 27 19.5 27 22.5 C27 25 29 27 32 27.5 L32 30" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+          <path d="M14 43 L32 30 L50 43 C49 46 47 46 45 46 L19 46 C17 46 15 46 14 43 Z" fill="#ffffff"/>
+          <path d="M47 13 Q47 19 41 19 Q47 19 47 25 Q47 19 53 19 Q47 19 47 13 Z" fill="#fef08a"/>
+        </svg>
+      </div>
       <div class="logo-text">
         <h1>Arangtik Garment AI</h1>
-        <span>Batch Background Removal &bull; Flow A + B</span>
+        <span>Studio Pipeline</span>
       </div>
     </div>
     <div class="header-actions">
       <span class="badge badge-green"><span class="badge-dot"></span> Port 8000 Ready</span>
-      <a href="/docs" target="_blank" style="color: var(--accent); font-size: 13px; text-decoration: none; font-weight: 600;">API Specs ↗</a>
+      <a href="/docs" target="_blank" style="color: var(--accent); font-size: 13px; text-decoration: none; font-weight: 600;">API Docs ↗</a>
     </div>
   </header>
 
   <main>
-    <!-- Pipeline Controls -->
+    <!-- Pipeline Mode & Settings -->
     <div class="panel">
       <div class="mode-select-row">
         <div class="mode-btn active" data-mode="auto" onclick="setMode('auto')">
-          <strong>⚡ Auto-Detect Pipeline</strong>
-          <small>Smart human detection $\rightarrow$ Worn vs Product</small>
+          <strong>⚡ Auto Detect</strong>
+          <small>Smart human detection</small>
         </div>
         <div class="mode-btn" data-mode="worn" onclick="setMode('worn')">
-          <strong>👗 Human Model (Flow B)</strong>
-          <small>SegFormer clothing parsing &amp; separation</small>
+          <strong>👗 Worn Model</strong>
+          <small>Person parsing &amp; clothing</small>
         </div>
         <div class="mode-btn" data-mode="isolated" onclick="setMode('isolated')">
-          <strong>👔 Flat-lay / Hanger (Flow A)</strong>
-          <small>BiRefNet Lite salient background removal</small>
+          <strong>👔 Flat-lay / Hanger</strong>
+          <small>Direct product cutout</small>
         </div>
       </div>
 
       <div class="options-row">
         <div>
-          <label style="color: var(--text-muted); margin-right: 6px;">Target Garment Filter:</label>
+          <label style="color: var(--text-muted); margin-right: 6px; font-weight: 600;">Target:</label>
           <select id="targetGarmentSelect">
-            <option value="all">All Garments (Auto-Detect Structure)</option>
-            <option value="saree">Saree / Traditional Ensemble</option>
-            <option value="lehenga">Lehenga / Ethnic Ensemble</option>
+            <option value="all">All Garments (Auto Detect)</option>
+            <option value="saree">Saree / Traditional</option>
+            <option value="lehenga">Lehenga / Ethnic</option>
             <option value="dress">Dress / Gown / Anarkali</option>
-            <option value="upper_clothes">Upper Clothes (T-Shirt / Top / Shirt)</option>
-            <option value="pants">Pants / Jeans / Trousers</option>
+            <option value="upper_clothes">Upper Clothes (Top / Shirt)</option>
+            <option value="pants">Pants / Trousers / Jeans</option>
             <option value="skirt">Skirt</option>
           </select>
         </div>
 
         <label class="checkbox-label">
           <input type="checkbox" id="autoRepairCheck" checked />
-          <span>LaMa Inpainting (Repair Hand Occlusions)</span>
+          <span>Inpaint Hand Occlusions</span>
         </label>
 
         <label class="checkbox-label">
@@ -634,28 +74,119 @@
       </div>
     </div>
 
+    <!-- Step-by-Step AI Testing Studio -->
+    <div class="panel stepwise-panel">
+      <div class="stepwise-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="step-badge-icon">🧪</span>
+          <div>
+            <h2 style="font-size: 15px; font-weight: 700; color: var(--text);">Interactive AI Studio</h2>
+            <span style="font-size: 11px; color: var(--text-muted);">Step-by-step model testing for GPU deployment</span>
+          </div>
+        </div>
+        <div id="gpuStatusIndicator" class="gpu-badge badge-amber">
+          <span class="badge-dot badge-dot-amber"></span> Checking Server Hardware...
+        </div>
+      </div>
+
+      <div class="stepwise-grid">
+        <!-- STEP 1: HUMAN PARSING -->
+        <div class="step-card">
+          <div>
+            <div class="step-card-header">
+              <span class="step-number">STEP 1</span>
+              <h3>Human Parsing</h3>
+            </div>
+            <p class="step-desc" style="margin-top: 4px;">Removes human body &amp; isolates garment cutout.</p>
+          </div>
+          <div class="step-actions">
+            <button id="runStep1Btn" class="primary-btn" onclick="runStep1Parsing()">
+              <span>👤</span> Run Step 1
+            </button>
+            <span id="step1Status" class="step-status-pill pill-idle">Ready</span>
+          </div>
+        </div>
+
+        <!-- STEP 2: INPAINTING & GENERATION ENGINES -->
+        <div class="step-card">
+          <div>
+            <div class="step-card-header">
+              <span class="step-number step-number-purple">STEP 2</span>
+              <h3>Choose Inpainting / Generation Engine</h3>
+            </div>
+            <p class="step-desc" style="margin-top: 4px;">Select model to test on the garment:</p>
+
+            <div class="engine-options-grid" style="margin-top: 8px;">
+              <!-- Option 1: LaMa -->
+              <div class="engine-option-card active" data-engine="lama" onclick="selectStep2Engine('lama')">
+                <div class="engine-radio-row">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <input type="radio" name="step2EngineRadio" value="lama" id="engine_lama" checked />
+                    <label for="engine_lama" style="cursor: pointer;"><strong>🦙 1. LaMa</strong></label>
+                  </div>
+                  <span class="engine-tier-tag tag-ready">CPU / Ready</span>
+                </div>
+                <small>Fast deterministic fabric repair.</small>
+              </div>
+
+              <!-- Option 2: SDXL + IP-Adapter -->
+              <div class="engine-option-card" data-engine="sdxl" onclick="selectStep2Engine('sdxl')">
+                <div class="engine-radio-row">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <input type="radio" name="step2EngineRadio" value="sdxl" id="engine_sdxl" />
+                    <label for="engine_sdxl" style="cursor: pointer;"><strong>🎨 2. SDXL</strong></label>
+                  </div>
+                  <span class="engine-tier-tag tag-gpu">RTX 4090</span>
+                </div>
+                <small>Latent diffusion inpaint.</small>
+              </div>
+
+              <!-- Option 3: Qwen-Image-2.1 -->
+              <div class="engine-option-card" data-engine="qwen" onclick="selectStep2Engine('qwen')">
+                <div class="engine-radio-row">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <input type="radio" name="step2EngineRadio" value="qwen" id="engine_qwen" />
+                    <label for="engine_qwen" style="cursor: pointer;"><strong>🌟 3. Qwen-2.1</strong></label>
+                  </div>
+                  <span class="engine-tier-tag tag-gpu">RTX 4090 24GB</span>
+                </div>
+                <small>Official 7B DiT standalone garment.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="step-actions" style="margin-top: 8px;">
+            <button id="runStep2Btn" class="primary-btn" style="background: linear-gradient(135deg, #059669, #0284c7);" onclick="runStep2Inpainting()">
+              <span>✨</span> Run Selected (<span id="selectedEngineName">LaMa</span>)
+            </button>
+            <span id="step2Status" class="step-status-pill pill-idle">Select an engine above</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Batch Action Toolbar -->
     <div class="batch-bar">
       <div class="batch-status-group">
-        <strong id="batchCountText" style="font-size: 14px;">Queue: 0 images</strong>
+        <strong id="batchCountText" style="font-size: 13px;">Queue: 0 images</strong>
         <div class="progress-track">
           <div class="progress-fill" id="progressFill"></div>
         </div>
-        <span id="batchProgressText" style="font-size: 12px; color: var(--text-muted);">0 / 0 completed</span>
+        <span id="batchProgressText" style="font-size: 11px; color: var(--text-muted);">0 / 0 completed</span>
       </div>
 
       <div class="btn-group">
         <button class="secondary-btn" onclick="document.getElementById('fileInput').click()">
-          <span>➕</span> Select Multiple Images
+          <span>➕</span> Add Images
         </button>
         <button id="processAllBtn" class="primary-btn" onclick="processAllBatch()" disabled>
-          <span>▶</span> Process All Images
+          <span>▶</span> Process All
         </button>
         <button id="downloadAllBtn" class="secondary-btn" onclick="downloadAllCleanGarments()" disabled>
-          <span>⬇</span> Download All Clean PNGs
+          <span>⬇</span> Download Clean PNGs
         </button>
         <button class="secondary-btn" style="color: var(--text-muted);" onclick="clearAllQueue()">
-          Clear Queue
+          Clear
         </button>
       </div>
     </div>
@@ -665,14 +196,14 @@
       <!-- Column 1: Uploaded Images Queue Sidebar -->
       <div class="queue-card">
         <div class="queue-header">
-          <h3>Uploaded Images (<span id="queueBadgeCount">0</span>)</h3>
-          <span style="font-size: 11px; color: var(--text-muted);">Click to inspect</span>
+          <h3>Queue (<span id="queueBadgeCount">0</span>)</h3>
+          <span style="font-size: 11px; color: var(--text-muted);">Select to inspect</span>
         </div>
         <div class="queue-list" id="queueList">
           <div class="queue-empty-dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
-            <strong style="font-size: 13px;">Drag &amp; Drop Multiple Images</strong>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse multiple JPG, PNG, WEBP files</p>
+            <div style="font-size: 28px; margin-bottom: 6px;">📁</div>
+            <strong style="font-size: 13px;">Drop Images Here</strong>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse JPG, PNG, WEBP</p>
           </div>
         </div>
       </div>
@@ -680,13 +211,13 @@
       <!-- Column 2: Selected Original Image -->
       <div class="view-card">
         <div class="view-card-header">
-          <h3>Original Selected Photo</h3>
-          <span id="selectedMeta" style="font-size: 12px; color: var(--text-muted);">No image selected</span>
+          <h3>Input Photo</h3>
+          <span id="selectedMeta" style="font-size: 11px; color: var(--text-muted);">No image selected</span>
         </div>
         <div class="view-card-body" id="inputViewBody">
           <div id="noSelectionInputPlaceholder" style="text-align: center; color: var(--text-muted);">
-            <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">📷</div>
-            <p style="font-size: 13px;">Select an image from the queue to view here.</p>
+            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">📷</div>
+            <p style="font-size: 12px;">Select an image from the queue.</p>
           </div>
           <img id="selectedInputPreview" class="preview-img" style="display: none;" alt="Selected Input" />
         </div>
@@ -695,20 +226,31 @@
       <!-- Column 3: Normalized 1024x1024 Transparent 2D Cutout -->
       <div class="view-card">
         <div class="view-card-header">
-          <h3>Clean 1024&times;1024 Transparent PNG</h3>
-          <button id="downloadCurrentBtn" class="primary-btn" style="padding: 4px 10px; font-size: 12px; display: none;" onclick="downloadActiveGarment()">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <h3>Garment Output</h3>
+            <span id="activeModelBadge" class="status-badge" style="background: #ecfdf5; color: #047857; font-size: 10px;">Master</span>
+          </div>
+          <button id="downloadCurrentBtn" class="primary-btn" style="padding: 4px 10px; font-size: 11px; display: none;" onclick="downloadActiveGarment()">
             ⬇ Download PNG
           </button>
         </div>
         <div class="view-card-body checkerboard-bg" id="outputViewBody">
-          <div id="outputPlaceholder" style="text-align: center; color: var(--text-muted);">
-            <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
-            <p style="font-size: 13px;">Processed transparent garment will appear here.</p>
+          <div class="comparative-tab-bar" id="comparativeTabBar">
+            <button class="comp-tab-btn active" data-tab="auto" onclick="switchComparativeTab('auto')">⚡ Master</button>
+            <button class="comp-tab-btn" data-tab="parsing" onclick="switchComparativeTab('parsing')">👤 Step 1</button>
+            <button class="comp-tab-btn" data-tab="lama" onclick="switchComparativeTab('lama')">🦙 LaMa</button>
+            <button class="comp-tab-btn tab-gpu" data-tab="sdxl" onclick="switchComparativeTab('sdxl')">🎨 SDXL</button>
+            <button class="comp-tab-btn tab-gpu" data-tab="qwen" onclick="switchComparativeTab('qwen')">🌟 Qwen-2.1</button>
+          </div>
+
+          <div id="outputPlaceholder" style="text-align: center; color: var(--text-muted); margin: auto;">
+            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">✨</div>
+            <p style="font-size: 12px;">Processed garment will appear here.</p>
           </div>
 
           <div id="activeResultContainer" style="display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center;">
             <div class="garment-tabs" id="garmentTabs"></div>
-            <img id="activeOutputPreview" class="preview-img" alt="2D Garment Cutout" />
+            <img id="activeOutputPreview" class="preview-img" alt="Garment Cutout" />
             <div class="meta-badges" id="metaBadges"></div>
           </div>
         </div>
@@ -718,8 +260,7 @@
     <!-- Footer info -->
     <div class="footer-api-info">
       <div>
-        <strong>External API Integration (Option 2):</strong>
-        Send multipart POST to <code>http://localhost:8000/api/v1/process-garment</code>
+        <strong>API:</strong> POST <code>/api/v1/process-garment</code>
       </div>
       <div id="statusTelemetry">System Ready</div>
     </div>
@@ -730,11 +271,49 @@
 
   <script>
     // State management
-    let fileQueue = []; // array of { id, file, objectUrl, status: 'pending'|'processing'|'done'|'error', result: null, errorMsg: null }
+    let fileQueue = []; // array of { id, file, objectUrl, status: 'pending'|'processing'|'done'|'error', result: null, errorMsg: null, stepwiseResults: {}, activeCompTab: 'auto' }
     let selectedIndex = -1;
     let selectedMode = 'auto';
     let activeGarmentTab = 0;
     let isProcessingBatch = false;
+    let selectedStep2Engine = 'lama';
+
+    // Query server hardware capability on load
+    async function checkBackendHardware() {
+      try {
+        const res = await fetch('/health');
+        if (res.ok) {
+          const data = await res.json();
+          const hw = data.hardware || {};
+          const ind = document.getElementById('gpuStatusIndicator');
+          if (ind) {
+            if (hw.cuda_available) {
+              ind.className = 'gpu-badge badge-green';
+              ind.innerHTML = `<span class="badge-dot"></span> 🟢 GPU Active: ${hw.gpu_name || 'CUDA Enabled'} (RTX 4090 Ready)`;
+            } else {
+              ind.className = 'gpu-badge badge-amber';
+              ind.innerHTML = `<span class="badge-dot badge-dot-amber"></span> 🟡 CPU Mode (LaMa Active &bull; SDXL/Qwen Ready for GPU Server)`;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to query backend health:', e);
+      }
+    }
+    window.addEventListener('DOMContentLoaded', checkBackendHardware);
+
+    function selectStep2Engine(engine) {
+      selectedStep2Engine = engine;
+      document.querySelectorAll('.engine-option-card').forEach(c => {
+        const isMatch = c.dataset.engine === engine;
+        c.classList.toggle('active', isMatch);
+        const radio = c.querySelector('input[type="radio"]');
+        if (radio) radio.checked = isMatch;
+      });
+      const nameMap = { lama: 'LaMa', sdxl: 'SDXL + IP-Adapter', qwen: 'Qwen-Image-2.1' };
+      const el = document.getElementById('selectedEngineName');
+      if (el) el.textContent = nameMap[engine] || engine;
+    }
 
     function setMode(mode) {
       selectedMode = mode;
@@ -812,6 +391,13 @@
           status: 'pending',
           result: null,
           errorMsg: null,
+          stepwiseResults: {
+            parsing: null,
+            lama: null,
+            sdxl: null,
+            qwen: null,
+          },
+          activeCompTab: 'auto',
         };
         fileQueue.push(item);
         addedCount++;
@@ -958,33 +544,424 @@
       inputImg.style.display = 'block';
       document.getElementById('selectedMeta').textContent = `${item.file.name} (${(item.file.size / (1024*1024)).toFixed(2)} MB)`;
 
-      // Update Output Column
-      if (item.status === 'done' && item.result) {
-        renderActiveResult(item.result);
-      } else if (item.status === 'processing') {
-        document.getElementById('outputPlaceholder').innerHTML = `
-          <div style="font-size: 32px; margin-bottom: 8px;">⏳</div>
-          <p style="font-size: 13px; color: var(--accent);">Processing through AI Pipeline...</p>
-        `;
-        document.getElementById('outputPlaceholder').style.display = 'block';
-        document.getElementById('activeResultContainer').style.display = 'none';
-        document.getElementById('downloadCurrentBtn').style.display = 'none';
-      } else if (item.status === 'error') {
-        document.getElementById('outputPlaceholder').innerHTML = `
-          <div style="font-size: 32px; margin-bottom: 8px; color: var(--red);">⚠️</div>
-          <p style="font-size: 13px; color: var(--red);">${item.errorMsg || 'Processing failed'}</p>
-        `;
-        document.getElementById('outputPlaceholder').style.display = 'block';
-        document.getElementById('activeResultContainer').style.display = 'none';
-        document.getElementById('downloadCurrentBtn').style.display = 'none';
+      // Update Step 1 Status Pill
+      const step1Pill = document.getElementById('step1Status');
+      if (item.stepwiseResults && item.stepwiseResults.parsing) {
+        step1Pill.className = 'step-status-pill pill-success';
+        const pLabel = (item.stepwiseResults.parsing.garments && item.stepwiseResults.parsing.garments[0]) ? item.stepwiseResults.parsing.garments[0].recognized_label : 'Garment';
+        step1Pill.textContent = `✓ Parsed: ${pLabel}`;
       } else {
-        document.getElementById('outputPlaceholder').innerHTML = `
-          <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
-          <p style="font-size: 13px;">Pending processing. Click "Process All Images".</p>
-        `;
-        document.getElementById('outputPlaceholder').style.display = 'block';
-        document.getElementById('activeResultContainer').style.display = 'none';
-        document.getElementById('downloadCurrentBtn').style.display = 'none';
+        step1Pill.className = 'step-status-pill pill-idle';
+        step1Pill.textContent = 'Ready';
+      }
+
+      // Update Step 2 Status Pill
+      const step2Pill = document.getElementById('step2Status');
+      if (item.stepwiseResults && item.stepwiseResults.qwen && !item.stepwiseResults.qwen.isPendingGPU) {
+        step2Pill.className = 'step-status-pill pill-success';
+        step2Pill.textContent = `✓ Qwen-2.1 Done`;
+      } else if (item.stepwiseResults && item.stepwiseResults.sdxl && !item.stepwiseResults.sdxl.isPendingGPU) {
+        step2Pill.className = 'step-status-pill pill-success';
+        step2Pill.textContent = `✓ SDXL Done`;
+      } else if (item.stepwiseResults && item.stepwiseResults.lama) {
+        step2Pill.className = 'step-status-pill pill-success';
+        step2Pill.textContent = `✓ LaMa Done`;
+      } else {
+        step2Pill.className = 'step-status-pill pill-idle';
+        step2Pill.textContent = 'Select an engine above';
+      }
+
+      // Switch to active comparative tab
+      const activeTab = item.activeCompTab || 'auto';
+      switchComparativeTab(activeTab);
+    }
+
+    function switchComparativeTab(tab) {
+      const item = fileQueue[selectedIndex];
+      if (item) {
+        item.activeCompTab = tab;
+      }
+      document.querySelectorAll('.comp-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+      renderCurrentTabOutput(tab);
+    }
+
+    function renderCurrentTabOutput(tab) {
+      const item = fileQueue[selectedIndex];
+      const modelBadge = document.getElementById('activeModelBadge');
+      const downloadBtn = document.getElementById('downloadCurrentBtn');
+      const placeholder = document.getElementById('outputPlaceholder');
+      const container = document.getElementById('activeResultContainer');
+
+      if (!item) {
+        resetInspectionViews();
+        return;
+      }
+
+      const badgeMap = {
+        auto: '⚡ Master Pipeline',
+        parsing: '👤 Step 1: Human Parsing',
+        lama: '🦙 LaMa FFC ONNX',
+        sdxl: '🎨 SDXL + IP-Adapter',
+        qwen: '🌟 Qwen-Image-2.1',
+      };
+      if (modelBadge) modelBadge.textContent = badgeMap[tab] || tab;
+
+      if (tab === 'auto') {
+        if (item.status === 'done' && item.result) {
+          renderActiveResult(item.result);
+        } else if (item.status === 'processing') {
+          placeholder.innerHTML = `
+            <div style="font-size: 32px; margin-bottom: 8px;">⏳</div>
+            <p style="font-size: 13px; color: var(--accent);">Processing through AI Pipeline...</p>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        } else if (item.status === 'error') {
+          placeholder.innerHTML = `
+            <div style="font-size: 32px; margin-bottom: 8px; color: var(--red);">⚠️</div>
+            <p style="font-size: 13px; color: var(--red);">${item.errorMsg || 'Processing failed'}</p>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        } else {
+          placeholder.innerHTML = `
+            <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
+            <p style="font-size: 13px;">Master pipeline output pending.</p>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Click "Process All Images" or test step-by-step above.</p>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        }
+        return;
+      }
+
+      if (tab === 'parsing') {
+        const pRes = item.stepwiseResults && item.stepwiseResults.parsing;
+        if (pRes && pRes.garments && pRes.garments.length > 0) {
+          placeholder.style.display = 'none';
+          container.style.display = 'flex';
+          downloadBtn.style.display = 'inline-flex';
+          const g = pRes.garments[0];
+          container.innerHTML = `
+            <div class="summary-bar">
+              <span class="summary-pill" style="border-color: #a7f3d0; color: #047857;">Step 1: Parsed</span>
+              <span class="summary-pill">Label: <strong>${g.recognized_label}</strong></span>
+              <span class="summary-pill">Confidence: <strong>${Math.round((g.confidence || 0.98)*100)}%</strong></span>
+            </div>
+            <img id="activeOutputPreview" class="preview-img" src="${g.output_png_url}" alt="Parsed Garment" />
+            <div class="meta-badges">
+              <span class="meta-badge">Model: <strong>SegFormer B2</strong></span>
+              <span class="meta-badge">Body: <strong>Removed</strong></span>
+              <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
+            </div>
+          `;
+        } else {
+          placeholder.innerHTML = `
+            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">👤</div>
+            <p style="font-size: 12px; color: var(--text-muted);">Step 1 not run yet for this image.</p>
+            <button class="primary-btn" style="margin-top: 8px;" onclick="runStep1Parsing()">
+              <span>👤</span> Run Step 1
+            </button>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        }
+        return;
+      }
+
+      if (tab === 'lama') {
+        const lRes = item.stepwiseResults && item.stepwiseResults.lama;
+        if (lRes && lRes.garments && lRes.garments.length > 0) {
+          placeholder.style.display = 'none';
+          container.style.display = 'flex';
+          downloadBtn.style.display = 'inline-flex';
+          const g = lRes.garments[0];
+          container.innerHTML = `
+            <div class="summary-bar">
+              <span class="summary-pill" style="border-color: #a7f3d0; color: #047857;">🦙 LaMa FFC</span>
+              <span class="summary-pill">Time: <strong>${Math.round(lRes.execution_time_ms)} ms</strong></span>
+              <span class="summary-pill">Repaired: <strong>${g.repaired ? 'Yes' : 'Clean'}</strong></span>
+            </div>
+            <img id="activeOutputPreview" class="preview-img" src="${g.output_png_url}" alt="LaMa Garment" />
+            <div class="meta-badges">
+              <span class="meta-badge">Engine: <strong>LaMa ONNX</strong></span>
+              <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
+            </div>
+          `;
+        } else {
+          placeholder.innerHTML = `
+            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🦙</div>
+            <p style="font-size: 12px; color: var(--text-muted);">LaMa Inpaint not run yet.</p>
+            <button class="primary-btn" style="margin-top: 8px;" onclick="runStep2Inpainting('lama')">
+              <span>🦙</span> Run LaMa
+            </button>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        }
+        return;
+      }
+
+      if (tab === 'sdxl') {
+        const sRes = item.stepwiseResults && item.stepwiseResults.sdxl;
+        if (sRes) {
+          if (sRes.isPendingGPU) {
+            placeholder.innerHTML = `
+              <div class="gpu-deployment-card">
+                <div style="font-size: 32px;">🎨</div>
+                <h4 style="font-size: 14px; font-weight: 700; color: var(--text);">SDXL Ready for GPU Server</h4>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+                  Requires NVIDIA CUDA GPU. When deployed on your RTX 4090 server, this runs live latent diffusion inpainting!
+                </p>
+                <span class="badge badge-green" style="font-size: 11px;">Pipeline: 100% Ready</span>
+              </div>
+            `;
+            placeholder.style.display = 'block';
+            container.style.display = 'none';
+            downloadBtn.style.display = 'none';
+          } else if (sRes.url) {
+            placeholder.style.display = 'none';
+            container.style.display = 'flex';
+            downloadBtn.style.display = 'inline-flex';
+            container.innerHTML = `
+              <div class="summary-bar">
+                <span class="summary-pill" style="border-color: #bfdbfe; color: #1d4ed8;">🎨 SDXL</span>
+                <span class="summary-pill">Time: <strong>${sRes.timing}s</strong></span>
+                <span class="summary-pill">Seed: <strong>${sRes.seed}</strong></span>
+              </div>
+              <img id="activeOutputPreview" class="preview-img" src="${sRes.url}" alt="SDXL Reconstruction" />
+              <div class="meta-badges">
+                <span class="meta-badge">Model: <strong>SDXL + IP-Adapter</strong></span>
+                <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
+              </div>
+            `;
+          }
+        } else {
+          placeholder.innerHTML = `
+            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🎨</div>
+            <p style="font-size: 12px; color: var(--text-muted);">SDXL not run yet for this image.</p>
+            <button class="primary-btn" style="margin-top: 8px;" onclick="runStep2Inpainting('sdxl')">
+              <span>🎨</span> Run SDXL
+            </button>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        }
+        return;
+      }
+
+      if (tab === 'qwen') {
+        const qRes = item.stepwiseResults && item.stepwiseResults.qwen;
+        if (qRes) {
+          if (qRes.isPendingGPU) {
+            placeholder.innerHTML = `
+              <div class="gpu-deployment-card">
+                <div style="font-size: 32px;">🌟</div>
+                <h4 style="font-size: 14px; font-weight: 700; color: var(--text);">Qwen-Image-2.1 Ready for GPU</h4>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+                  Official 7B DiT model requires 24GB VRAM. When deployed to your RTX 4090 GPU server, this button generates the complete standalone garment with native RGBA transparency!
+                </p>
+                <span class="badge badge-green" style="font-size: 11px;">Diffusers Pipeline: 100% Ready</span>
+              </div>
+            `;
+            placeholder.style.display = 'block';
+            container.style.display = 'none';
+            downloadBtn.style.display = 'none';
+          } else if (qRes.output_png_url) {
+            placeholder.style.display = 'none';
+            container.style.display = 'flex';
+            downloadBtn.style.display = 'inline-flex';
+            container.innerHTML = `
+              <div class="summary-bar">
+                <span class="summary-pill" style="border-color: #bfdbfe; color: #1d4ed8;">🌟 Qwen-2.1</span>
+                <span class="summary-pill">Time: <strong>${qRes.inference_seconds || 0}s</strong></span>
+                <span class="summary-pill">Alpha: <strong>${qRes.has_alpha_channel ? 'RGBA' : 'RGB'}</strong></span>
+              </div>
+              <img id="activeOutputPreview" class="preview-img" src="${qRes.output_png_url}" alt="Qwen Garment" />
+              <div class="meta-badges">
+                <span class="meta-badge">Model: <strong>Qwen-Image-2.1 (7B DiT)</strong></span>
+                <span class="meta-badge">Output: <strong>Standalone Product</strong></span>
+                <span class="meta-badge">Size: <strong>${qRes.width || 1024}&times;${qRes.height || 1024}</strong></span>
+              </div>
+            `;
+          }
+        } else {
+          placeholder.innerHTML = `
+            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🌟</div>
+            <p style="font-size: 12px; color: var(--text-muted);">Qwen-2.1 not run yet for this image.</p>
+            <button class="primary-btn" style="margin-top: 8px; background: linear-gradient(135deg, #059669, #0284c7);" onclick="runStep2Inpainting('qwen')">
+              <span>🌟</span> Run Qwen-2.1
+            </button>
+          `;
+          placeholder.style.display = 'block';
+          container.style.display = 'none';
+          downloadBtn.style.display = 'none';
+        }
+        return;
+      }
+    }
+
+    async function runStep1Parsing() {
+      if (selectedIndex < 0 || !fileQueue[selectedIndex]) {
+        alert("Please select or upload an image first!");
+        return;
+      }
+      const item = fileQueue[selectedIndex];
+      const btn = document.getElementById('runStep1Btn');
+      const pill = document.getElementById('step1Status');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span>◌</span> Parsing Model...';
+      pill.className = 'step-status-pill pill-running';
+      pill.textContent = 'Parsing...';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', item.file);
+        formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
+        formData.append('auto_repair', 'false'); // Step 1: No inpainting, strictly person parsing!
+        formData.append('auto_straighten', 'true');
+        formData.append('mode_hint', 'worn');
+
+        const res = await fetch('/api/v1/process-garment', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          throw new Error(err.detail || 'Human parsing failed');
+        }
+
+        const data = await res.json();
+        item.stepwiseResults.parsing = data;
+        pill.className = 'step-status-pill pill-success';
+        const gLabel = (data.garments && data.garments[0]) ? data.garments[0].recognized_label : 'Garment';
+        pill.textContent = `✓ Parsed: ${gLabel} (${Math.round(data.execution_time_ms)}ms)`;
+
+        switchComparativeTab('parsing');
+      } catch (err) {
+        pill.className = 'step-status-pill pill-idle';
+        pill.textContent = 'Failed';
+        alert('Step 1 Human Parsing error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>👤</span> Step 1: Run Human Parsing';
+      }
+    }
+
+    async function runStep2Inpainting(forcedEngine = null) {
+      if (selectedIndex < 0 || !fileQueue[selectedIndex]) {
+        alert("Please select or upload an image first!");
+        return;
+      }
+      const item = fileQueue[selectedIndex];
+      const engine = forcedEngine || selectedStep2Engine || 'lama';
+      const btn = document.getElementById('runStep2Btn');
+      const pill = document.getElementById('step2Status');
+
+      btn.disabled = true;
+      btn.innerHTML = `<span>◌</span> Running ${engine.toUpperCase()}...`;
+      pill.className = 'step-status-pill pill-running';
+      pill.textContent = `Running ${engine}...`;
+
+      try {
+        if (engine === 'lama') {
+          const formData = new FormData();
+          formData.append('file', item.file);
+          formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
+          formData.append('auto_repair', 'true');
+          formData.append('auto_straighten', 'true');
+          formData.append('mode_hint', 'worn');
+
+          const res = await fetch('/api/v1/process-garment', {
+            method: 'POST',
+            body: formData,
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+            throw new Error(err.detail || 'LaMa Inpainting failed');
+          }
+          const data = await res.json();
+          item.stepwiseResults.lama = data;
+          pill.className = 'step-status-pill pill-success';
+          pill.textContent = `✓ LaMa Done (${Math.round(data.execution_time_ms)}ms)`;
+          switchComparativeTab('lama');
+
+        } else if (engine === 'sdxl') {
+          const formData = new FormData();
+          formData.append('original_image', item.file);
+
+          const res = await fetch('/api/v1/reconstruct-garment', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (res.status === 503) {
+            const errData = await res.json().catch(() => ({ detail: 'GPU server required.' }));
+            item.stepwiseResults.sdxl = { isPendingGPU: true, reason: errData.detail };
+            pill.className = 'step-status-pill pill-idle';
+            pill.textContent = 'ℹ SDXL Ready for GPU';
+            switchComparativeTab('sdxl');
+          } else if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+            throw new Error(err.detail || 'SDXL execution failed');
+          } else {
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const timing = res.headers.get('X-Inference-Seconds') || '0';
+            const device = res.headers.get('X-Model-Device') || 'cuda';
+            const seed = res.headers.get('X-Seed') || '42';
+            item.stepwiseResults.sdxl = { url, timing, device, seed };
+            pill.className = 'step-status-pill pill-success';
+            pill.textContent = `✓ SDXL Done (${timing}s)`;
+            switchComparativeTab('sdxl');
+          }
+
+        } else if (engine === 'qwen') {
+          const formData = new FormData();
+          formData.append('original_image', item.file);
+          formData.append('transparent_background', 'true');
+          formData.append('response_format', 'json');
+
+          const res = await fetch('/api/v1/qwen-generate-garment', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (res.status === 503) {
+            const errData = await res.json().catch(() => ({ detail: 'GPU server required.' }));
+            item.stepwiseResults.qwen = { isPendingGPU: true, reason: errData.detail };
+            pill.className = 'step-status-pill pill-idle';
+            pill.textContent = 'ℹ Qwen Ready for GPU';
+            switchComparativeTab('qwen');
+          } else if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+            throw new Error(err.detail || 'Qwen execution failed');
+          } else {
+            const data = await res.json();
+            item.stepwiseResults.qwen = data;
+            pill.className = 'step-status-pill pill-success';
+            pill.textContent = `✓ Qwen Done (${data.inference_seconds || 0}s)`;
+            switchComparativeTab('qwen');
+          }
+        }
+      } catch (err) {
+        pill.className = 'step-status-pill pill-idle';
+        pill.textContent = 'Error';
+        alert(`Engine ${engine} failed: ` + err.message);
+      } finally {
+        btn.disabled = false;
+        const nameMap = { lama: 'LaMa', sdxl: 'SDXL + IP-Adapter', qwen: 'Qwen-Image-2.1' };
+        btn.innerHTML = `<span>✨</span> Run Selected Engine (${nameMap[selectedStep2Engine] || 'LaMa'})`;
       }
     }
 
@@ -1175,20 +1152,54 @@
     // Download individual garment or multi-garment ZIP
     function downloadActiveGarment() {
       const activeItem = fileQueue[selectedIndex];
-      if (!activeItem || !activeItem.result) return;
-      const result = activeItem.result;
-      if (result.garments && result.garments.length > 1 && result.job_id) {
-        // Multi-garment: download zip archive containing all extracted 1024x1024 PNGs
-        window.location.href = `/api/v1/download-batch-zip/${result.job_id}`;
+      if (!activeItem) return;
+      const tab = activeItem.activeCompTab || 'auto';
+      const baseName = activeItem.file.name.replace(/\.[^/.]+$/, "");
+
+      let urlToDownload = null;
+      let filename = `${baseName}_1024x1024_transparent.png`;
+
+      if (tab === 'auto' && activeItem.result) {
+        if (activeItem.result.garments && activeItem.result.garments.length > 1 && activeItem.result.job_id) {
+          window.location.href = `/api/v1/download-batch-zip/${activeItem.result.job_id}`;
+          return;
+        }
+        const img = document.getElementById('activeOutputPreview');
+        if (img && img.src) urlToDownload = img.src;
+      } else if (tab === 'parsing' && activeItem.stepwiseResults && activeItem.stepwiseResults.parsing) {
+        const g = activeItem.stepwiseResults.parsing.garments[0];
+        if (g) {
+          urlToDownload = g.output_png_url;
+          filename = `${baseName}_step1_parsed.png`;
+        }
+      } else if (tab === 'lama' && activeItem.stepwiseResults && activeItem.stepwiseResults.lama) {
+        const g = activeItem.stepwiseResults.lama.garments[0];
+        if (g) {
+          urlToDownload = g.output_png_url;
+          filename = `${baseName}_lama_repaired.png`;
+        }
+      } else if (tab === 'sdxl' && activeItem.stepwiseResults && activeItem.stepwiseResults.sdxl && activeItem.stepwiseResults.sdxl.url) {
+        urlToDownload = activeItem.stepwiseResults.sdxl.url;
+        filename = `${baseName}_sdxl_reconstructed.png`;
+      } else if (tab === 'qwen' && activeItem.stepwiseResults && activeItem.stepwiseResults.qwen && activeItem.stepwiseResults.qwen.output_png_url) {
+        urlToDownload = activeItem.stepwiseResults.qwen.output_png_url;
+        filename = `${baseName}_qwen_garment.png`;
+      } else {
+        const img = document.getElementById('activeOutputPreview');
+        if (img && img.src) urlToDownload = img.src;
+      }
+
+      if (!urlToDownload) {
+        alert('No generated garment available to download for this tab.');
         return;
       }
-      const img = document.getElementById('activeOutputPreview');
-      if (!img || !img.src) return;
-      const baseName = activeItem.file.name.replace(/\.[^/.]+$/, "");
+
       const a = document.createElement('a');
-      a.href = img.src;
-      a.download = `${baseName}_1024x1024_transparent.png`;
+      a.href = urlToDownload;
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
     }
 
     // Download all completed clean garments

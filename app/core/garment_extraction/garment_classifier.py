@@ -281,6 +281,11 @@ def classify_outfit_structure(
             label = "Suit / Salwar Kameez / Ethnic Ensemble"
             key = "suit_salwar"
             mode = "mode_c_traditional_ensemble"
+        elif has_skirt:
+            ensemble_type = "lehenga"
+            label = "Lehenga / Ethnic Ensemble"
+            key = "lehenga"
+            mode = "mode_c_traditional_ensemble"
         elif has_scarf or scene_type == "mannequin":
             ensemble_type = "saree"
             label = "Saree / Traditional Ensemble"

@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-11-03T12:54:40Z",
+  "model_id": "Qwen/Qwen-Image-2.1",
+  "configured_device": "cuda",
+  "is_available": false,
+  "availability_reason": "CUDA GPU is not available on this host. Model execution is PENDING GPU TESTING on an RTX 4090 server.",
+  "cases": [
+    {
+      "case_id": "case_1_magenta_suit",
+      "case_name": "Magenta Suit Salwar",
+      "category": "suit_salwar",
+      "input_resolution": [
+        1000,
+        1333
+      ],
+      "output_resolution": [
+        1024,
+        1024
+      ],
+      "has_alpha_channel": true,
+      "inference_time_seconds": 0.0,
+      "peak_vram_mb": 0.0,
+      "status": "pending_gpu_testing",
+      "error_detail": "CUDA GPU is not available on this host. Model execution is PENDING GPU TESTING on an RTX 4090 server."
+    },
+    {
+      "case_id": "case_2_kerala_saree",
+      "case_name": "White Kerala Saree with Red Blouse",
+      "category": "saree",
+      "input_resolution": [
+        3376,
+        6000
+      ],
+      "output_resolution": [
+        1024,
+        1024
+      ],
+      "has_alpha_channel": true,
+      "inference_time_seconds": 0.0,
+      "peak_vram_mb": 0.0,
+      "status": "pending_gpu_testing",
+      "error_detail": "CUDA GPU is not available on this host. Model execution is PENDING GPU TESTING on an RTX 4090 server."
+    },
+    {
+      "case_id": "case_3_trouser_product",
+      "case_name": "Standalone Trouser Product",
+      "category": "pants",
+      "input_resolution": [
+        1024,
+        1024
+      ],
+      "output_resolution": [
+        1024,
+        1024
+      ],
+      "has_alpha_channel": true,
+      "inference_time_seconds": 0.0,
+      "peak_vram_mb": 0.0,
+      "status": "pending_gpu_testing",
+      "error_detail": "CUDA GPU is not available on this host. Model execution is PENDING GPU TESTING on an RTX 4090 server."
+    }
+  ]
+}

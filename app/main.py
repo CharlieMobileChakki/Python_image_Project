@@ -25,10 +25,17 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from app.api.qwen_garment_generation import qwen_router
 from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
 from app.core.background_removal import extract_isolated_flow_a
-from app.core.model_manager import load_inpainter_model, load_segmenter_models
+from app.core.model_manager import (
+    are_models_loaded,
+    is_inpainter_loaded,
+    load_inpainter_model,
+    load_segmenter_models,
+)
+from app.schemas import HealthResponse
 from app.services.extraction import MODEL_NAME as FLOW_A_MODEL_NAME, extract_garment, load_model
 
 MODEL_NAME = FLOW_A_MODEL_NAME
@@ -88,6 +95,7 @@ app.add_middleware(
 # Include core API router under /api/v1
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(reconstruction_router, prefix="/api/v1")
+app.include_router(qwen_router, prefix="/api/v1")
 
 # Mount outputs directory to serve generated 1024x1024 PNGs
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
@@ -95,6 +103,14 @@ app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
 # Mount static directory for UI assets
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    fav = STATIC_DIR / "favicon.svg"
+    if fav.exists():
+        return FileResponse(fav, media_type="image/svg+xml")
+    raise HTTPException(status_code=404)
 
 
 @app.get("/")
@@ -119,18 +135,41 @@ async def ui_redirect():
     return HTMLResponse("<h1>Arangtik Garment AI</h1><p>UI file not found.</p>")
 
 
-@app.get("/health")
-async def health_check():
-    """Root health check probe."""
-    return {
-        "status": "ok",
-        "service": "arangtik-garment-extraction",
-        "flow": "A",
-        "model": MODEL_NAME,
-        "version": "1.0.0",
-        "docs_url": "/docs",
-        "ui_url": "/ui",
-    }
+@app.get("/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
+    """Unified system health check and loaded AI model status."""
+    seg_status = are_models_loaded()
+    lama_status = is_inpainter_loaded()
+
+    has_cuda = False
+    gpu_name = "N/A"
+    try:
+        import torch
+        has_cuda = torch.cuda.is_available()
+        if has_cuda:
+            gpu_name = torch.cuda.get_device_name(0)
+    except Exception:
+        pass
+
+    return HealthResponse(
+        status="ok",
+        service="arangtik-garment-ai",
+        flow="Unified Pipeline",
+        version="1.0.0",
+        model=MODEL_NAME,
+        docs_url="/docs",
+        ui_url="/ui",
+        models_loaded={
+            **seg_status,
+            "lama_inpainter": lama_status,
+        },
+        hardware={
+            "cpu_cores": os.cpu_count() or 1,
+            "device": "cuda" if has_cuda else "cpu",
+            "cuda_available": has_cuda,
+            "gpu_name": gpu_name,
+        },
+    )
 
 
 # Backward-compatible Flow A endpoint

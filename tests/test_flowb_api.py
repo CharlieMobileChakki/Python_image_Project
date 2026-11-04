@@ -15,14 +15,14 @@ import numpy as np
 from PIL import Image
 import pytest
 
-from flowb_service.extraction import (
+from app.services.flow_b.extraction import (
     EXPLICIT_ALIASES,
     FlowBResult,
     get_id2label,
     is_model_loaded,
     resolve_target_classes,
 )
-from flowb_service.main import app
+from app.services.flow_b.main import app
 
 client = TestClient(app)
 
@@ -97,7 +97,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertIn("/health", data["health"])
         self.assertIn("/docs", data["docs"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
     def test_health_when_loaded(self, mock_loaded) -> None:
         response = client.get("/health")
         self.assertEqual(response.status_code, 200)
@@ -107,7 +107,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertTrue(data["model_loaded"])
         self.assertIn("anarkali", data["supported_aliases"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=False)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=False)
     def test_health_when_initializing(self, mock_loaded) -> None:
         response = client.get("/health")
         self.assertEqual(response.status_code, 503)
@@ -116,7 +116,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertFalse(data["model_loaded"])
 
     # 2. Upload and Format Validations
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
     def test_unsupported_media_type(self, mock_loaded) -> None:
         response = client.post(
             "/api/v1/extract-garment/worn",
@@ -126,7 +126,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 415)
         self.assertIn("Supported image types", response.json()["detail"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
     def test_empty_file_upload(self, mock_loaded) -> None:
         response = client.post(
             "/api/v1/extract-garment/worn",
@@ -136,7 +136,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("uploaded file is empty", response.json()["detail"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
     def test_oversized_file_upload(self, mock_loaded) -> None:
         oversized = b"0" * (15 * 1024 * 1024 + 10)
         response = client.post(
@@ -147,7 +147,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 413)
         self.assertIn("exceeds the 15 MB upload limit", response.json()["detail"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=False)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=False)
     def test_endpoint_when_model_unready(self, mock_loaded) -> None:
         img_bytes = make_dummy_image_bytes()
         response = client.post(
@@ -159,7 +159,7 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertIn("still initializing", response.json()["detail"])
 
     # 3. Parameter Validations
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
     def test_invalid_alpha_mode(self, mock_loaded) -> None:
         img_bytes = make_dummy_image_bytes()
         response = client.post(
@@ -170,8 +170,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("alpha_mode must be either 'soft' or 'hard'", response.json()["detail"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.extraction.get_id2label", return_value=MOCK_ID2LABEL)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.extraction.get_id2label", return_value=MOCK_ID2LABEL)
     def test_invalid_class_name(self, mock_id2label, mock_loaded) -> None:
         img_bytes = make_dummy_image_bytes()
         response = client.post(
@@ -182,8 +182,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("Unknown garment class", response.json()["detail"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.extraction.get_id2label", return_value=MOCK_ID2LABEL)
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.extraction.get_id2label", return_value=MOCK_ID2LABEL)
     def test_invalid_alpha_thresholds(self, mock_id2label, mock_loaded) -> None:
         img_bytes = make_dummy_image_bytes()
         response = client.post(
@@ -195,8 +195,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertIn("strictly less than", response.json()["detail"])
 
     # 4. Error Handling: Empty Mask & Model Failures
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.main.extract_garment_worn", side_effect=ValueError("No foreground garment was detected"))
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.extract_garment_worn", side_effect=ValueError("No foreground garment was detected"))
     def test_empty_mask_returns_422(self, mock_extract, mock_loaded) -> None:
         img_bytes = make_dummy_image_bytes()
         response = client.post(
@@ -207,8 +207,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("No foreground garment was detected", response.json()["detail"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.main.extract_garment_worn", side_effect=RuntimeError("PyTorch execution failed"))
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.extract_garment_worn", side_effect=RuntimeError("PyTorch execution failed"))
     def test_model_runtime_error_returns_422(self, mock_extract, mock_loaded) -> None:
         img_bytes = make_dummy_image_bytes()
         response = client.post(
@@ -220,8 +220,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertIn("PyTorch execution failed", response.json()["detail"])
 
     # 5. Successful Single-Class, Multi-Class, and Alias Extractions
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.main.extract_garment_worn")
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.extract_garment_worn")
     def test_successful_single_class_extraction(self, mock_extract, mock_loaded) -> None:
         mock_extract.return_value = dummy_flowb_result(class_name="pants", orig_w=1200, orig_h=800)
         img_bytes = make_dummy_image_bytes()
@@ -248,8 +248,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertTrue((alpha_arr == 0).any(), "Expected transparent background pixels")
         self.assertTrue((alpha_arr > 0).any(), "Expected foreground garment pixels")
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.main.extract_garment_worn")
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.extract_garment_worn")
     def test_successful_multi_class_extraction(self, mock_extract, mock_loaded) -> None:
         mock_extract.return_value = dummy_flowb_result(class_name="upper-clothes,skirt")
         img_bytes = make_dummy_image_bytes()
@@ -264,8 +264,8 @@ class TestFlowBAPI(unittest.TestCase):
         self.assertIn("Upper-clothes", response.headers["x-target-classes"])
         self.assertIn("Skirt", response.headers["x-target-classes"])
 
-    @patch("flowb_service.main.is_model_loaded", return_value=True)
-    @patch("flowb_service.main.extract_garment_worn")
+    @patch("app.services.flow_b.main.is_model_loaded", return_value=True)
+    @patch("app.services.flow_b.main.extract_garment_worn")
     def test_successful_anarkali_alias_extraction(self, mock_extract, mock_loaded) -> None:
         mock_extract.return_value = dummy_flowb_result(class_name="anarkali")
         img_bytes = make_dummy_image_bytes()

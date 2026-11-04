@@ -1,9 +1,8 @@
-"""Arm and hand occlusion mask detection for human model inpainting."""
+"""Arm, hand, hair, and prop occlusion mask detection for garment inpainting."""
 from __future__ import annotations
 
 import cv2
 import numpy as np
-from PIL import Image, ImageFilter
 
 
 def compute_arm_occlusion_mask(
@@ -11,110 +10,117 @@ def compute_arm_occlusion_mask(
     garment_class_id: int | list[int] | tuple[int, ...],
     cutout_alpha: np.ndarray | None = None,
     arm_classes: tuple[int, ...] = (14, 15),
-    dilation_radius: int = 17,
+    dilation_radius: int = 11,
 ) -> np.ndarray:
-    """Detect regions where model's arms cut into or cross over garment fabric.
+    """Detect regions where model's arms, hands, hair, or handheld props occlude garment fabric.
 
-    Strictly triggers ONLY for genuine human occlusions:
-    - Reconstructs fabric hidden by hands/arms crossing over the torso/garment body.
-    - Excludes arms resting outside on walls or hanging down in the background.
-    - Excludes background regions (Class 0), natural necklines, and bottom hemlines.
+    Reconstructs:
+    - Fabric hidden by crossed arms, resting hands, or fingers on the torso/waist/hemline.
+    - Notches, voids, and missing fabric occluded by handheld props (microphones, phones, bags).
+    - Fabric covered by long hair falling across the chest or shoulders.
+
+    Strictly protects:
+    - Natural necklines (top open collar/neckline).
+    - Outer background (never spills into empty background beyond the garment silhouette).
     """
     if isinstance(garment_class_id, (list, tuple)):
         garment_mask = np.isin(pred_map, garment_class_id)
     else:
         garment_mask = (pred_map == garment_class_id)
 
-    arms_mask = np.isin(pred_map, arm_classes)
-    bg_mask = (pred_map == 0)
+    # Use cutout alpha if available as the most accurate depiction of extracted fabric
+    if cutout_alpha is not None:
+        effective_garment = (cutout_alpha > 20)
+    else:
+        effective_garment = garment_mask
 
-    if garment_mask.sum() == 0 or (arms_mask.sum() < 100 and cutout_alpha is None):
-        return np.zeros_like(garment_mask, dtype=np.uint8)
+    if effective_garment.sum() < 60:
+        return np.zeros_like(pred_map, dtype=np.uint8)
 
     H, W = pred_map.shape
-    garment_rows = np.any(garment_mask, axis=1)
+    garment_rows = np.any(effective_garment, axis=1)
     if not np.any(garment_rows):
-        return np.zeros_like(garment_mask, dtype=np.uint8)
+        return np.zeros_like(pred_map, dtype=np.uint8)
 
     y_indices = np.where(garment_rows)[0]
     y_min, y_max = y_indices[0], y_indices[-1]
     garment_height = max(1, y_max - y_min)
 
-    # Protect natural neckline (top 10%) and natural hemline (bottom 5%)
-    y_top_limit = y_min + int(0.10 * garment_height)
-    y_bot_limit = y_max - int(0.05 * garment_height)
+    # Protect natural neckline (top 8% where collar/neck/face resides)
+    y_top_limit = y_min + int(0.08 * garment_height)
 
-    # 1. Arm regions genuinely crossing the garment torso/body
-    crossed_arms = np.zeros_like(garment_mask, dtype=bool)
+    # Occluding body and prop classes in SegFormer
+    # arms: 14, 15; hair: 2; accessories/bag/belt: 1, 3, 8, 16
+    arms_mask = np.isin(pred_map, arm_classes)
+    hair_mask = (pred_map == 2)
+    acc_mask = np.isin(pred_map, [1, 3, 8, 16])
+    bg_mask = (pred_map == 0)
+
+    # 1. Natural garment envelope / convex torso hull
+    contours, _ = cv2.findContours(
+        effective_garment.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    if not contours:
+        return np.zeros_like(pred_map, dtype=np.uint8)
+
+    # Build silhouette hull
+    hull_mask = np.zeros((H, W), dtype=np.uint8)
+    for c in contours:
+        if cv2.contourArea(c) > 200:
+            h = cv2.convexHull(c)
+            cv2.drawContours(hull_mask, [h], -1, 255, -1)
+
+    # 2. Identify crossed arms / hands across the garment torso
+    crossed_limbs = np.zeros_like(effective_garment, dtype=bool)
     if arms_mask.sum() > 0:
-        for y in range(y_top_limit, y_bot_limit):
-            row_g = np.where(garment_mask[y])[0]
+        for y in range(y_top_limit, min(H, y_max + 1)):
+            row_g = np.where(effective_garment[y])[0]
             row_a = np.where(arms_mask[y])[0]
-            if len(row_g) < 25 or len(row_a) == 0:
+            if len(row_a) == 0:
                 continue
-            g_left, g_right = row_g[0], row_g[-1]
-            # Arm pixel must be embedded horizontally inside the garment silhouette
-            in_torso = (row_a >= g_left) & (row_a <= g_right)
-            valid_x = row_a[in_torso]
-            if len(valid_x) > 0:
-                crossed_arms[y, valid_x] = True
+            if len(row_g) > 0:
+                g_left, g_right = row_g[0], row_g[-1]
+                # Limb inside garment horizontal span or within 12px of edge
+                in_span = (row_a >= max(0, g_left - 12)) & (row_a <= min(W - 1, g_right + 12))
+                crossed_limbs[y, row_a[in_span]] = True
+            elif hull_mask[y].any():
+                h_left, h_right = np.where(hull_mask[y] == 255)[0][[0, -1]]
+                in_hull = (row_a >= h_left) & (row_a <= h_right)
+                crossed_limbs[y, row_a[in_hull]] = True
 
-        # Filter out arm components that are purely external limbs in the background
-        if crossed_arms.any():
-            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crossed_arms.astype(np.uint8))
-            kernel = np.ones((7, 7), np.uint8)
-            filtered_arms = np.zeros_like(crossed_arms, dtype=bool)
-            for i in range(1, num_labels):
-                if stats[i, cv2.CC_STAT_AREA] < 40:
-                    continue
-                comp = (labels == i)
-                dilated = cv2.dilate(comp.astype(np.uint8), kernel) > 0
-                ring = dilated & ~comp
-                bg_touch = (ring & bg_mask).sum()
-                g_touch = (ring & garment_mask).sum()
-                total_ring = max(1, ring.sum())
-                # Keep if embedded in torso OR substantially resting against/overlapping garment
-                if (bg_touch / total_ring) < 0.45 or g_touch > 40:
-                    filtered_arms |= comp
-            crossed_arms = filtered_arms
+    # 3. Identify missing notches / voids within the natural garment envelope
+    hull_void = (hull_mask == 255) & (~effective_garment)
+    # Restrict to areas touched by crossed limbs, arms, accessories, or hair
+    occlusion_sources = crossed_limbs | arms_mask | acc_mask | (hair_mask & (hull_mask == 255))
+    dilated_sources = cv2.dilate(occlusion_sources.astype(np.uint8), np.ones((13, 13), np.uint8)) > 0
+    enclosed_occlusions = hull_void & dilated_sources
 
-    # If there are no confirmed human arm/hand pixels crossing the garment, do not repair!
-    # Prevents artificial holes being carved into plackets, necklines, or embroidery on flat-lays or mannequins.
-    if not crossed_arms.any():
-        return np.zeros_like(garment_mask, dtype=np.uint8)
+    # Union of crossed limbs and enclosed occlusions
+    repair_candidate = (crossed_limbs & (hull_mask == 255)) | enclosed_occlusions
 
-    # 2. Internal transparent holes enclosed within the garment silhouette that touch crossed arms
-    internal_holes = np.zeros_like(garment_mask, dtype=bool)
-    if cutout_alpha is not None:
-        contours, _ = cv2.findContours(
-            (cutout_alpha > 20).astype(np.uint8) * 255, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
-        )
-        filled_silhouette = np.zeros_like(cutout_alpha)
-        for c in contours:
-            cv2.drawContours(filled_silhouette, [c], -1, 255, -1)
-        # Internal void: strictly enclosed, NOT background, NOT in neckline or hemline
-        candidate_holes = (filled_silhouette == 255) & (cutout_alpha < 30) & (~bg_mask)
-        candidate_holes[:y_top_limit, :] = False
-        candidate_holes[y_bot_limit:, :] = False
-        # Must touch or be near crossed arm pixels
-        dilated_arms = cv2.dilate(crossed_arms.astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
-        internal_holes = candidate_holes & dilated_arms
+    # Exclude natural neckline at the top
+    repair_candidate[:y_top_limit, :] = False
 
-    # Union of genuine crossed arms and enclosed arm holes
-    repair_mask = crossed_arms | internal_holes
-    if repair_mask.sum() < 60:
-        return np.zeros_like(garment_mask, dtype=np.uint8)
+    # Filter out tiny isolated noise (< 25px)
+    if repair_candidate.sum() < 30:
+        return np.zeros_like(pred_map, dtype=np.uint8)
 
-    # Tight boundary seam dilation (5px) to cover seam without over-expanding into intact fabric
-    seam_radius = min(dilation_radius, 5) if dilation_radius > 5 else dilation_radius
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (seam_radius, seam_radius))
-    dilated_mask = cv2.dilate(repair_mask.astype(np.uint8) * 255, kernel)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(repair_candidate.astype(np.uint8))
+    filtered_repair = np.zeros_like(repair_candidate, dtype=bool)
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] >= 25:
+            filtered_repair |= (labels == i)
 
-    # Restrict strictly inside the filled garment silhouette (never spill into outer background)
-    if cutout_alpha is not None and "filled_silhouette" in locals():
-        dilated_mask[filled_silhouette == 0] = 0
-    dilated_mask[:y_top_limit, :] = 0
-    dilated_mask[y_bot_limit:, :] = 0
+    if not filtered_repair.any():
+        return np.zeros_like(pred_map, dtype=np.uint8)
 
-    return dilated_mask
+    # 4. Smooth seam dilation to cover boundary contact seams and shadows
+    seam_rad = max(5, min(dilation_radius, 13))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (seam_rad, seam_rad))
+    dilated_repair = cv2.dilate(filtered_repair.astype(np.uint8) * 255, kernel)
 
+    # Restrict strictly inside the garment envelope (never spill into outer background)
+    dilated_repair[hull_mask == 0] = 0
+    dilated_repair[:y_top_limit, :] = 0
+
+    return dilated_repair

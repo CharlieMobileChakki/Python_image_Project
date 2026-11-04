@@ -123,18 +123,20 @@ def repair_garment_cutout(
     crop_rgba_np = np.array(crop_rgba)
     mask_bin = (mask_crop > 0).astype(np.uint8)
 
-    # Provide authentic color context (avoid passing pitch-black (0,0,0) transparent pixels to LaMa)
-    if padded_orig is not None:
+    # Provide clean garment color context (avoid feeding raw unmasked skin/props into the hole)
+    valid_fabric = (crop_rgba_np[:, :, 3] > 80) & (mask_bin == 0)
+    if valid_fabric.any():
+        mean_color = crop_rgba_np[valid_fabric, :3].mean(axis=0).astype(np.uint8)
+        crop_rgb_np = crop_rgba_np[:, :, :3].copy()
+        crop_rgb_np[mask_bin > 0] = mean_color
+        prefilled_rgb = cv2.inpaint(crop_rgb_np, mask_bin, 7, cv2.INPAINT_TELEA)
+    elif padded_orig is not None:
         crop_rgb_np = np.array(padded_orig.crop((x0, y0, x1, y1)))
+        prefilled_rgb = cv2.inpaint(crop_rgb_np, mask_bin, 5, cv2.INPAINT_TELEA)
     else:
         crop_rgb_np = crop_rgba_np[:, :, :3].copy()
-        valid_fabric = (crop_rgba_np[:, :, 3] > 100) & (mask_bin == 0)
-        if valid_fabric.any():
-            mean_color = crop_rgba_np[valid_fabric, :3].mean(axis=0)
-            crop_rgb_np[crop_rgba_np[:, :, 3] == 0] = mean_color
+        prefilled_rgb = cv2.inpaint(crop_rgb_np, mask_bin, 5, cv2.INPAINT_TELEA)
 
-    # Pre-fill mask using surrounding clean garment fabric interpolation
-    prefilled_rgb = cv2.inpaint(crop_rgb_np, mask_bin, 5, cv2.INPAINT_TELEA)
     prefilled_im = Image.fromarray(prefilled_rgb, mode="RGB")
 
     # Execute LaMa on guaranteed 512x512 crop

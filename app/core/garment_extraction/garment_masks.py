@@ -77,14 +77,39 @@ def extract_garment_cutout_guided(
     # Rule B: Remove actual human body pixels (face, hair, arms, hands, legs)
     if opp_body_classes:
         body_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_body_classes])
-        # Body removal requires higher confidence than weak fabric boundary jitter
-        is_body = (body_probs > target_probs) & (body_probs >= 0.32)
+        # Body removal: active body prob exceeds target or is confidently human body (>= 0.25)
+        is_body = (body_probs > target_probs) | (body_probs >= 0.25)
         alpha_uint8[is_body] = 0
 
-    # Suppress distinct non-garment accessories (sunglasses, bags, shoes)
+        # Exposed skin detection via YCrCb to prune necklines, shoulders, armpits, and arm boundaries
+        if is_human:
+            img_np = np.array(image_rgb)
+            ycrcb = cv2.cvtColor(img_np, cv2.COLOR_RGB2YCrCb)
+            skin_cand = (
+                (ycrcb[:, :, 1] >= 133) & (ycrcb[:, :, 1] <= 173) &
+                (ycrcb[:, :, 2] >= 77) & (ycrcb[:, :, 2] <= 127)
+            )
+            body_boundary = cv2.dilate((body_probs > 0.18).astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+            is_skin_body = skin_cand & body_boundary & (target_probs < 0.60)
+            alpha_uint8[is_skin_body] = 0
+
+    # Suppress distinct non-garment accessories (sunglasses, bags, belts, shoes)
     if opp_acc_classes:
         acc_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_acc_classes])
-        alpha_uint8[(acc_probs > target_probs) & (acc_probs >= 0.40)] = 0
+        alpha_uint8[(acc_probs > target_probs) | (acc_probs >= 0.22)] = 0
+
+    # Suppress handheld props (microphones, phones, dark objects held by hands overlapping garment)
+    if is_human and opp_body_classes:
+        arms_mask = np.isin(probs_tensor.argmax(dim=0).numpy(), [14, 15]) | (body_probs > 0.22)
+        arms_dilated = cv2.dilate(arms_mask.astype(np.uint8), np.ones((11, 11), np.uint8)) > 0
+        img_np = np.array(image_rgb)
+        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+        solid_fabric = (alpha_uint8 > 50)
+        if solid_fabric.any():
+            mean_bright = float(gray[solid_fabric].mean())
+            if mean_bright > 80:
+                dark_handheld = (gray < (0.60 * mean_bright)) & arms_dilated & ((target_probs < 0.50) | (bg_prob > 0.12))
+                alpha_uint8[dark_handheld] = 0
 
     # 3. Foreground Boundary Recovery (using BiRefNet Lite when provided)
     if has_fg:
@@ -115,15 +140,17 @@ def extract_garment_cutout_guided(
     alpha_bin = (alpha_uint8 > 20).astype(np.uint8)
     contours, hierarchy = cv2.findContours(alpha_bin, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     if hierarchy is not None and len(contours) > 1:
+        max_heal_area = 250 if is_human else 10000
         for i in range(len(contours)):
             if hierarchy[0][i][3] >= 0:  # Enclosed internal void
                 area = cv2.contourArea(contours[i])
-                if area < 10000:
+                if area < max_heal_area:
                     hole_mask = np.zeros_like(alpha_uint8)
                     cv2.drawContours(hole_mask, [contours[i]], -1, 255, -1)
                     if opp_body_classes:
                         body_probs = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_body_classes])
-                        safe_to_heal = (hole_mask == 255) & is_fg & (body_probs < 0.35)
+                        acc_probs_local = np.maximum.reduce([probs_tensor[c].numpy() for c in opp_acc_classes]) if opp_acc_classes else np.zeros_like(body_probs)
+                        safe_to_heal = (hole_mask == 255) & is_fg & (body_probs < 0.20) & (acc_probs_local < 0.20)
                     else:
                         safe_to_heal = (hole_mask == 255) & is_fg
                     if safe_to_heal.any():
