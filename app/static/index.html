@@ -34,17 +34,13 @@
     <!-- Pipeline Mode & Settings -->
     <div class="panel">
       <div class="mode-select-row">
-        <div class="mode-btn active" data-mode="auto" onclick="setMode('auto')">
-          <strong>⚡ Auto Detect</strong>
-          <small>Smart human detection</small>
+        <div class="mode-btn active" data-mode="with_person" onclick="setMode('with_person')">
+          <strong>👗 Flow B: With Person</strong>
+          <small>Model-Worn: Person Parsing + Fabric Repair</small>
         </div>
-        <div class="mode-btn" data-mode="worn" onclick="setMode('worn')">
-          <strong>👗 Worn Model</strong>
-          <small>Person parsing &amp; clothing</small>
-        </div>
-        <div class="mode-btn" data-mode="isolated" onclick="setMode('isolated')">
-          <strong>👔 Flat-lay / Hanger</strong>
-          <small>Direct product cutout</small>
+        <div class="mode-btn" data-mode="without_person" onclick="setMode('without_person')">
+          <strong>👔 Flow A: Without Person</strong>
+          <small>Flat-lay / Product: Fast Pure BG Removal</small>
         </div>
       </div>
 
@@ -273,7 +269,7 @@
     // State management
     let fileQueue = []; // array of { id, file, objectUrl, status: 'pending'|'processing'|'done'|'error', result: null, errorMsg: null, stepwiseResults: {}, activeCompTab: 'auto' }
     let selectedIndex = -1;
-    let selectedMode = 'auto';
+    let selectedMode = 'with_person';
     let activeGarmentTab = 0;
     let isProcessingBatch = false;
     let selectedStep2Engine = 'lama';
@@ -829,7 +825,9 @@
         formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
         formData.append('auto_repair', 'false'); // Step 1: No inpainting, strictly person parsing!
         formData.append('auto_straighten', 'true');
-        formData.append('mode_hint', 'worn');
+        formData.append('person_mode', 'with_person');
+        formData.append('has_human', 'true');
+        formData.append('mode_hint', 'with_person');
 
         const res = await fetch('/api/v1/process-garment', {
           method: 'POST',
@@ -880,7 +878,9 @@
           formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
           formData.append('auto_repair', 'true');
           formData.append('auto_straighten', 'true');
-          formData.append('mode_hint', 'worn');
+          formData.append('person_mode', 'with_person');
+          formData.append('has_human', 'true');
+          formData.append('mode_hint', 'with_person');
 
           const res = await fetch('/api/v1/process-garment', {
             method: 'POST',
@@ -1074,6 +1074,8 @@
       formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
       formData.append('auto_repair', document.getElementById('autoRepairCheck').checked);
       formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
+      formData.append('person_mode', selectedMode);
+      formData.append('has_human', selectedMode === 'with_person' ? 'true' : 'false');
       formData.append('mode_hint', selectedMode);
 
       const endpoint = '/api/v1/process-garment';

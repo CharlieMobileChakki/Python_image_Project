@@ -33,15 +33,23 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def test_single_image(image_path: Path | str) -> bool:
-    """Run full unified pipeline extraction and repair on a single image."""
+def test_single_image(image_path: Path | str, mode: str = "with_person") -> bool:
+    """Run pipeline extraction on a single image.
+
+    Args:
+        image_path: Path to input image file.
+        mode: 'with_person' (Flow B: Human Parsing + Inpainting) or
+              'without_person' (Flow A: Pure Background Removal to 1024).
+    """
     img_file = Path(image_path)
     if not img_file.is_file():
         print(f"\n❌ Error: File not found: {img_file}")
         return False
 
+    flow_label = "👗 Flow B (With Person — Parsing + Inpainting)" if mode == "with_person" else "👔 Flow A (Without Person — Direct BG Removal)"
     print(f"\n=======================================================")
     print(f"👗 Processing: {img_file.name}")
+    print(f"🔄 Mode: {flow_label}")
     print(f"📁 Path: {img_file.resolve()}")
     print(f"=======================================================")
 
@@ -52,6 +60,8 @@ def test_single_image(image_path: Path | str) -> bool:
         t0 = time.perf_counter()
         result = process_garment_pipeline(
             img_bytes,
+            person_mode=mode,
+            has_human=(mode == "with_person"),
             target_garment="all",
             auto_repair=True,
             auto_straighten=True,
@@ -60,6 +70,7 @@ def test_single_image(image_path: Path | str) -> bool:
 
         print(f"\n✅ Pipeline Finished in {elapsed} ms!")
         print(f" - Job ID: {result.get('job_id')}")
+        print(f" - Pipeline Mode: {result.get('mode')}")
         print(f" - Scene Type: {result.get('scene_type')}")
         print(f" - Human Present: {result.get('has_human')}")
         print(f" - Outfit Mode: {result.get('outfit_mode')}")
@@ -139,14 +150,22 @@ def interactive_menu() -> None:
             print(" [C] Enter custom path")
 
             sub_choice = input("\nEnter image number or [C]: ").strip()
+            selected = None
             if sub_choice.isdigit() and 1 <= int(sub_choice) <= len(valid_images):
                 selected = valid_images[int(sub_choice) - 1]
-                test_single_image(selected)
             elif sub_choice.upper() == "C":
                 custom_path = input("Enter image path: ").strip().strip('"').strip("'")
-                test_single_image(custom_path)
+                selected = Path(custom_path)
             else:
                 print("Invalid selection.")
+                continue
+
+            print("\nSelect Execution Flow:")
+            print(" [1] 👗 Flow B: With Person (Model Worn — Human Parsing + Fabric Inpainting) [Default]")
+            print(" [2] 👔 Flow A: Without Person (Flat-lay / Product — Pure Background Removal to 1024)")
+            flow_choice = input("Enter flow [1-2, default 1]: ").strip()
+            mode = "without_person" if flow_choice == "2" else "with_person"
+            test_single_image(selected, mode=mode)
 
         elif choice == "2":
             run_unit_tests()
@@ -169,6 +188,14 @@ def interactive_menu() -> None:
 def main():
     parser = argparse.ArgumentParser(description="Arangtik Garment AI Testing Runner")
     parser.add_argument("--image", "-i", type=str, help="Path to single image to process and test")
+    parser.add_argument(
+        "--mode",
+        "-m",
+        type=str,
+        choices=["with_person", "without_person"],
+        default="with_person",
+        help="Pipeline flow: with_person (Flow B: parsing + inpaint) or without_person (Flow A: direct bg removal)",
+    )
     parser.add_argument("--pytest", "-t", action="store_true", help="Run pytest unit tests")
     parser.add_argument("--server", "-s", action="store_true", help="Launch FastAPI web server")
     parser.add_argument("--port", "-p", type=int, default=8000, help="Port for web server")
@@ -176,7 +203,7 @@ def main():
     args = parser.parse_args()
 
     if args.image:
-        test_single_image(args.image)
+        test_single_image(args.image, mode=args.mode)
     elif args.pytest:
         run_unit_tests()
     elif args.server:

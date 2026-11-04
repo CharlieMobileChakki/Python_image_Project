@@ -54,21 +54,22 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
 @router.post("/process-garment", response_model=ProcessGarmentResponse)
 async def process_garment_endpoint(
     file: UploadFile = File(..., description="Input image of garment or worn model"),
+    person_mode: str = Form("with_person", description="Execution mode: 'with_person' (Flow B: parsing + inpainting) or 'without_person' (Flow A: direct background removal)"),
+    has_human: bool | None = Form(None, description="Explicit boolean flag: True for with-person, False for without-person"),
     target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
-    auto_repair: bool = Form(True, description="Enable LaMa fabric inpainting for occlusions"),
+    auto_repair: bool = Form(True, description="Enable LaMa fabric inpainting for occlusions in Flow B"),
     auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
     response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
-    mode_hint: str = Form("auto", description="'auto', 'worn', or 'isolated'"),
+    mode_hint: str | None = Form(None, description="Legacy mode hint for backwards compatibility: 'worn', 'isolated', 'auto'"),
 ) -> Any:
     """Master Unified Pipeline Endpoint (Option 2 Machine-to-Machine API).
 
-    Processes image through the 5-step intelligent pipeline:
-    1. Human presence detection.
-    2. Branching: SegFormer parsing (worn) or BiRefNet Lite (isolated product).
-    3. Occlusion inspection & LaMa Fast Fourier inpainting.
-    4. Auto-deskew angle correction.
-    5. 1024x1024 transparent PNG canvas normalization.
+    Processes image through explicit dual-flow architecture:
+    - Flow A (without_person): Pure background removal via BiRefNet Lite with zero
+      human-parsing overhead, normalized to clean 1024x1024 transparent canvas.
+    - Flow B (with_person): Background removal -> SegFormer B2 clothes parsing ->
+      garment extraction -> LaMa inpainting fabric repair -> 1024x1024 normalization.
     """
     image_bytes = await validate_and_read_image(file)
     try:
@@ -76,11 +77,13 @@ async def process_garment_endpoint(
             result = await run_in_threadpool(
                 process_garment_pipeline,
                 image_bytes=image_bytes,
+                person_mode=person_mode,
+                has_human=has_human,
+                mode_hint=mode_hint,
                 target_garment=target_garment,
                 auto_repair=auto_repair,
                 auto_straighten=auto_straighten,
                 include_base64=include_base64,
-                mode_hint=mode_hint,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
