@@ -89,12 +89,12 @@ async def reconstruct_garment_endpoint(
             import numpy as np
             from PIL import Image
             from app.core.background_removal import extract_isolated_flow_a
-            from app.core.inpainting import compute_arm_occlusion_mask
-            from app.core.segmentation import (
+            from app.core.garment_extraction import (
                 analyze_semantic_map,
                 extract_garment_cutout_guided,
-                run_segformer_inference,
             )
+            from app.core.inpainting import compute_arm_occlusion_mask
+            from app.core.person_parsing import run_segformer_inference
 
             fg_cutout = extract_isolated_flow_a(original_pil)
             fg_alpha = np.array(fg_cutout.split()[3])
