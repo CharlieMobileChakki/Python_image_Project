@@ -39,6 +39,7 @@ def execute_flow_a_without_person(
     image_rgb: Image.Image,
     image_bytes: bytes,
     job_id: str,
+    target_garment: str = "all",
     auto_straighten: bool = True,
     include_base64: bool = False,
     t_start: float | None = None,
@@ -77,8 +78,8 @@ def execute_flow_a_without_person(
         for idx, comp in enumerate(multi_comps):
             g_id = f"garment_{idx+1:03d}"
             c_mask = comp["comp_mask"]
-            c_soft = cv2.GaussianBlur(c_mask.astype(np.float32) * 255.0, (3, 3), 0.5)
-            g_alpha = np.clip(c_soft, 0, 255).astype(np.uint8)
+            # Preserve BiRefNet Lite's exact anti-aliased alpha boundary
+            g_alpha = np.where(c_mask, fg_alpha, 0).astype(np.uint8)
 
             x0, y0, x1, y1 = comp["bbox"]
             pad = 8
@@ -138,6 +139,22 @@ def execute_flow_a_without_person(
     else:
         # Single Product Flat-lay / Hanger background removal
         cutout_rgba = fg_cutout
+
+        # Prune detached non-garment specks (such as stand feet, stray hanger artifacts)
+        cutout_arr = np.array(cutout_rgba)
+        alpha_channel = cutout_arr[:, :, 3]
+        bin_cutout = (alpha_channel > 40).astype(np.uint8)
+        num_l, lab, st, _ = cv2.connectedComponentsWithStats(bin_cutout)
+        if num_l > 2:
+            max_comp_area = max(st[i, cv2.CC_STAT_AREA] for i in range(1, num_l))
+            # Keep components that are at least 12% of the main garment area
+            keep_m = np.zeros_like(bin_cutout, dtype=bool)
+            for i in range(1, num_l):
+                if st[i, cv2.CC_STAT_AREA] >= 0.12 * max_comp_area:
+                    keep_m |= (lab == i)
+            cutout_arr[:, :, 3] = np.where(keep_m, alpha_channel, 0)
+            cutout_rgba = Image.fromarray(cutout_arr, mode="RGBA")
+
         angle_deg = 0.0
         if auto_straighten:
             angle_deg = detect_rotation_angle(cutout_rgba)
@@ -149,10 +166,17 @@ def execute_flow_a_without_person(
         final_cutout = val_res.get("refined_cutout", normalized_1024)
 
         w, h = cutout_rgba.size
-        if h > w * 1.35:
+        aspect = h / max(1, w)
+        if target_garment and target_garment != "all":
+            cat_key = target_garment
+            cat_label = target_garment.replace("_", " ").title()
+        elif aspect > 1.35:
             cat_key = "dress"
             cat_label = "Dress / Gown / Full Outfit"
-        elif h > w * 1.15:
+        elif aspect > 1.10 and w > h * 0.75:
+            cat_key = "dress"
+            cat_label = "Dress / Kurta / Outfit"
+        elif aspect > 1.15:
             cat_key = "pants"
             cat_label = "Pants / Jeans"
         else:
@@ -479,6 +503,7 @@ def process_garment_pipeline(
             image_rgb=image_rgb,
             image_bytes=image_bytes,
             job_id=job_id,
+            target_garment=target_garment,
             auto_straighten=auto_straighten,
             include_base64=include_base64,
             t_start=t_start,
