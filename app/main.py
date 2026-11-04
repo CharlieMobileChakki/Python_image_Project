@@ -32,7 +32,6 @@ from app.core.background_removal import extract_isolated_flow_a
 from app.core.model_manager import (
     are_models_loaded,
     is_inpainter_loaded,
-    load_inpainter_model,
     load_segmenter_models,
 )
 from app.schemas import HealthResponse
@@ -60,11 +59,8 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"  - Warning: Failed to preload segmentation models: {exc}")
 
-    try:
-        await run_in_threadpool(load_inpainter_model)
-        print("  - LaMa Fast Fourier Inpainter ONNX loaded.")
-    except Exception as exc:
-        print(f"  - Warning: Failed to preload inpainter model: {exc}")
+    # Note: LaMa ONNX is no longer loaded during application startup.
+    # Qwen-Image-2.1 serves as the primary generative reconstruction engine, loaded on-demand on GPU.
 
     print("Arangtik Garment AI ready for requests.")
     yield

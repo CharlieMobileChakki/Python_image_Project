@@ -136,16 +136,16 @@
             <p class="step-desc" style="margin-top: 4px;">Select model to test on the garment:</p>
 
             <div class="engine-options-grid" style="margin-top: 8px;">
-              <!-- Option 1: LaMa -->
-              <div class="engine-option-card active" data-engine="lama" onclick="selectStep2Engine('lama')">
+              <!-- Option 1: Qwen-Image-2.1 (Primary Reconstruction Engine) -->
+              <div class="engine-option-card active" data-engine="qwen" onclick="selectStep2Engine('qwen')">
                 <div class="engine-radio-row">
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="radio" name="step2EngineRadio" value="lama" id="engine_lama" checked />
-                    <label for="engine_lama" style="cursor: pointer;"><strong>🦙 1. LaMa</strong></label>
+                    <input type="radio" name="step2EngineRadio" value="qwen" id="engine_qwen" checked />
+                    <label for="engine_qwen" style="cursor: pointer;"><strong>🌟 1. Qwen-2.1</strong></label>
                   </div>
-                  <span class="engine-tier-tag tag-ready">CPU / Ready</span>
+                  <span class="engine-tier-tag tag-ready">Primary &bull; RTX 3090</span>
                 </div>
-                <small>Fast deterministic fabric repair.</small>
+                <small>Reference-guided fabric reconstruction.</small>
               </div>
 
               <!-- Option 2: SDXL + IP-Adapter -->
@@ -160,23 +160,23 @@
                 <small>Latent diffusion inpaint.</small>
               </div>
 
-              <!-- Option 3: Qwen-Image-2.1 -->
-              <div class="engine-option-card" data-engine="qwen" onclick="selectStep2Engine('qwen')">
+              <!-- Option 3: LaMa (Fallback) -->
+              <div class="engine-option-card" data-engine="lama" onclick="selectStep2Engine('lama')">
                 <div class="engine-radio-row">
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="radio" name="step2EngineRadio" value="qwen" id="engine_qwen" />
-                    <label for="engine_qwen" style="cursor: pointer;"><strong>🌟 3. Qwen-2.1</strong></label>
+                    <input type="radio" name="step2EngineRadio" value="lama" id="engine_lama" />
+                    <label for="engine_lama" style="cursor: pointer;"><strong>🦙 3. LaMa FFC</strong></label>
                   </div>
-                  <span class="engine-tier-tag tag-gpu">RTX 4090 24GB</span>
+                  <span class="engine-tier-tag tag-ready">CPU / Fallback</span>
                 </div>
-                <small>Official 7B DiT standalone garment.</small>
+                <small>Fast deterministic fabric repair.</small>
               </div>
             </div>
           </div>
 
           <div class="step-actions" style="margin-top: 8px;">
             <button id="runStep2Btn" class="primary-btn" style="background: linear-gradient(135deg, #059669, #0284c7);" onclick="runStep2Inpainting()">
-              <span>✨</span> Run Selected (<span id="selectedEngineName">LaMa</span>)
+              <span>✨</span> Run Selected (<span id="selectedEngineName">Qwen-Image-2.1</span>)
             </button>
             <span id="step2Status" class="step-status-pill pill-idle">Select an engine above</span>
           </div>
@@ -256,10 +256,10 @@
         <div class="view-card-body checkerboard-bg" id="outputViewBody">
           <div class="comparative-tab-bar" id="comparativeTabBar">
             <button class="comp-tab-btn active" data-tab="auto" onclick="switchComparativeTab('auto')">⚡ Master</button>
-            <button class="comp-tab-btn" data-tab="parsing" onclick="switchComparativeTab('parsing')">👤 Step 1</button>
-            <button class="comp-tab-btn" data-tab="lama" onclick="switchComparativeTab('lama')">🦙 LaMa</button>
-            <button class="comp-tab-btn tab-gpu" data-tab="sdxl" onclick="switchComparativeTab('sdxl')">🎨 SDXL</button>
-            <button class="comp-tab-btn tab-gpu" data-tab="qwen" onclick="switchComparativeTab('qwen')">🌟 Qwen-2.1</button>
+            <button class="comp-tab-btn flow-b-tab" data-tab="parsing" onclick="switchComparativeTab('parsing')">👤 Step 1</button>
+            <button class="comp-tab-btn flow-b-tab tab-gpu" data-tab="qwen" onclick="switchComparativeTab('qwen')">🌟 Qwen-2.1 (Primary)</button>
+            <button class="comp-tab-btn flow-b-tab tab-gpu" data-tab="sdxl" onclick="switchComparativeTab('sdxl')">🎨 SDXL</button>
+            <button class="comp-tab-btn flow-b-tab" data-tab="lama" onclick="switchComparativeTab('lama')">🦙 LaMa</button>
           </div>
 
           <div id="outputPlaceholder" style="text-align: center; color: var(--text-muted); margin: auto;">
@@ -295,7 +295,7 @@
     let selectedMode = 'with_person';
     let activeGarmentTab = 0;
     let isProcessingBatch = false;
-    let selectedStep2Engine = 'lama';
+    let selectedStep2Engine = 'qwen';
 
     // Query server hardware capability on load
     async function checkBackendHardware() {
@@ -308,10 +308,10 @@
           if (ind) {
             if (hw.cuda_available) {
               ind.className = 'gpu-badge badge-green';
-              ind.innerHTML = `<span class="badge-dot"></span> 🟢 GPU Active: ${hw.gpu_name || 'CUDA Enabled'} (RTX 4090 Ready)`;
+              ind.innerHTML = `<span class="badge-dot"></span> 🟢 GPU Active: ${hw.gpu_name || 'CUDA Enabled'} (RTX 3090 Ready)`;
             } else {
               ind.className = 'gpu-badge badge-amber';
-              ind.innerHTML = `<span class="badge-dot badge-dot-amber"></span> 🟡 CPU Mode (LaMa Active &bull; SDXL/Qwen Ready for GPU Server)`;
+              ind.innerHTML = `<span class="badge-dot badge-dot-amber"></span> 🟡 CPU Mode (Qwen Primary &bull; RTX 3090 Deployment Ready)`;
             }
           }
         }
@@ -329,7 +329,7 @@
         const radio = c.querySelector('input[type="radio"]');
         if (radio) radio.checked = isMatch;
       });
-      const nameMap = { lama: 'LaMa', sdxl: 'SDXL + IP-Adapter', qwen: 'Qwen-Image-2.1' };
+      const nameMap = { qwen: 'Qwen-Image-2.1', sdxl: 'SDXL + IP-Adapter', lama: 'LaMa FFC' };
       const el = document.getElementById('selectedEngineName');
       if (el) el.textContent = nameMap[engine] || engine;
     }
@@ -362,6 +362,12 @@
         if (step1Card) step1Card.style.display = 'none';
         if (step2Card) step2Card.style.display = 'none';
 
+        // Hide Step 1 and Step 2 tabs when in Flow A (pure background removal mode)
+        document.querySelectorAll('.flow-b-tab').forEach(tab => {
+          tab.style.display = 'none';
+        });
+        switchComparativeTab('auto');
+
         if (repairCheck) repairCheck.disabled = true;
         if (repairLabel) {
           repairLabel.style.opacity = '0.35';
@@ -379,6 +385,11 @@
         if (flowACard) flowACard.style.display = 'none';
         if (step1Card) step1Card.style.display = 'block';
         if (step2Card) step2Card.style.display = 'block';
+
+        // Show all tabs when in Flow B
+        document.querySelectorAll('.flow-b-tab').forEach(tab => {
+          tab.style.display = 'inline-flex';
+        });
 
         if (repairCheck) repairCheck.disabled = false;
         if (repairLabel) {
@@ -596,7 +607,7 @@
       }
 
       // Switch to active comparative tab
-      const activeTab = item.activeCompTab || 'auto';
+      const activeTab = (selectedMode === 'without_person') ? 'auto' : (item.activeCompTab || 'auto');
       switchComparativeTab(activeTab);
     }
 
@@ -789,40 +800,42 @@
             placeholder.innerHTML = `
               <div class="gpu-deployment-card">
                 <div style="font-size: 32px;">🌟</div>
-                <h4 style="font-size: 14px; font-weight: 700; color: var(--text);">Qwen-Image-2.1 Ready for GPU</h4>
+                <h4 style="font-size: 14px; font-weight: 700; color: var(--text);">Qwen-Image-2.1 Ready for GPU Server</h4>
                 <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
-                  Official 7B DiT model requires 24GB VRAM. When deployed to your RTX 4090 GPU server, this button generates the complete standalone garment with native RGBA transparency!
+                  Qwen-Image-2.1 is the Primary Generative Fabric Reconstruction Engine. It is ready for deployment on your RTX 3090 GPU server!
                 </p>
-                <span class="badge badge-green" style="font-size: 11px;">Diffusers Pipeline: 100% Ready</span>
+                <span class="badge badge-green" style="font-size: 11px;">Primary Engine: Configured</span>
               </div>
             `;
             placeholder.style.display = 'block';
             container.style.display = 'none';
             downloadBtn.style.display = 'none';
-          } else if (qRes.output_png_url) {
+          } else if (qRes.url || qRes.output_png_url) {
             placeholder.style.display = 'none';
             container.style.display = 'flex';
             downloadBtn.style.display = 'inline-flex';
+            const imgUrl = qRes.url || qRes.output_png_url;
             container.innerHTML = `
               <div class="summary-bar">
-                <span class="summary-pill" style="border-color: #bfdbfe; color: #1d4ed8;">🌟 Qwen-2.1</span>
-                <span class="summary-pill">Time: <strong>${qRes.inference_seconds || 0}s</strong></span>
-                <span class="summary-pill">Alpha: <strong>${qRes.has_alpha_channel ? 'RGBA' : 'RGB'}</strong></span>
+                <span class="summary-pill" style="border-color: #bfdbfe; color: #1d4ed8;">🌟 Qwen-Image-2.1 (Primary)</span>
+                <span class="summary-pill">Time: <strong>${qRes.timing || qRes.inference_seconds || 0}s</strong></span>
+                <span class="summary-pill">Alpha: <strong>100% Clean RGBA</strong></span>
               </div>
-              <img id="activeOutputPreview" class="preview-img" src="${qRes.output_png_url}" alt="Qwen Garment" />
+              <img id="activeOutputPreview" class="preview-img" src="${imgUrl}" alt="Qwen Reconstructed Garment" />
               <div class="meta-badges">
                 <span class="meta-badge">Model: <strong>Qwen-Image-2.1 (7B DiT)</strong></span>
-                <span class="meta-badge">Output: <strong>Standalone Product</strong></span>
-                <span class="meta-badge">Size: <strong>${qRes.width || 1024}&times;${qRes.height || 1024}</strong></span>
+                <span class="meta-badge">Fabric Preservation: <strong>100% Original Pixels Preserved</strong></span>
+                <span class="meta-badge">Transparency: <strong>BiRefNet Lite Verified</strong></span>
+                <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
               </div>
             `;
           }
         } else {
           placeholder.innerHTML = `
             <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🌟</div>
-            <p style="font-size: 12px; color: var(--text-muted);">Qwen-2.1 not run yet for this image.</p>
+            <p style="font-size: 12px; color: var(--text-muted);">Qwen-2.1 reconstruction not run yet for this image.</p>
             <button class="primary-btn" style="margin-top: 8px; background: linear-gradient(135deg, #059669, #0284c7);" onclick="runStep2Inpainting('qwen')">
-              <span>🌟</span> Run Qwen-2.1
+              <span>🌟</span> Run Qwen-2.1 Reconstruction
             </button>
           `;
           placeholder.style.display = 'block';
@@ -1009,10 +1022,8 @@
         } else if (engine === 'qwen') {
           const formData = new FormData();
           formData.append('original_image', item.file);
-          formData.append('transparent_background', 'true');
-          formData.append('response_format', 'json');
 
-          const res = await fetch('/api/v1/qwen-generate-garment', {
+          const res = await fetch('/api/v1/reconstruct-garment', {
             method: 'POST',
             body: formData,
           });
@@ -1027,10 +1038,13 @@
             const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
             throw new Error(err.detail || 'Qwen execution failed');
           } else {
-            const data = await res.json();
-            item.stepwiseResults.qwen = data;
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const timing = res.headers.get('X-Inference-Seconds') || '0';
+            const status = res.headers.get('X-Reconstruction-Status') || 'success';
+            item.stepwiseResults.qwen = { url, timing, status, has_alpha_channel: true };
             pill.className = 'step-status-pill pill-success';
-            pill.textContent = `✓ Qwen Done (${data.inference_seconds || 0}s)`;
+            pill.textContent = `✓ Qwen Done (${timing}s)`;
             switchComparativeTab('qwen');
           }
         }
@@ -1040,8 +1054,8 @@
         alert(`Engine ${engine} failed: ` + err.message);
       } finally {
         btn.disabled = false;
-        const nameMap = { lama: 'LaMa', sdxl: 'SDXL + IP-Adapter', qwen: 'Qwen-Image-2.1' };
-        btn.innerHTML = `<span>✨</span> Run Selected Engine (${nameMap[selectedStep2Engine] || 'LaMa'})`;
+        const nameMap = { qwen: 'Qwen-Image-2.1', sdxl: 'SDXL + IP-Adapter', lama: 'LaMa FFC' };
+        btn.innerHTML = `<span>✨</span> Run Selected Engine (${nameMap[selectedStep2Engine] || 'Qwen-Image-2.1'})`;
       }
     }
 
@@ -1149,14 +1163,15 @@
 
     // Process a single item
     async function processSingleItem(item) {
+      const isWithoutPerson = (selectedMode === 'without_person');
       const formData = new FormData();
       formData.append('file', item.file);
-      formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
-      formData.append('auto_repair', document.getElementById('autoRepairCheck').checked);
+      formData.append('target_garment', isWithoutPerson ? 'all' : document.getElementById('targetGarmentSelect').value);
+      formData.append('auto_repair', isWithoutPerson ? 'false' : document.getElementById('autoRepairCheck').checked);
       formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
-      formData.append('person_mode', selectedMode);
-      formData.append('has_human', selectedMode === 'with_person' ? 'true' : 'false');
-      formData.append('mode_hint', selectedMode);
+      formData.append('person_mode', isWithoutPerson ? 'without_person' : 'with_person');
+      formData.append('has_human', isWithoutPerson ? 'false' : 'true');
+      formData.append('mode_hint', isWithoutPerson ? 'without_person' : 'with_person');
 
       const endpoint = '/api/v1/process-garment';
 

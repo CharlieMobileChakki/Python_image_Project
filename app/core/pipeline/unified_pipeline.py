@@ -1,6 +1,7 @@
 """Master Pipeline Orchestrator: Coordinates Flow A (Without Person) and Flow B (With Person)."""
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 import uuid
@@ -33,6 +34,9 @@ from app.core.inpainting import (
 from app.core.person_parsing import run_segformer_inference
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
 from app.core.pipeline.pipeline_router import resolve_execution_flow
+from app.experimental.qwen_generation import get_qwen_garment_engine
+
+logger = logging.getLogger(__name__)
 
 
 def execute_flow_a_without_person(
@@ -286,6 +290,27 @@ def execute_flow_b_with_person(
     scene_info = analyze_semantic_map(pred_map)
     seg_time_ms = round((time.perf_counter() - t_seg_start) * 1000, 2)
 
+    # Automatic safety fallback: If no human body (face, arms, hair, skin) is present,
+    # the image is an isolated product, flat-lay, or mannequin mistakenly sent as Flow B.
+    # Route gracefully to Flow A (BiRefNet Lite) rather than hallucinating garments on background noise.
+    has_human_detected = scene_info.get("has_human", True)
+    if not has_human_detected:
+        logger.info(
+            "Flow B invoked on image with no human detected (scene_type=%s, human_pixels=%s). "
+            "Gracefully delegating to Flow A (isolated background removal).",
+            scene_info.get("scene_type"),
+            scene_info.get("human_pixel_count", 0),
+        )
+        return execute_flow_a_without_person(
+            image_rgb=image_rgb,
+            image_bytes=image_bytes,
+            job_id=job_id,
+            target_garment=target_garment,
+            auto_straighten=auto_straighten,
+            include_base64=include_base64,
+            t_start=t_start,
+        )
+
     detected_garments = scene_info["detected_garments"]
 
     # Step 3: Outfit Structure Classification
@@ -323,7 +348,7 @@ def execute_flow_b_with_person(
                 min_component_area=150,
             )
 
-            # 4B. Occlusion Inspection & LaMa Fabric Inpainting
+            # 4B. Occlusion Inspection & Qwen-Image-2.1 Fabric Reconstruction
             repaired = False
             repair_method = None
             if auto_repair:
@@ -334,9 +359,28 @@ def execute_flow_b_with_person(
                 )
                 notch_px = (notch_mask > 0).sum()
                 if 60 < notch_px < int(0.35 * garment_pixel_area):
-                    cutout_rgba, _ = repair_garment_cutout(cutout_rgba, notch_mask, original_rgb=person_rgb)
-                    repaired = True
-                    repair_method = "lama_ffc_onnx"
+                    qwen_engine = get_qwen_garment_engine()
+                    is_avail, _ = qwen_engine.is_available()
+                    if is_avail:
+                        # Primary: Qwen-Image-2.1 reference-guided reconstruction on GPU
+                        q_res = qwen_engine.reconstruct_garment(
+                            original_image=person_rgb,
+                            garment_cutout=cutout_rgba,
+                            repair_mask=notch_mask,
+                        )
+                        if q_res.status == "success":
+                            cutout_rgba = q_res.image
+                            repaired = True
+                            repair_method = "qwen_image_2_1"
+                    else:
+                        # Graceful dev environment fallback without locking CPU
+                        try:
+                            cutout_rgba, _ = repair_garment_cutout(cutout_rgba, notch_mask, original_rgb=person_rgb)
+                            repaired = True
+                            repair_method = "qwen_image_2_1_pending_gpu (dev_fallback: cpu_safe)"
+                        except Exception:
+                            repaired = False
+                            repair_method = "unrepaired (pending_gpu)"
 
             # 4C. Auto-Deskewing
             angle_deg = 0.0

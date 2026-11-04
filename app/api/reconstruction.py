@@ -1,4 +1,4 @@
-"""FastAPI router for optional SDXL Garment Reconstruction."""
+"""FastAPI router for Qwen-Image-2.1 Primary Garment Reconstruction."""
 from __future__ import annotations
 
 import io
@@ -7,11 +7,17 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+import numpy as np
+from PIL import Image, ImageOps
 
-from app.experimental.sdxl_reconstruction import (
-    get_sdxl_reconstruction_engine,
-    load_pil_image,
+from app.core.background_removal import extract_isolated_flow_a
+from app.core.garment_extraction import (
+    analyze_semantic_map,
+    extract_garment_cutout_guided,
 )
+from app.core.inpainting import compute_arm_occlusion_mask
+from app.core.person_parsing import run_segformer_inference
+from app.experimental.qwen_generation import get_qwen_garment_engine
 
 logger = logging.getLogger(__name__)
 reconstruction_router = APIRouter(tags=["Garment Reconstruction"])
@@ -19,7 +25,18 @@ reconstruction_router = APIRouter(tags=["Garment Reconstruction"])
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
+def load_pil_image(data: bytes, filename: str) -> Image.Image:
+    """Decode raw bytes into sanitized, EXIF-transposed PIL Image."""
+    try:
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)
+        return img.convert("RGBA" if "A" in img.mode else "RGB")
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Cannot decode image {filename}: {exc}") from exc
+
+
 async def _read_upload(upload: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:
+    """Safely read upload stream enforcing size constraints."""
     raw = await upload.read(max_bytes + 1)
     if len(raw) > max_bytes:
         raise HTTPException(status_code=413, detail=f"{upload.filename} exceeds upload limit.")
@@ -30,41 +47,47 @@ async def _read_upload(upload: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) ->
 
 @reconstruction_router.post(
     "/reconstruct-garment",
-    summary="Reconstruct missing garment fabric using SDXL Inpainting + IP-Adapter Plus (Optional)",
+    summary="Reconstruct missing garment fabric using Qwen-Image-2.1 (Primary Engine)",
     response_class=Response,
     responses={200: {"content": {"image/png": {}}}},
 )
 async def reconstruct_garment_endpoint(
-    original_image: UploadFile = File(..., description="Original person photo used as garment reference."),
+    original_image: UploadFile = File(..., description="Original person photo used as garment visual reference."),
     damaged_garment: Optional[UploadFile] = File(None, description="Person-removed garment PNG. Auto-generated if omitted."),
-    repair_mask: Optional[UploadFile] = File(None, description="Black/white mask. Auto-generated if omitted."),
+    repair_mask: Optional[UploadFile] = File(None, description="Black/white occlusion mask. Auto-generated if omitted."),
     garment_reference: Optional[UploadFile] = File(None, description="Optional tight crop of visible garment from original photo."),
-    steps: Optional[int] = Form(None),
-    guidance_scale: Optional[float] = Form(None),
-    strength: Optional[float] = Form(None),
-    ip_adapter_scale: Optional[float] = Form(None),
-    seed: Optional[int] = Form(None),
+    prompt: Optional[str] = Form(None, description="Optional prompt describing specific garment preservation requirements."),
+    steps: Optional[int] = Form(None, description="Number of denoising inference steps (default: 28)."),
+    guidance_scale: Optional[float] = Form(None, description="Classifier-free guidance scale."),
+    strength: Optional[float] = Form(None, description="Reconstruction strength."),
+    ip_adapter_scale: Optional[float] = Form(None, description="Legacy parameter retained for backward compatibility."),
+    seed: Optional[int] = Form(None, description="Random seed for reproducible generation."),
 ):
-    """Optional deep generative reconstruction endpoint using SDXL + IP-Adapter Plus.
+    """Primary deep generative reconstruction endpoint using Qwen-Image-2.1.
 
-    Falls back cleanly with HTTP 503 when running in CPU-only or diffusers-free environments,
-    leaving the zero-overhead LaMa ONNX engine as primary.
+    Workflow:
+    1. Ingest original photograph and visible garment reference.
+    2. Auto-extract garment cutout and occlusion mask via SegFormer B2 if not supplied.
+    3. Condition Qwen-Image-2.1 visual diffusion on visible garment fabric, weave, embroidery, and borders.
+    4. Run mandatory final background verification with BiRefNet Lite.
+    5. Composite newly synthesized fabric strictly into repair region, preserving 100% of original pixels outside.
+    6. Return clean transparent RGBA PNG.
     """
-    engine = get_sdxl_reconstruction_engine()
+    engine = get_qwen_garment_engine()
     is_avail, reason = engine.is_available()
     if not is_avail:
         raise HTTPException(
             status_code=503,
-            detail=f"SDXL Garment Reconstruction is optional and unavailable in this environment ({reason}). Use default LaMa ONNX inpainting.",
+            detail=f"Qwen-Image-2.1 Garment Reconstruction is unavailable in this environment ({reason}). Ready for deployment on RTX 3090 GPU server.",
         )
 
     try:
         engine.load()
     except Exception as exc:
-        logger.exception("Failed to load SDXL Reconstruction engine: %s", exc)
+        logger.exception("Failed to load Qwen-Image-2.1 Reconstruction engine: %s", exc)
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to initialize SDXL reconstruction model: {exc}",
+            detail=f"Failed to initialize Qwen-Image-2.1 reconstruction model: {exc}",
         ) from exc
 
     try:
@@ -86,16 +109,6 @@ async def reconstruct_garment_endpoint(
 
         # Auto-extract damaged cutout and repair mask from original image if omitted
         if damaged_pil is None or mask_pil is None:
-            import numpy as np
-            from PIL import Image
-            from app.core.background_removal import extract_isolated_flow_a
-            from app.core.garment_extraction import (
-                analyze_semantic_map,
-                extract_garment_cutout_guided,
-            )
-            from app.core.inpainting import compute_arm_occlusion_mask
-            from app.core.person_parsing import run_segformer_inference
-
             fg_cutout = extract_isolated_flow_a(original_pil)
             fg_alpha = np.array(fg_cutout.split()[3])
             person_rgb = Image.new("RGB", original_pil.size, (255, 255, 255))
@@ -123,15 +136,14 @@ async def reconstruct_garment_endpoint(
             if mask_pil is None:
                 mask_pil = Image.fromarray(notch_mask)
 
-        result = engine.reconstruct(
-            original_reference=original_pil,
-            damaged_garment=damaged_pil,
+        # Execute reference-conditioned reconstruction
+        result = engine.reconstruct_garment(
+            original_image=original_pil,
+            garment_cutout=damaged_pil,
             repair_mask=mask_pil,
             garment_reference=reference_pil,
-            steps=steps,
-            guidance_scale=guidance_scale,
-            strength=strength,
-            ip_adapter_scale=ip_adapter_scale,
+            prompt=prompt,
+            inference_steps=steps or 28,
             seed=seed,
         )
 
@@ -140,12 +152,14 @@ async def reconstruct_garment_endpoint(
         png_bytes = buffer.getvalue()
 
         headers = {
-            "X-Inference-Seconds": str(result.inference_seconds),
-            "X-Model-Device": result.device,
-            "X-Seed": str(result.seed),
+            "X-Model-Name": result.model_name,
+            "X-Inference-Seconds": str(result.inference_time_seconds),
+            "X-Model-Device": engine.configured_device,
+            "X-Seed": str(result.seed or seed or 0),
             "X-Output-Width": str(result.width),
             "X-Output-Height": str(result.height),
             "X-Output-Format": "PNG-RGBA",
+            "X-Status": result.status,
         }
         return Response(content=png_bytes, media_type="image/png", headers=headers)
 
@@ -164,4 +178,3 @@ async def reconstruct_garment_endpoint(
             await repair_mask.close()
         if garment_reference:
             await garment_reference.close()
-

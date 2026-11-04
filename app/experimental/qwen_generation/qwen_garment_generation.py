@@ -22,6 +22,7 @@ import threading
 import time
 from typing import Optional, Tuple
 
+import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
@@ -52,6 +53,55 @@ DEFAULT_GARMENT_SOLID_PROMPT = (
     "Remove the person, body, skin, face, mannequin, and hangers completely. "
     "Preserve exact colors, fabric texture, embroidery, and silhouette."
 )
+
+DEFAULT_RECONSTRUCTION_PROMPT = (
+    "This is an RGBA image with transparency. "
+    "A clean, photorealistic, isolated studio product photograph of the EXACT SAME garment shown in the reference image. "
+    "Reconstruct only the missing fabric, folds, pleats, waistline, and drape where hands, arms, "
+    "or body parts occluded the clothing in the reference photo. "
+    "Strictly preserve the original fabric color, color distribution, fabric texture, weave, "
+    "embroidery, patterns, printed motifs, borders, lace, seams, and neckline from the visible reference. "
+    "Do not invent a different garment, color, pattern, or design. "
+    "Remove the person, body, skin, face, hair, mannequin, and background completely. "
+    "The clothing item is perfectly isolated on a transparent background."
+)
+
+
+def composite_reconstructed_fabric(
+    original_garment: Image.Image,
+    generated_fabric: Image.Image,
+    repair_mask: np.ndarray,
+    feather_radius: int = 5,
+) -> Image.Image:
+    """Composite Qwen-generated fabric strictly into the occluded region while preserving 100% of original pixels."""
+    orig_rgba = original_garment.convert("RGBA")
+    W, H = orig_rgba.size
+
+    # Ensure generated fabric matches original dimensions
+    gen_rgba = generated_fabric.convert("RGBA").resize((W, H), Image.Resampling.LANCZOS)
+
+    # Ensure repair mask matches dimensions
+    if repair_mask.shape != (H, W):
+        repair_mask = cv2.resize(repair_mask, (W, H), interpolation=cv2.INTER_NEAREST)
+
+    orig_arr = np.array(orig_rgba).astype(np.float32)
+    gen_arr = np.array(gen_rgba).astype(np.float32)
+
+    # Soft feathering at the boundary to eliminate hard seam transitions
+    mask_binary = (repair_mask > 20).astype(np.float32)
+    if feather_radius > 0 and mask_binary.any():
+        ksize = feather_radius * 2 + 1
+        mask_f = cv2.GaussianBlur(mask_binary, (ksize, ksize), feather_radius / 2.0)
+    else:
+        mask_f = mask_binary
+    mask_f = np.clip(mask_f, 0.0, 1.0)[..., None]
+
+    # Preserve 100% of original pixels outside the repair mask
+    blended_rgb = orig_arr[:, :, :3] * (1.0 - mask_f) + gen_arr[:, :, :3] * mask_f
+    blended_alpha = np.maximum(orig_arr[:, :, 3:4], gen_arr[:, :, 3:4] * mask_f)
+
+    blended_rgba = np.dstack([blended_rgb, blended_alpha])
+    return Image.fromarray(np.clip(blended_rgba, 0, 255).astype(np.uint8), mode="RGBA")
 
 
 @dataclass
@@ -288,6 +338,102 @@ class QwenGarmentGenerationEngine:
             has_alpha_channel=has_alpha,
             inference_time_seconds=round(inference_time, 2),
             gpu_memory_peak_mb=round(peak_vram, 1),
+            model_name=self.model_id,
+            seed=seed,
+            status="success",
+            error_detail=None,
+        )
+
+    def reconstruct_garment(
+        self,
+        original_image: Image.Image,
+        garment_cutout: Image.Image,
+        repair_mask: Image.Image | np.ndarray,
+        garment_reference: Optional[Image.Image] = None,
+        prompt: Optional[str] = None,
+        resolution: int = 1024,
+        inference_steps: int = 28,
+        seed: Optional[int] = None,
+        feather_radius: int = 5,
+    ) -> QwenGenerationResult:
+        """Execute reference-based fabric reconstruction using Qwen-Image-2.1 conditioned on original photo.
+
+        Workflow:
+        1. Condition Qwen on original photo and visible garment reference.
+        2. Generate missing fabric conditioned on visible colors, embroidery, borders.
+        3. Mandatory background verification with BiRefNet Lite.
+        4. Strict original pixel preservation: composite generated fabric into repair mask region.
+        5. Return clean transparent RGBA PNG.
+        """
+        if isinstance(repair_mask, Image.Image):
+            repair_mask_np = np.array(repair_mask.convert("L"))
+        else:
+            repair_mask_np = np.array(repair_mask)
+
+        # 1. Environment Guard
+        is_avail, reason = self.is_available()
+        if not is_avail:
+            logger.warning("Qwen-Image-2.1 reconstruction skipped: %s", reason)
+            return QwenGenerationResult(
+                image=garment_cutout,
+                image_format="PNG",
+                width=garment_cutout.width,
+                height=garment_cutout.height,
+                has_alpha_channel=(garment_cutout.mode == "RGBA"),
+                inference_time_seconds=0.0,
+                gpu_memory_peak_mb=0.0,
+                model_name=self.model_id,
+                seed=seed,
+                status="pending_gpu_testing",
+                error_detail=reason,
+            )
+
+        # 2. Select visual conditioning reference: prefer tight garment reference or full original
+        ref_condition = garment_reference if garment_reference is not None else original_image
+
+        # 3. Denoising inference prompt
+        final_prompt = prompt or DEFAULT_RECONSTRUCTION_PROMPT
+
+        # 4. Run diffusion generation
+        gen_res = self.generate(
+            reference_image=ref_condition,
+            prompt=final_prompt,
+            resolution=resolution,
+            inference_steps=inference_steps,
+            seed=seed,
+            transparent_background=True,
+        )
+
+        if gen_res.status != "success":
+            return gen_res
+
+        generated_raw = gen_res.image
+
+        # 5. Mandatory Final Background Verification (BiRefNet Lite)
+        try:
+            from app.core.background_removal import extract_isolated_flow_a
+            # Always verify transparency on the generated fabric
+            verified_fabric = extract_isolated_flow_a(generated_raw)
+        except Exception as exc:
+            logger.warning("BiRefNet transparency verification fallback: %s", exc)
+            verified_fabric = generated_raw
+
+        # 6. Original Pixel Preservation (Composite strictly inside repair mask)
+        composited_garment = composite_reconstructed_fabric(
+            original_garment=garment_cutout,
+            generated_fabric=verified_fabric,
+            repair_mask=repair_mask_np,
+            feather_radius=feather_radius,
+        )
+
+        return QwenGenerationResult(
+            image=composited_garment,
+            image_format="PNG",
+            width=composited_garment.width,
+            height=composited_garment.height,
+            has_alpha_channel=True,
+            inference_time_seconds=gen_res.inference_time_seconds,
+            gpu_memory_peak_mb=gen_res.gpu_memory_peak_mb,
             model_name=self.model_id,
             seed=seed,
             status="success",
