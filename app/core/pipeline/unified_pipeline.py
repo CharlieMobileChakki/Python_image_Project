@@ -223,8 +223,11 @@ def execute_flow_a_without_person(
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
     return {
         "success": True,
-        "status": "success",
         "job_id": job_id,
+        "execution_time_ms": total_time_ms,
+        "total_garments": len(processed_items),
+        "garments": processed_items,
+        "status": "success",
         "mode": "without_person",
         "has_human": False,
         "scene_type": scene_type,
@@ -472,8 +475,11 @@ def execute_flow_b_with_person(
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
     return {
         "success": True,
-        "status": "success",
         "job_id": job_id,
+        "execution_time_ms": total_time_ms,
+        "total_garments": len(processed_items),
+        "garments": processed_items,
+        "status": "success",
         "mode": "with_person",
         "has_human": True,
         "scene_type": "person",

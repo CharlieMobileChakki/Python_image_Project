@@ -40,33 +40,20 @@ curl -X POST "http://ai.arangtik.com/api/background-removal" \
   -F "file=@kurta.jpg"
 ```
 
-#### JSON Response (HTTP 200):
+#### JSON Response (HTTP 200 — Clean Production):
 ```json
 {
   "success": true,
   "job_id": "8d3e9114-1234-4567-89ab-cdef01234567",
-  "mode": "without_person",
-  "has_human": false,
-  "total_garments_found": 1,
   "execution_time_ms": 1184.5,
-  "scene_type": "flat_lay",
-  "outfit_mode": "mode_b_single_piece",
+  "total_garments": 1,
   "garments": [
     {
-      "garment_id": "garment_001",
-      "category": "product",
-      "recognized_label": "Garment Cutout",
-      "image": "8d3e9114-1234-4567-89ab-cdef01234567_garment_001.png",
-      "confidence": 0.985,
-      "coverage_percentage": 100.0,
+      "output_png_url": "/api/outputs/8d3e9114-1234-4567-89ab-cdef01234567_garment_001.png",
       "width": 1024,
       "height": 1024,
-      "image_dimensions": [1024, 1024],
-      "rotation_angle_deg": -1.2,
-      "repaired": false,
-      "output_png_url": "/api/outputs/8d3e9114-1234-4567-89ab-cdef01234567_garment_001.png",
-      "background_removal_status": "clean_isolated",
-      "background_removal_confidence": 0.99
+      "category": "product",
+      "recognized_label": "Garment Cutout"
     }
   ]
 }

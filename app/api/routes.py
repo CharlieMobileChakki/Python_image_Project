@@ -54,7 +54,12 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     return image_bytes
 
 
-@router.post("/background-removal", response_model=ProcessGarmentResponse, summary="Primary Background Removal & Garment Processing API")
+@router.post(
+    "/background-removal",
+    response_model=ProcessGarmentResponse,
+    response_model_exclude_none=True,
+    summary="Primary Background Removal & Garment Processing API",
+)
 async def background_removal_endpoint(
     file: UploadFile = File(..., description="Input image of garment or worn model"),
     person_mode: str = Form("without_person", description="Execution mode: 'without_person' (Flow A: direct background removal, default 80% workload) or 'with_person' (Flow B: parsing + inpainting)"),

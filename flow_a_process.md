@@ -141,39 +141,38 @@ removeGarmentBackground('./kurta.png');
 
 ---
 
-## 4. API Ka Response Format
+## 4. API Ka Response Format (Clean & Minimal)
 
-### Standard JSON Output:
+API me se saare unnecessary internal debug fields hata diye gaye hain. Agle bande / downstream developer ko database me save karne ke liye sirf **zaroori fields** milte hain:
+
 ```json
 {
   "success": true,
   "job_id": "7f8b91a2-3456-4abc-9def-0123456789ab",
-  "mode": "without_person",
-  "has_human": false,
-  "total_garments_found": 1,
   "execution_time_ms": 1140.25,
-  "scene_type": "flat_lay",
-  "outfit_mode": "mode_b_single_piece",
+  "total_garments": 1,
   "garments": [
     {
-      "garment_id": "garment_001",
-      "category": "product",
-      "recognized_label": "Garment Cutout",
-      "image": "7f8b91a2-3456-4abc-9def-0123456789ab_garment_001.png",
-      "confidence": 0.99,
-      "coverage_percentage": 100.0,
+      "output_png_url": "/api/outputs/7f8b91a2-3456-4abc-9def-0123456789ab_garment_001.png",
       "width": 1024,
       "height": 1024,
-      "image_dimensions": [1024, 1024],
-      "rotation_angle_deg": 0.0,
-      "repaired": false,
-      "output_png_url": "/api/outputs/7f8b91a2-3456-4abc-9def-0123456789ab_garment_001.png",
-      "background_removal_status": "clean_isolated",
-      "background_removal_confidence": 0.99
+      "category": "product",
+      "recognized_label": "Garment Cutout"
     }
   ]
 }
 ```
+
+### Response Fields Explanation:
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `success` | `boolean` | `true` agar background remove ho gaya |
+| `job_id` | `string` | Unique tracking ID |
+| `execution_time_ms` | `float` | Server processing time in ms (e.g. `1140.25`) |
+| `total_garments` | `integer` | Kitne kapde extract hue (1 for single, 2+ for multi) |
+| `output_png_url` | `string` | Transparent 1024x1024 PNG download URL |
+| `width` / `height` | `integer` | Normalized canvas size (`1024` x `1024`) |
+| `category` | `string` | Basic category (`product`, `upper_clothes`, etc.) |
 
 ---
 
@@ -201,3 +200,4 @@ Agar photo me 2 alag kapde hain (jaise suit set ya kurta + pajama):
   ```http
   GET /api/download-batch-zip/{job_id}
   ```
+
