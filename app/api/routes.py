@@ -9,7 +9,7 @@ import time
 from typing import Any
 import zipfile
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from PIL import Image
 from starlette.concurrency import run_in_threadpool
@@ -61,6 +61,7 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     summary="Primary Background Removal & Garment Processing API",
 )
 async def background_removal_endpoint(
+    request: Request,
     file: UploadFile = File(..., description="Input image of garment or worn model"),
     person_mode: str = Form("without_person", description="Execution mode: 'without_person' (Flow A: direct background removal, default 80% workload) or 'with_person' (Flow B: parsing + inpainting)"),
     has_human: str | bool | None = Form(None, description="Explicit flag: True/False or 'with_person'/'without_person'"),
@@ -68,7 +69,7 @@ async def background_removal_endpoint(
     auto_repair: bool = Form(True, description="Enable LaMa/Qwen fabric inpainting for occlusions in Flow B"),
     auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
-    response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
+    response_format: str = Form("image_direct", description="'image_direct' (default for single garment) or 'json' for multi-garment metadata"),
     mode_hint: str | None = Form(None, description="Legacy mode hint for backwards compatibility: 'worn', 'isolated', 'auto'"),
 ) -> Any:
     """Master Background Removal & Garment Extraction Endpoint.
@@ -78,6 +79,10 @@ async def background_removal_endpoint(
       with zero human-parsing overhead, normalized to clean 1024x1024 transparent canvas.
     - Flow B (with_person): Background removal -> SegFormer B2 clothes parsing ->
       garment extraction -> Qwen/LaMa fabric repair -> 1024x1024 normalization.
+
+    Supports both Ankit's Node.js caller formats:
+    - Option 1 (Recommended): Direct transparent PNG binary stream (image/png).
+    - Option 2: JSON Response with status, message, image (Base64 data URI), and garments array.
     """
     image_bytes = await validate_and_read_image(file)
 
@@ -117,8 +122,14 @@ async def background_removal_endpoint(
     finally:
         await file.close()
 
-    # Optional direct image return mode if exactly one garment was produced
-    if response_format.lower() == "image_direct" and result.get("garments"):
+    # Check if client requested direct PNG image stream (Option 1)
+    accept_hdr = request.headers.get("accept", "").lower()
+    wants_image = (
+        response_format.lower() in ("image_direct", "direct", "image", "stream", "png")
+        or ("image/" in accept_hdr and "application/json" not in accept_hdr)
+    )
+
+    if wants_image and result.get("garments") and len(result["garments"]) == 1:
         top_garment = result["garments"][0]
         png_path = OUTPUT_DIR / Path(top_garment["output_png_url"]).name
         if png_path.exists():
@@ -134,6 +145,20 @@ async def background_removal_endpoint(
                     "X-Canvas-Size": "1024x1024",
                 },
             )
+
+    # For Option 2 (JSON): populate status, message, and top garment Base64 data URI
+    result.setdefault("status", "success")
+    result.setdefault("message", "Background removed successfully")
+    if result.get("garments") and not result.get("image"):
+        top_garment = result["garments"][0]
+        if top_garment.get("output_png_base64"):
+            result["image"] = top_garment["output_png_base64"]
+        else:
+            png_p = OUTPUT_DIR / Path(top_garment["output_png_url"]).name
+            if png_p.exists():
+                import base64
+                b64_str = base64.b64encode(png_p.read_bytes()).decode("utf-8")
+                result["image"] = f"data:image/png;base64,{b64_str}"
 
     return result
 

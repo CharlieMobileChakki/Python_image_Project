@@ -19,6 +19,9 @@ class GarmentItem(BaseModel):
 class ProcessGarmentResponse(BaseModel):
     """Clean production response schema with only essential fields."""
     success: bool = Field(default=True, description="Overall pipeline status boolean")
+    status: str = Field(default="success", description="Status string matching node.js client expectations")
+    message: str = Field(default="Background removed successfully", description="Status message")
+    image: str | None = Field(default=None, description="Direct Base64 data URI for node.js Option 2")
     job_id: str = Field(..., description="Unique job identifier")
     execution_time_ms: float = Field(..., description="Total processing time in milliseconds")
     total_garments: int = Field(default=1, description="Count of extracted clean garments")
