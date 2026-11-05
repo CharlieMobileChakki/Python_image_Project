@@ -70,7 +70,7 @@ def root() -> dict[str, str]:
         "service": "arangtik-garment-flow-b",
         "docs": "/docs",
         "health": "/health",
-        "endpoint": "/api/v1/extract-garment/worn",
+        "endpoint": "/api/extract-garment/worn",
     }
 
 
@@ -93,7 +93,7 @@ def health() -> Response:
     )
 
 
-@app.post("/api/v1/extract-garment/worn")
+@app.post("/api/extract-garment/worn")
 async def extract_garment_worn_endpoint(
     file: UploadFile = File(...),
     class_name: str = Form(...),

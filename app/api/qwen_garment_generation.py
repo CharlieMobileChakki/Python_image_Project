@@ -125,7 +125,7 @@ async def qwen_generate_garment_endpoint(
         has_alpha_channel=result.has_alpha_channel,
         inference_time_seconds=result.inference_time_seconds,
         gpu_memory_peak_mb=result.gpu_memory_peak_mb,
-        output_png_url=f"/api/v1/outputs/{filename}",
+        output_png_url=f"/api/outputs/{filename}",
         output_png_base64=b64_str,
         error_detail=result.error_detail,
     )

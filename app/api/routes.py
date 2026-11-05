@@ -15,10 +15,6 @@ from PIL import Image
 from starlette.concurrency import run_in_threadpool
 
 from app.schemas import HealthResponse, ProcessGarmentResponse
-from app.core.background_removal import extract_isolated_flow_a
-from app.core.image_processing import detect_rotation_angle, normalize_to_1024, straighten_garment
-from app.core.inpainting import repair_garment_cutout
-from app.core.model_manager import are_models_loaded, is_inpainter_loaded
 from app.core.pipeline import OUTPUT_DIR, process_garment_pipeline
 
 router = APIRouter()
@@ -137,112 +133,6 @@ async def process_garment_endpoint(
     return result
 
 
-@router.post(
-    "/flow-a",
-    response_model=ProcessGarmentResponse,
-    summary="Flow A Dedicated: Pure Background Removal (Without Person — 80% Workload)",
-)
-async def flow_a_endpoint(
-    file: UploadFile = File(..., description="Product photo on hanger, flat-lay, or mannequin"),
-    target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
-    auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
-    include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
-    response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
-) -> Any:
-    """Dedicated Flow A endpoint: Direct pure background removal via BiRefNet Lite.
-
-    Bypasses all person parsing overhead to deliver clean 1024x1024 transparent garment cutouts in ~1.2s.
-    """
-    image_bytes = await validate_and_read_image(file)
-    try:
-        async with get_semaphore():
-            result = await run_in_threadpool(
-                process_garment_pipeline,
-                image_bytes=image_bytes,
-                person_mode="without_person",
-                has_human=False,
-                target_garment=target_garment,
-                auto_repair=False,
-                auto_straighten=auto_straighten,
-                include_base64=include_base64,
-            )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Flow A pipeline error: {exc}") from exc
-    finally:
-        await file.close()
-
-    if response_format.lower() == "image_direct" and result.get("garments"):
-        top_garment = result["garments"][0]
-        png_path = OUTPUT_DIR / Path(top_garment["output_png_url"]).name
-        if png_path.exists():
-            return FileResponse(
-                path=png_path,
-                media_type="image/png",
-                filename=png_path.name,
-                headers={
-                    "X-Flow-Mode": "without_person",
-                    "X-Garment-Category": top_garment["category"],
-                    "X-Garment-Label": top_garment["recognized_label"],
-                    "X-Execution-Time-Ms": str(result["execution_time_ms"]),
-                    "X-Canvas-Size": "1024x1024",
-                },
-            )
-
-    return result
-
-
-@router.post(
-    "/remove-background",
-    response_model=ProcessGarmentResponse,
-    summary="Fast Background Removal (Alias for Flow A)",
-)
-async def remove_background_endpoint(
-    file: UploadFile = File(..., description="Product photo on hanger, flat-lay, or mannequin"),
-    target_garment: str = Form("all"),
-    auto_straighten: bool = Form(True),
-    include_base64: bool = Form(False),
-    response_format: str = Form("json"),
-) -> Any:
-    """Public alias for Flow A: Direct pure background removal."""
-    return await flow_a_endpoint(
-        file=file,
-        target_garment=target_garment,
-        auto_straighten=auto_straighten,
-        include_base64=include_base64,
-        response_format=response_format,
-    )
-
-
-@router.post("/extract-isolated")
-async def extract_isolated_endpoint(
-    file: UploadFile = File(..., description="Isolated product photo on hanger/flat-lay/mannequin"),
-    auto_straighten: bool = Form(True),
-) -> Any:
-    """Dedicated Flow A endpoint: Extracts product from background and returns 1024x1024 transparent PNG."""
-    image_bytes = await validate_and_read_image(file)
-    try:
-        raw_img = Image.open(BytesIO(image_bytes)).convert("RGB")
-        async with get_semaphore():
-            cutout_rgba = await run_in_threadpool(extract_isolated_flow_a, raw_img)
-            if auto_straighten:
-                angle = detect_rotation_angle(cutout_rgba)
-                if abs(angle) > 0.5:
-                    cutout_rgba = straighten_garment(cutout_rgba, angle)
-            norm_1024 = normalize_to_1024(cutout_rgba, target_size=1024)
-
-            buf = BytesIO()
-            norm_1024.save(buf, format="PNG", optimize=True)
-            png_bytes = buf.getvalue()
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Flow A extraction failed: {exc}") from exc
-    finally:
-        await file.close()
-
-    return Response(content=png_bytes, media_type="image/png")
-
-
 @router.get("/outputs/{filename}")
 async def get_output_image(filename: str) -> FileResponse:
     """Download or view a processed 1024x1024 transparent garment PNG."""
@@ -302,7 +192,3 @@ async def forward_downstream_endpoint(
             }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Downstream forward failed: {exc}") from exc
-
-
-
-
