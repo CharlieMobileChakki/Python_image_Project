@@ -27,12 +27,19 @@ MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 _semaphore: asyncio.Semaphore | None = None
+_semaphore_loop: asyncio.AbstractEventLoop | None = None
 
 
 def get_semaphore() -> asyncio.Semaphore:
-    global _semaphore
-    if _semaphore is None:
-        _semaphore = asyncio.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "1"))))
+    global _semaphore, _semaphore_loop
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if _semaphore is None or _semaphore_loop != current_loop:
+        _semaphore = asyncio.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "4"))))
+        _semaphore_loop = current_loop
     return _semaphore
 
 
@@ -54,10 +61,10 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
 @router.post("/process-garment", response_model=ProcessGarmentResponse)
 async def process_garment_endpoint(
     file: UploadFile = File(..., description="Input image of garment or worn model"),
-    person_mode: str = Form("with_person", description="Execution mode: 'with_person' (Flow B: parsing + inpainting) or 'without_person' (Flow A: direct background removal)"),
+    person_mode: str = Form("without_person", description="Execution mode: 'without_person' (Flow A: direct background removal, default 80% workload) or 'with_person' (Flow B: parsing + inpainting)"),
     has_human: str | bool | None = Form(None, description="Explicit flag: True/False or 'with_person'/'without_person'"),
     target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
-    auto_repair: bool = Form(True, description="Enable LaMa fabric inpainting for occlusions in Flow B"),
+    auto_repair: bool = Form(True, description="Enable LaMa/Qwen fabric inpainting for occlusions in Flow B"),
     auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
     response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
@@ -66,10 +73,10 @@ async def process_garment_endpoint(
     """Master Unified Pipeline Endpoint (Option 2 Machine-to-Machine API).
 
     Processes image through explicit dual-flow architecture:
-    - Flow A (without_person): Pure background removal via BiRefNet Lite with zero
-      human-parsing overhead, normalized to clean 1024x1024 transparent canvas.
+    - Flow A (without_person, default 80% workload): Pure background removal via BiRefNet Lite
+      with zero human-parsing overhead, normalized to clean 1024x1024 transparent canvas.
     - Flow B (with_person): Background removal -> SegFormer B2 clothes parsing ->
-      garment extraction -> LaMa inpainting fabric repair -> 1024x1024 normalization.
+      garment extraction -> Qwen/LaMa fabric repair -> 1024x1024 normalization.
     """
     image_bytes = await validate_and_read_image(file)
 
@@ -119,13 +126,93 @@ async def process_garment_endpoint(
                 media_type="image/png",
                 filename=png_path.name,
                 headers={
+                    "X-Flow-Mode": result.get("mode", "without_person"),
                     "X-Garment-Category": top_garment["category"],
                     "X-Garment-Label": top_garment["recognized_label"],
                     "X-Execution-Time-Ms": str(result["execution_time_ms"]),
+                    "X-Canvas-Size": "1024x1024",
                 },
             )
 
     return result
+
+
+@router.post(
+    "/flow-a",
+    response_model=ProcessGarmentResponse,
+    summary="Flow A Dedicated: Pure Background Removal (Without Person — 80% Workload)",
+)
+async def flow_a_endpoint(
+    file: UploadFile = File(..., description="Product photo on hanger, flat-lay, or mannequin"),
+    target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
+    auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
+    include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
+    response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
+) -> Any:
+    """Dedicated Flow A endpoint: Direct pure background removal via BiRefNet Lite.
+
+    Bypasses all person parsing overhead to deliver clean 1024x1024 transparent garment cutouts in ~1.2s.
+    """
+    image_bytes = await validate_and_read_image(file)
+    try:
+        async with get_semaphore():
+            result = await run_in_threadpool(
+                process_garment_pipeline,
+                image_bytes=image_bytes,
+                person_mode="without_person",
+                has_human=False,
+                target_garment=target_garment,
+                auto_repair=False,
+                auto_straighten=auto_straighten,
+                include_base64=include_base64,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Flow A pipeline error: {exc}") from exc
+    finally:
+        await file.close()
+
+    if response_format.lower() == "image_direct" and result.get("garments"):
+        top_garment = result["garments"][0]
+        png_path = OUTPUT_DIR / Path(top_garment["output_png_url"]).name
+        if png_path.exists():
+            return FileResponse(
+                path=png_path,
+                media_type="image/png",
+                filename=png_path.name,
+                headers={
+                    "X-Flow-Mode": "without_person",
+                    "X-Garment-Category": top_garment["category"],
+                    "X-Garment-Label": top_garment["recognized_label"],
+                    "X-Execution-Time-Ms": str(result["execution_time_ms"]),
+                    "X-Canvas-Size": "1024x1024",
+                },
+            )
+
+    return result
+
+
+@router.post(
+    "/remove-background",
+    response_model=ProcessGarmentResponse,
+    summary="Fast Background Removal (Alias for Flow A)",
+)
+async def remove_background_endpoint(
+    file: UploadFile = File(..., description="Product photo on hanger, flat-lay, or mannequin"),
+    target_garment: str = Form("all"),
+    auto_straighten: bool = Form(True),
+    include_base64: bool = Form(False),
+    response_format: str = Form("json"),
+) -> Any:
+    """Public alias for Flow A: Direct pure background removal."""
+    return await flow_a_endpoint(
+        file=file,
+        target_garment=target_garment,
+        auto_straighten=auto_straighten,
+        include_base64=include_base64,
+        response_format=response_format,
+    )
 
 
 @router.post("/extract-isolated")
