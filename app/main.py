@@ -2,8 +2,10 @@
 
 Provides:
 - Option 1: Browser-based interactive UI (served at / and /ui).
-- Option 2: Machine-to-Machine API for external platforms (/api/process-garment).
-- Direct file download for normalized 1024x1024 transparent PNGs (/api/outputs/{filename}).
+- Option 2: Machine-to-Machine API:
+  - POST /api/background-removal (BiRefNet Lite + SegFormer B2 Clothes)
+  - POST /api/qwen-image (Qwen-Image-2.1 Fabric Reconstruction)
+  - GET /api/outputs/{filename} (Direct 1024x1024 transparent PNG retrieval)
 """
 from __future__ import annotations
 
@@ -24,7 +26,6 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.api.qwen_garment_generation import qwen_router
 from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
 from app.core.model_manager import (
@@ -86,10 +87,9 @@ app.add_middleware(
     ],
 )
 
-# Include core API router under /api (No /v1 prefix, single API per function)
+# Include core API routers under /api (No /v1 prefix, single API per function)
 app.include_router(api_router, prefix="/api")
 app.include_router(reconstruction_router, prefix="/api")
-app.include_router(qwen_router, prefix="/api")
 
 # Mount outputs directory to serve generated 1024x1024 PNGs
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")

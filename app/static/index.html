@@ -279,7 +279,7 @@
     <!-- Footer info -->
     <div class="footer-api-info">
       <div>
-        <strong>API:</strong> POST <code>/api/process-garment</code>
+        <strong>API:</strong> POST <code>/api/background-removal</code> | POST <code>/api/qwen-image</code>
       </div>
       <div id="statusTelemetry">System Ready</div>
     </div>
@@ -869,7 +869,7 @@
         formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
         formData.append('response_format', 'json');
 
-        const res = await fetch('/api/process-garment', {
+        const res = await fetch('/api/background-removal', {
           method: 'POST',
           body: formData,
         });
@@ -922,7 +922,7 @@
         formData.append('has_human', 'true');
         formData.append('mode_hint', 'with_person');
 
-        const res = await fetch('/api/process-garment', {
+        const res = await fetch('/api/background-removal', {
           method: 'POST',
           body: formData,
         });
@@ -975,7 +975,7 @@
           formData.append('has_human', 'true');
           formData.append('mode_hint', 'with_person');
 
-          const res = await fetch('/api/process-garment', {
+          const res = await fetch('/api/background-removal', {
             method: 'POST',
             body: formData,
           });
@@ -993,7 +993,7 @@
           const formData = new FormData();
           formData.append('original_image', item.file);
 
-          const res = await fetch('/api/reconstruct-garment', {
+          const res = await fetch('/api/qwen-image', {
             method: 'POST',
             body: formData,
           });
@@ -1023,7 +1023,7 @@
           const formData = new FormData();
           formData.append('original_image', item.file);
 
-          const res = await fetch('/api/reconstruct-garment', {
+          const res = await fetch('/api/qwen-image', {
             method: 'POST',
             body: formData,
           });
@@ -1173,7 +1173,7 @@
       formData.append('has_human', isWithoutPerson ? 'false' : 'true');
       formData.append('mode_hint', isWithoutPerson ? 'without_person' : 'with_person');
 
-      const endpoint = '/api/process-garment';
+      const endpoint = '/api/background-removal';
 
       const res = await fetch(endpoint, {
         method: 'POST',

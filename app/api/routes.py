@@ -54,8 +54,8 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     return image_bytes
 
 
-@router.post("/process-garment", response_model=ProcessGarmentResponse)
-async def process_garment_endpoint(
+@router.post("/background-removal", response_model=ProcessGarmentResponse, summary="Primary Background Removal & Garment Processing API")
+async def background_removal_endpoint(
     file: UploadFile = File(..., description="Input image of garment or worn model"),
     person_mode: str = Form("without_person", description="Execution mode: 'without_person' (Flow A: direct background removal, default 80% workload) or 'with_person' (Flow B: parsing + inpainting)"),
     has_human: str | bool | None = Form(None, description="Explicit flag: True/False or 'with_person'/'without_person'"),
@@ -66,7 +66,7 @@ async def process_garment_endpoint(
     response_format: str = Form("json", description="'json' for multi-garment metadata or 'image_direct' for single direct PNG"),
     mode_hint: str | None = Form(None, description="Legacy mode hint for backwards compatibility: 'worn', 'isolated', 'auto'"),
 ) -> Any:
-    """Master Unified Pipeline Endpoint (Option 2 Machine-to-Machine API).
+    """Master Background Removal & Garment Extraction Endpoint.
 
     Processes image through explicit dual-flow architecture:
     - Flow A (without_person, default 80% workload): Pure background removal via BiRefNet Lite

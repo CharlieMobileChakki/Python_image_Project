@@ -46,12 +46,12 @@ async def _read_upload(upload: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) ->
 
 
 @reconstruction_router.post(
-    "/reconstruct-garment",
-    summary="Reconstruct missing garment fabric using Qwen-Image-2.1 (Primary Engine)",
+    "/qwen-image",
+    summary="Fabric Reconstruction & Generative Synthesis using Qwen-Image-2.1",
     response_class=Response,
     responses={200: {"content": {"image/png": {}}}},
 )
-async def reconstruct_garment_endpoint(
+async def qwen_image_endpoint(
     original_image: UploadFile = File(..., description="Original person photo used as garment visual reference."),
     damaged_garment: Optional[UploadFile] = File(None, description="Person-removed garment PNG. Auto-generated if omitted."),
     repair_mask: Optional[UploadFile] = File(None, description="Black/white occlusion mask. Auto-generated if omitted."),

@@ -1,19 +1,19 @@
-# Arangtik Garment AI — Production Headless API
+# Arangtik Garment AI — Production Headless API Specification
 
-This document provides complete specification for the Arangtik Garment AI Machine-to-Machine (M2M) API backend.
+Complete machine-to-machine API reference for Arangtik Garment AI.
 
-**Base Server URL:** `http://ai.arangtik.com` (or `http://127.0.0.1:8000`)  
-**Prefix:** `/api` (No `/v1` prefix)  
-**Standard Output Canvas:** $1024 \times 1024$ pixels, transparent PNG (RGBA)
+- **Base URL:** `http://ai.arangtik.com` (or `http://127.0.0.1:8000`)
+- **Prefix:** `/api` (No `/v1` prefix)
+- **Standard Output Canvas:** $1024 \times 1024$ pixels, transparent PNG (RGBA)
 
 ---
 
-## 1. Primary Garment Processing Endpoint (Single Unified API)
+## 1. Primary Background Removal & Garment Extraction API
 
-All garment extraction, background removal, auto-straightening, and model-garment separation are consolidated into **one single endpoint**:
+This single API handles background removal, multi-garment splitting, auto-deskewing, and model human removal:
 
 ```http
-POST /api/process-garment
+POST /api/background-removal
 Content-Type: multipart/form-data
 ```
 
@@ -22,22 +22,21 @@ Content-Type: multipart/form-data
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `file` | `File` (**Required**) | — | Input image (`.jpg`, `.png`, `.webp`, up to 15 MB) |
-| `person_mode` | `string` | `"without_person"` | **`"without_person"`** (Flow A: 80% workload, flat-lay/hanger background removal, ~1.2s)<br>**`"with_person"`** (Flow B: model parsing, human removal, fabric inpainting) |
-| `response_format` | `string` | `"json"` | **`"json"`**: Returns full JSON metadata & download URLs<br>**`"image_direct"`**: Streams transparent $1024 \times 1024$ PNG directly |
+| `person_mode` | `string` | `"without_person"` | **`"without_person"`** (Flow A: 80% Workload, pure background removal, ~1.2s)<br>**`"with_person"`** (Flow B: model parsing, human removal, fabric inpainting) |
+| `response_format` | `string` | `"json"` | **`"json"`**: Returns JSON metadata & download URLs<br>**`"image_direct"`**: Streams transparent $1024 \times 1024$ PNG directly |
 | `target_garment` | `string` | `"all"` | Filter: `"all"`, `"upper_clothes"`, `"pants"`, `"dress"`, `"skirt"` |
-| `auto_straighten` | `boolean` | `true` | Automatically detects tilt and deskews garments |
-| `auto_repair` | `boolean` | `true` | Enables fabric repair for occlusions when in `with_person` mode |
-| `include_base64` | `boolean` | `false` | Include Base64 data URI directly in JSON response |
+| `auto_straighten` | `boolean` | `true` | Automatically detects tilt and straightens garment |
+| `auto_repair` | `boolean` | `true` | Enables fabric repair for occlusions in `with_person` mode |
+| `include_base64` | `boolean` | `false` | Include Base64 data URI directly in JSON |
 
 ---
 
-### Use Case A: Pure Background Removal (Flat-Lay / Hanger / Mannequin — 80% Workload)
+### Example A: Fast Background Removal (Flat-Lay / Hanger — 80% Workload)
 
-Simply post the image. No extra parameters required!
+Just send the file! Default settings automatically trigger ultra-fast Flow A (~1.2s):
 
-#### cURL Request:
 ```bash
-curl -X POST "http://ai.arangtik.com/api/process-garment" \
+curl -X POST "http://ai.arangtik.com/api/background-removal" \
   -F "file=@kurta.jpg"
 ```
 
@@ -75,12 +74,12 @@ curl -X POST "http://ai.arangtik.com/api/process-garment" \
 
 ---
 
-### Use Case B: Direct Image Stream (Instant PNG Download)
+### Example B: Direct Image Stream (Instant PNG Download)
 
 Returns binary image stream directly (`Content-Type: image/png`):
 
 ```bash
-curl -X POST "http://ai.arangtik.com/api/process-garment" \
+curl -X POST "http://ai.arangtik.com/api/background-removal" \
   -F "file=@kurta.jpg" \
   -F "response_format=image_direct" \
   --output clean_kurta_1024.png
@@ -88,24 +87,24 @@ curl -X POST "http://ai.arangtik.com/api/process-garment" \
 
 ---
 
-### Use Case C: Model Photo (Person Parsing & Human Removal — Flow B)
+### Example C: Model-Worn Garment (Person Removal — Flow B)
 
-Set `person_mode="with_person"`:
+When a human model is wearing the outfit:
 
 ```bash
-curl -X POST "http://ai.arangtik.com/api/process-garment" \
-  -F "file=@model_wearing_suit.jpg" \
+curl -X POST "http://ai.arangtik.com/api/background-removal" \
+  -F "file=@model_wearing_saree.jpg" \
   -F "person_mode=with_person"
 ```
 
 ---
 
-## 2. Fabric Reconstruction Endpoint (Qwen-Image-2.1)
+## 2. Qwen-Image Fabric Reconstruction API
 
-For deep generative reconstruction of missing fabric, folds, and arm-occluded regions:
+Deep generative synthesis and inpainting for occluded fabric and missing areas using Qwen-Image-2.1:
 
 ```http
-POST /api/reconstruct-garment
+POST /api/qwen-image
 Content-Type: multipart/form-data
 ```
 
@@ -113,11 +112,18 @@ Content-Type: multipart/form-data
 
 | Parameter | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `original_image` | `File` | Yes | High-resolution photo of person wearing the garment |
-| `damaged_garment`| `File` | No | Garment cutout with arms removed (auto-computed if omitted) |
+| `original_image` | `File` | **Yes** | High-resolution photo of person wearing the garment |
+| `damaged_garment`| `File` | No | Garment cutout with arms/hands removed (auto-computed if omitted) |
 | `repair_mask` | `File` | No | Occlusion mask (auto-computed if omitted) |
 | `prompt` | `string` | No | Optional fabric/garment preservation instructions |
 | `steps` | `integer` | No | Denoising steps (default: 28) |
+
+#### cURL Request:
+```bash
+curl -X POST "http://ai.arangtik.com/api/qwen-image" \
+  -F "original_image=@model_with_crossed_arms.jpg" \
+  --output qwen_reconstructed_garment.png
+```
 
 ---
 
