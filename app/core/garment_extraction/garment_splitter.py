@@ -68,11 +68,11 @@ def detect_multi_garment_layout(
         connected_bg = (bg_seed_mask == 128)
         cleaned_alpha[connected_bg] = 0
 
-    # 2. Binary threshold
-    bin_mask = (cleaned_alpha > 35).astype(np.uint8)
+    # 2. Binary threshold (removes faint inter-garment halo)
+    bin_mask = (cleaned_alpha > 45).astype(np.uint8)
 
-    # Gentle opening (kernel 3x3) to sever narrow noise bridges between distinct garments
-    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    # Rectangular opening (kernel 3x3) cleanly severs 1-pixel diagonal bridges between adjacent garments
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     bin_mask = cv2.morphologyEx(bin_mask, cv2.MORPH_OPEN, kernel_open)
 
     # Connected components analysis
