@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class GarmentItem(BaseModel):
     """Clean production metadata for a single extracted and normalized 2D garment."""
+    garment_id: str | None = Field(default=None, description="Garment identifier (e.g. garment_001)")
     output_png_url: str = Field(..., description="Download/preview URL for the transparent 1024x1024 PNG")
     width: int = Field(default=1024, description="Canvas width in pixels")
     height: int = Field(default=1024, description="Canvas height in pixels")

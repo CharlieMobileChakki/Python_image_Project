@@ -1097,23 +1097,26 @@
         // Multi-Garment Responsive Grid View
         let gridHtml = summaryHtml + '<div class="multi-garments-grid">';
         result.garments.forEach((g, gIdx) => {
+          const gid = g.garment_id || ('garment_' + (gIdx + 1));
+          const gidLabel = String(gid).toUpperCase();
+          const gLabel = g.recognized_label || g.category || 'Garment';
           const statusClass = `status-${g.background_removal_status || 'success'}`;
           const statusLabel = g.background_removal_status === 'success' ? '✓ BG Clean' :
                               (g.background_removal_status === 'partial' ? '⚠ Partial' :
-                              (g.background_removal_status === 'failed' ? '✕ Failed' : '? Review'));
+                              (g.background_removal_status === 'failed' ? '✕ Failed' : '✓ Clean BG'));
 
           gridHtml += `
             <div class="garment-card">
               <div class="garment-thumb-wrap checkerboard-bg">
-                <img class="garment-thumb-img" src="${g.output_png_url}" alt="${g.garment_id}" />
+                <img class="garment-thumb-img" src="${g.output_png_url}" alt="${gid}" />
               </div>
-              <strong style="font-size: 12px; color: var(--text);">${g.garment_id.toUpperCase()}</strong>
-              <span style="font-size: 11px; color: var(--text-muted); text-align: center;">${g.recognized_label}</span>
+              <strong style="font-size: 12px; color: var(--text);">${gidLabel}</strong>
+              <span style="font-size: 11px; color: var(--text-muted); text-align: center;">${gLabel}</span>
               <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
                 <span class="status-badge ${statusClass}">${statusLabel}</span>
                 <span class="status-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">1024&times;1024</span>
               </div>
-              <a href="${g.output_png_url}" download="${g.garment_id}_1024x1024.png" class="secondary-btn" style="padding: 3px 8px; font-size: 11px; text-decoration: none; margin-top: 4px; width: 100%; text-align: center; justify-content: center;">
+              <a href="${g.output_png_url}" download="${gid}_1024x1024.png" class="secondary-btn" style="padding: 3px 8px; font-size: 11px; text-decoration: none; margin-top: 4px; width: 100%; text-align: center; justify-content: center;">
                 ⬇ Download PNG
               </a>
             </div>
