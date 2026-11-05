@@ -30,23 +30,59 @@ def detect_multi_garment_layout(
 
     # Use salient foreground alpha from BiRefNet Lite
     if fg_alpha is None:
-        bin_mask = np.ones((H, W), dtype=np.uint8)
+        alpha = np.ones((H, W), dtype=np.uint8) * 255
     else:
-        # Solid foreground threshold
-        bin_mask = (fg_alpha > 45).astype(np.uint8)
+        alpha = fg_alpha.copy()
 
-    # Bridge delicate embroidery, lace, folds, or internal pattern gaps
-    kernel_size = max(5, int(min(W, H) * 0.02))
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-    closed = cv2.morphologyEx(bin_mask, cv2.MORPH_CLOSE, kernel)
+    # 1. Background color suppression for studio / catalog photos:
+    # Sample corner pixels to detect uniform studio background (white, off-white, light gray)
+    corners = np.array([
+        arr[0, 0], arr[0, -1],
+        arr[-1, 0], arr[-1, -1],
+    ], dtype=np.float32)
+    bg_color = np.median(corners, axis=0)
+    bg_std = float(np.std(corners, axis=0).mean())
 
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(closed, connectivity=8)
+    cleaned_alpha = alpha.copy()
 
-    # A legitimate independent catalog garment occupies significant canvas area
-    # Minimum 4% of total canvas or 1000 pixels, with realistic physical span
-    min_area = max(1000, int(0.04 * total_px))
-    min_w = int(0.08 * W)
-    min_h = int(0.08 * H)
+    # Only apply edge floodfill if the canvas corners represent a consistent studio background
+    if bg_std < 30.0:
+        color_diff = np.linalg.norm(arr.astype(np.float32) - bg_color, axis=2)
+        # Cap max tolerance strictly to 32.0 so garment fabric is never matched
+        is_bg_color = (color_diff < min(32.0, max(18.0, bg_std * 2.0)))
+
+        flood_map = np.zeros((H + 2, W + 2), dtype=np.uint8)
+        bg_seed_mask = is_bg_color.astype(np.uint8) * 255
+
+        # Seed floodfill from outer canvas perimeter
+        for y in [0, H - 1]:
+            for x in range(0, W, max(1, W // 10)):
+                if is_bg_color[y, x] and bg_seed_mask[y, x] == 255:
+                    cv2.floodFill(bg_seed_mask, flood_map, (x, y), 128, flags=4 | (255 << 8))
+
+        for x in [0, W - 1]:
+            for y in range(0, H, max(1, H // 10)):
+                if is_bg_color[y, x] and bg_seed_mask[y, x] == 255:
+                    cv2.floodFill(bg_seed_mask, flood_map, (x, y), 128, flags=4 | (255 << 8))
+
+        connected_bg = (bg_seed_mask == 128)
+        cleaned_alpha[connected_bg] = 0
+
+    # 2. Binary threshold
+    bin_mask = (cleaned_alpha > 35).astype(np.uint8)
+
+    # Gentle opening (kernel 3x3) to sever narrow noise bridges between distinct garments
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    bin_mask = cv2.morphologyEx(bin_mask, cv2.MORPH_OPEN, kernel_open)
+
+    # Connected components analysis
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(bin_mask, connectivity=8)
+
+    # Adaptive minimum area: 0.4% of total canvas or 200 pixels
+    # Allows individual items in 8-12 item collection grids while discarding noise specks
+    min_area = max(200, int(0.004 * total_px))
+    min_w = max(12, int(0.02 * W))
+    min_h = max(12, int(0.02 * H))
 
     significant_comps: list[dict[str, Any]] = []
     for i in range(1, num_labels):
@@ -101,12 +137,12 @@ def detect_multi_garment_layout(
 
     # Multi-garment condition:
     # Requires at least 2 distinct significant garments where the largest item
-    # does NOT dominate >= 85% of total foreground area.
+    # does NOT dominate >= 88% of total foreground area, or >= 3 garments.
     is_multi = False
     if len(significant_comps) >= 2 and total_fg_area > 0:
         largest_area = max(c["area"] for c in significant_comps)
         largest_share = largest_area / total_fg_area
-        if largest_share < 0.85:
+        if len(significant_comps) >= 3 or largest_share < 0.88:
             is_multi = True
             row_height = max(30, int(H / 5))
             significant_comps.sort(key=lambda c: (c["y"] // row_height, c["x"]))
