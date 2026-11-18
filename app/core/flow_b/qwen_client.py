@@ -74,7 +74,7 @@ def check_gpu_worker_health() -> dict[str, Any]:
 def generate_garment_via_gpu(
     reference_image: Image.Image,
     prompt: str,
-    steps: int = 8,
+    steps: int = 10,
     guidance_scale: float = 1.0,
     seed: int | None = None,
 ) -> tuple[Image.Image, dict[str, Any]]:

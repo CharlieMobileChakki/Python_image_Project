@@ -36,12 +36,12 @@ logger = logging.getLogger("qwen-gpu-worker")
 MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-Edit").strip()
 USE_LIGHTNING_LORA = os.getenv("QWEN_USE_LIGHTNING", "true").strip().lower() in ("1", "true", "yes")
 LIGHTNING_LORA_REPO = os.getenv("QWEN_LORA_REPO", "lightx2v/Qwen-Image-Lightning").strip()
-LIGHTNING_LORA_WEIGHT = os.getenv("QWEN_LORA_WEIGHT", "Qwen-Image-Edit-Lightning-8steps-V1.0.safetensors").strip()
+LIGHTNING_LORA_WEIGHT = os.getenv("QWEN_LORA_WEIGHT", "Qwen-Image-Edit-Lightning-8steps-V1.0-bf16.safetensors").strip()
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
 QUANTIZE_4BIT = os.getenv("QWEN_QUANTIZE_4BIT", "true").strip().lower() in ("1", "true", "yes")
 PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
 MAX_EDGE = int(os.getenv("QWEN_MAX_EDGE", "1024"))
-DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "8" if USE_LIGHTNING_LORA else "40"))
+DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "10" if USE_LIGHTNING_LORA else "40"))
 DEFAULT_CFG = float(os.getenv("QWEN_DEFAULT_CFG", "1.0" if USE_LIGHTNING_LORA else "4.0"))
 # Official Qwen-Image-Edit requires a single space negative_prompt for razor-sharp texture fidelity
 DEFAULT_NEGATIVE_PROMPT = " "
@@ -120,6 +120,8 @@ def load_qwen_pipeline():
             try:
                 from diffusers.quantizers import PipelineQuantizationConfig
 
+                # Keep Qwen2.5-VL text_encoder in full bfloat16 for lossless color & smooth fabric fidelity;
+                # quantize only the 20B transformer to 4-bit NF4 to stay cleanly inside 24GB VRAM.
                 load_kwargs["quantization_config"] = PipelineQuantizationConfig(
                     quant_backend="bitsandbytes_4bit",
                     quant_kwargs={
@@ -127,9 +129,9 @@ def load_qwen_pipeline():
                         "bnb_4bit_quant_type": "nf4",
                         "bnb_4bit_compute_dtype": dtype,
                     },
-                    components_to_quantize=["transformer", "text_encoder"],
+                    components_to_quantize=["transformer"],
                 )
-                logger.info("Enabled PipelineQuantizationConfig (4-bit NF4) for 24GB VRAM optimization.")
+                logger.info("Enabled 4-bit NF4 on transformer only (full bfloat16 Qwen2.5-VL vision encoder).")
             except Exception as exc:
                 logger.warning("PipelineQuantizationConfig unavailable (%s); falling back to CPU offload.", exc)
 
