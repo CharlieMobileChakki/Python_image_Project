@@ -86,16 +86,20 @@ def load_qwen_pipeline():
         # 4-bit NF4 quantization keeps 20B Qwen-Image-Edit safely within RTX 3090 24GB VRAM
         if QUANTIZE_4BIT:
             try:
-                from diffusers import BitsAndBytesConfig
+                from diffusers.quantizers import PipelineQuantizationConfig
 
-                load_kwargs["quantization_config"] = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=dtype,
+                load_kwargs["quantization_config"] = PipelineQuantizationConfig(
+                    quant_backend="bitsandbytes_4bit",
+                    quant_kwargs={
+                        "load_in_4bit": True,
+                        "bnb_4bit_quant_type": "nf4",
+                        "bnb_4bit_compute_dtype": dtype,
+                    },
+                    components_to_quantize=["transformer", "text_encoder"],
                 )
-                logger.info("Enabled 4-bit NF4 quantization for 24GB VRAM optimization.")
+                logger.info("Enabled PipelineQuantizationConfig (4-bit NF4) for 24GB VRAM optimization.")
             except Exception as exc:
-                logger.warning("4-bit BitsAndBytesConfig unavailable (%s); falling back to CPU offload.", exc)
+                logger.warning("PipelineQuantizationConfig unavailable (%s); falling back to CPU offload.", exc)
 
         pipe = QwenImageEditPipeline.from_pretrained(MODEL_ID, **load_kwargs)
 

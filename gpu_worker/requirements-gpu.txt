@@ -3,18 +3,17 @@
 # NOTE: Uses the GPU server's pre-installed CUDA PyTorch (do NOT install CPU torch!)
 # =============================================================================
 
-fastapi>=0.110.0,<1.0.0
-uvicorn[standard]>=0.28.0,<1.0.0
+fastapi==0.115.6
+uvicorn==0.32.1
 python-multipart>=0.0.9
 python-dotenv>=1.0.0
 Pillow>=10.0.0
 
 # Qwen-Image-Edit (diffusers + 4-bit NF4 VRAM optimization for RTX 3090)
-git+https://github.com/huggingface/diffusers.git
-transformers>=4.51.3
+diffusers>=0.35.0,<0.38.0
+transformers>=4.51.3,<5.0.0
 accelerate>=1.0.0
 safetensors>=0.4.5
 bitsandbytes>=0.45.0
 sentencepiece>=0.2.0
-protobuf>=4.25.0
-
+protobuf<6
