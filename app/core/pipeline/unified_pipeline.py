@@ -300,13 +300,10 @@ def execute_flow_b_with_person(
         # Step 3: Strip studio white background cleanly via BiRefNet Lite
         cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
 
-        # Step 4: Auto-deskew & 1024x1024 transparent canvas normalization
+        # Step 4: 1024x1024 transparent canvas normalization
+        # Note: Qwen-Image-2.1-Turbo already generates upright studio garments; skip PCA deskewing
+        # so asymmetric dupattas/drapes/flared hems are never erroneously tilted.
         angle_deg = 0.0
-        if auto_straighten:
-            angle_deg = detect_rotation_angle(cutout_rgba)
-            if abs(angle_deg) > 0.5:
-                cutout_rgba = straighten_garment(cutout_rgba, angle_deg)
-
         normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
         val_res = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
         final_cutout = val_res.get("refined_cutout", normalized_1024)
