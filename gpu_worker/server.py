@@ -1,14 +1,10 @@
-"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Qwen-Image-Edit + Lightning 8-Step LoRA).
+"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Full bfloat16 Qwen-Image-Edit + Fused Lightning 8-Step LoRA).
 
-Run on AIC Cloud RTX 3090 GPU Server (24GB VRAM):
+Uses lossless full bfloat16 + diffusers group_offload (zero 4-bit bitsandbytes grain/mottling!)
+so RTX 3090 (24GB VRAM) produces razor-sharp, bright, smooth studio-grade garment cutouts in 8 steps.
+
+Run on AIC Cloud RTX 3090 GPU Server:
     uvicorn server:app --host 0.0.0.0 --port 8001
-
-Endpoints:
-    GET  /health               -> GPU VRAM & Qwen model status
-    POST /jobs                 -> Async submit (immune to Cloudflare 100s 524 timeout!)
-    GET  /jobs/{job_id}        -> Poll job status
-    GET  /jobs/{job_id}/result -> Fetch generated PNG bytes
-    POST /generate             -> Direct synchronous generation
 """
 from __future__ import annotations
 
@@ -38,15 +34,14 @@ USE_LIGHTNING_LORA = os.getenv("QWEN_USE_LIGHTNING", "true").strip().lower() in 
 LIGHTNING_LORA_REPO = os.getenv("QWEN_LORA_REPO", "lightx2v/Qwen-Image-Lightning").strip()
 LIGHTNING_LORA_WEIGHT = os.getenv("QWEN_LORA_WEIGHT", "Qwen-Image-Edit-Lightning-8steps-V1.0-bf16.safetensors").strip()
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
-QUANTIZE_4BIT = os.getenv("QWEN_QUANTIZE_4BIT", "true").strip().lower() in ("1", "true", "yes")
 PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
 MAX_EDGE = int(os.getenv("QWEN_MAX_EDGE", "1024"))
-DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "10" if USE_LIGHTNING_LORA else "40"))
+# Exact 8 steps matches the distilled Lightning 8-step LoRA sigma schedule
+DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "8" if USE_LIGHTNING_LORA else "36"))
 DEFAULT_CFG = float(os.getenv("QWEN_DEFAULT_CFG", "1.0" if USE_LIGHTNING_LORA else "4.0"))
-# Official Qwen-Image-Edit requires a single space negative_prompt for razor-sharp texture fidelity
 DEFAULT_NEGATIVE_PROMPT = " "
 
-app = FastAPI(title="Arangtik Qwen GPU Worker (Lightning 8-Step)", version="2.2.0")
+app = FastAPI(title="Arangtik Qwen GPU Worker (Full BF16 + Lightning 8-Step)", version="2.3.0")
 
 _pipeline = None
 _lora_active = False
@@ -75,7 +70,7 @@ def _get_gpu_info() -> dict:
 
 
 def load_qwen_pipeline():
-    """Load Qwen-Image-Edit + Lightning 8-Step LoRA optimized for RTX 3090 (24GB VRAM)."""
+    """Load Qwen-Image-Edit in FULL LOSSLESS bfloat16 with group offloading + fused Lightning 8-Step LoRA."""
     global _pipeline, _lora_active
     if _pipeline is not None:
         return _pipeline
@@ -90,12 +85,12 @@ def load_qwen_pipeline():
         from diffusers import FlowMatchEulerDiscreteScheduler, QwenImageEditPipeline
 
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        logger.info("Loading %s (dtype=%s, 4bit=%s, lightning=%s)...", MODEL_ID, dtype, QUANTIZE_4BIT, USE_LIGHTNING_LORA)
+        logger.info("Loading %s in FULL LOSSLESS %s (lightning=%s, zero 4-bit quantization)...", MODEL_ID, dtype, USE_LIGHTNING_LORA)
         t0 = time.perf_counter()
 
         load_kwargs: dict[str, Any] = {"torch_dtype": dtype}
 
-        # Distilled FlowMatch scheduler required for Lightning 8-step LoRA sharpness
+        # Distilled FlowMatch scheduler required for exact 8-step Lightning LoRA sharpness
         if USE_LIGHTNING_LORA:
             scheduler_config = {
                 "base_image_seq_len": 256,
@@ -115,44 +110,44 @@ def load_qwen_pipeline():
             }
             load_kwargs["scheduler"] = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
 
-        # 4-bit NF4 quantization keeps 20B Qwen-Image-Edit safely within RTX 3090 24GB VRAM
-        if QUANTIZE_4BIT:
-            try:
-                from diffusers.quantizers import PipelineQuantizationConfig
-
-                # Keep Qwen2.5-VL text_encoder in full bfloat16 for lossless color & smooth fabric fidelity;
-                # quantize only the 20B transformer to 4-bit NF4 to stay cleanly inside 24GB VRAM.
-                load_kwargs["quantization_config"] = PipelineQuantizationConfig(
-                    quant_backend="bitsandbytes_4bit",
-                    quant_kwargs={
-                        "load_in_4bit": True,
-                        "bnb_4bit_quant_type": "nf4",
-                        "bnb_4bit_compute_dtype": dtype,
-                    },
-                    components_to_quantize=["transformer"],
-                )
-                logger.info("Enabled 4-bit NF4 on transformer only (full bfloat16 Qwen2.5-VL vision encoder).")
-            except Exception as exc:
-                logger.warning("PipelineQuantizationConfig unavailable (%s); falling back to CPU offload.", exc)
-
+        # Load full lossless bfloat16 weights (NO bitsandbytes 4-bit -> eliminates dark/grainy artifacts!)
         pipe = QwenImageEditPipeline.from_pretrained(MODEL_ID, **load_kwargs)
 
-        # Attach official Lightning 8-Step LoRA (unfused — compatible with 4-bit NF4 weights!)
+        # Load & FUSE official Lightning 8-Step BF16 LoRA for zero-overhead 8-step studio sharpness
         if USE_LIGHTNING_LORA:
             try:
-                logger.info("Loading Lightning LoRA: %s / %s", LIGHTNING_LORA_REPO, LIGHTNING_LORA_WEIGHT)
+                logger.info("Loading & fusing Lightning LoRA: %s / %s", LIGHTNING_LORA_REPO, LIGHTNING_LORA_WEIGHT)
                 pipe.load_lora_weights(LIGHTNING_LORA_REPO, weight_name=LIGHTNING_LORA_WEIGHT)
+                pipe.fuse_lora()
+                pipe.unload_lora_weights()
                 _lora_active = True
-                logger.info("Lightning 8-Step LoRA attached successfully!")
+                logger.info("Lightning 8-Step LoRA fused into full bfloat16 weights successfully!")
             except Exception as exc:
                 _lora_active = False
                 logger.warning("Failed to load Lightning LoRA (%s); continuing with base model.", exc)
 
-        # CPU offload guarantees zero OOM spikes on 24GB VRAM + 31GB System RAM
-        if hasattr(pipe, "enable_model_cpu_offload"):
-            pipe.enable_model_cpu_offload()
-        else:
-            pipe.to("cuda")
+        # Stream blocks asynchronously from CPU RAM -> RTX 3090 VRAM (fits 40GB BF16 cleanly inside 24GB VRAM!)
+        try:
+            cuda_dev = torch.device("cuda")
+            cpu_dev = torch.device("cpu")
+            pipe.transformer.enable_group_offload(
+                onload_device=cuda_dev,
+                offload_device=cpu_dev,
+                offload_type="block_level",
+                num_blocks_per_group=2,
+                use_stream=True,
+            )
+            pipe.text_encoder.enable_group_offload(
+                onload_device=cuda_dev,
+                offload_device=cpu_dev,
+                offload_type="leaf_level",
+                use_stream=True,
+            )
+            pipe.vae.to(cuda_dev)
+            logger.info("Enabled async group_offload (full bfloat16 streaming on RTX 3090 24GB VRAM).")
+        except Exception as exc:
+            logger.warning("group_offload unavailable (%s); falling back to sequential CPU offload.", exc)
+            pipe.enable_sequential_cpu_offload()
 
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
             pipe.vae.enable_slicing()
@@ -160,7 +155,7 @@ def load_qwen_pipeline():
             pipe.vae.enable_tiling()
 
         _pipeline = pipe
-        logger.info("Model %s ready in %.2fs (lightning_lora=%s).", MODEL_ID, time.perf_counter() - t0, _lora_active)
+        logger.info("Model %s ready in %.2fs (full_bf16=True, lightning_lora=%s).", MODEL_ID, time.perf_counter() - t0, _lora_active)
         return _pipeline
 
 
@@ -181,22 +176,21 @@ def _run_inference_sync(
     guidance_scale: float,
     seed: Optional[int],
 ) -> tuple[bytes, dict[str, str]]:
-    """Run Qwen-Image-Edit under GPU lock and return crisp PNG bytes + headers."""
+    """Run full-BF16 Qwen-Image-Edit under GPU lock and return crisp PNG bytes + headers."""
     pipe = load_qwen_pipeline()
     used_seed = seed if seed is not None else int(time.time()) % 1000000
     generator = torch.Generator(device="cuda").manual_seed(used_seed)
 
-    # Enforce optimal steps & CFG for Lightning 8-step LoRA vs base model
-    actual_steps = max(4, min(50, int(steps)))
-    actual_cfg = float(guidance_scale)
-    if _lora_active and actual_steps <= 12:
+    # Exact 8 steps + cfg=1.0 for Lightning 8-step LoRA; 36 steps + cfg=4.0 for base model
+    if _lora_active:
+        actual_steps = 8
         actual_cfg = 1.0
-    elif not _lora_active and actual_steps < 28:
-        actual_steps = 36
-        actual_cfg = 4.0
+    else:
+        actual_steps = max(24, min(50, int(steps)))
+        actual_cfg = float(guidance_scale) if float(guidance_scale) > 1.0 else 4.0
 
-    # Official Qwen-Image-Edit works sharpest with blank single-space negative_prompt
     neg = negative_prompt if negative_prompt and negative_prompt.strip() else " "
+    logger.info("Running inference (steps=%d, cfg=%.1f, size=%s) | prompt: %.160s...", actual_steps, actual_cfg, ref_img.size, prompt)
 
     t0 = time.perf_counter()
     with _pipe_lock, torch.inference_mode():
@@ -217,7 +211,7 @@ def _run_inference_sync(
     buf = io.BytesIO()
     out_img.save(buf, format="PNG")
     headers = {
-        "X-Model-Name": f"{MODEL_ID}+Lightning-8step" if _lora_active else MODEL_ID,
+        "X-Model-Name": f"{MODEL_ID}+Lightning-8step-BF16" if _lora_active else f"{MODEL_ID}-BF16",
         "X-GPU-Name": gpu_info["gpu_name"],
         "X-Inference-Time-Sec": str(elapsed),
         "X-Seed": str(used_seed),
@@ -287,9 +281,9 @@ def health(x_api_key: Optional[str] = Header(default=None)):
     return {
         "status": "ok",
         "model_id": MODEL_ID,
+        "precision": "full_bfloat16",
         "lightning_lora": _lora_active,
         "model_loaded": _pipeline is not None,
-        "quantize_4bit": QUANTIZE_4BIT,
         "default_steps": DEFAULT_STEPS,
         "max_edge": MAX_EDGE,
         **gpu,
