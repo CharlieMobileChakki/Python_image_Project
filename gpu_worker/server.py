@@ -1,16 +1,16 @@
-"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Full bfloat16 Qwen-Image-Edit + Fused Lightning 8-Step LoRA).
+"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Official Qwen/Qwen-Image-2.1-Turbo).
 
-Uses lossless full bfloat16 + diffusers group_offload (zero 4-bit bitsandbytes grain/mottling!)
-so RTX 3090 (24GB VRAM) produces razor-sharp, bright, smooth studio-grade garment cutouts in 8 steps.
+7B Single-Stream DiT architecture with native 8-step Turbo schedule, prefix KV caching,
+and lossless full bfloat16 precision — produces Myntra/Meesho studio-grade garment cutouts
+in real-time on RTX 3090 (24GB VRAM).
 
-Run on AIC Cloud RTX 3090 GPU Server:
+Run on AIC Cloud RTX 3090 GPU Server (Python 3.11 Conda env):
     uvicorn server:app --host 0.0.0.0 --port 8001
 """
 from __future__ import annotations
 
 import io
 import logging
-import math
 import os
 import threading
 import time
@@ -26,25 +26,18 @@ import torch
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("qwen-gpu-worker")
+logger = logging.getLogger("qwen21-gpu-worker")
 
-# Configuration via environment variables
-MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-Edit").strip()
-USE_LIGHTNING_LORA = os.getenv("QWEN_USE_LIGHTNING", "true").strip().lower() in ("1", "true", "yes")
-LIGHTNING_LORA_REPO = os.getenv("QWEN_LORA_REPO", "lightx2v/Qwen-Image-Lightning").strip()
-LIGHTNING_LORA_WEIGHT = os.getenv("QWEN_LORA_WEIGHT", "Qwen-Image-Edit-Lightning-8steps-V1.0-bf16.safetensors").strip()
+# Official Qwen-Image-2.1-Turbo (7B, native 8-step editing + product preservation)
+MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-2.1-Turbo").strip()
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
 PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
-MAX_EDGE = int(os.getenv("QWEN_MAX_EDGE", "1024"))
-# Exact 8 steps matches the distilled Lightning 8-step LoRA sigma schedule
-DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "8" if USE_LIGHTNING_LORA else "36"))
-DEFAULT_CFG = float(os.getenv("QWEN_DEFAULT_CFG", "1.0" if USE_LIGHTNING_LORA else "4.0"))
-DEFAULT_NEGATIVE_PROMPT = " "
+OUTPUT_WIDTH = int(os.getenv("QWEN_OUTPUT_WIDTH", "1024"))
+OUTPUT_HEIGHT = int(os.getenv("QWEN_OUTPUT_HEIGHT", "1024"))
 
-app = FastAPI(title="Arangtik Qwen GPU Worker (Full BF16 + Lightning 8-Step)", version="2.3.0")
+app = FastAPI(title="Arangtik Qwen-Image-2.1-Turbo GPU Worker", version="3.0.0")
 
 _pipeline = None
-_lora_active = False
 _pipe_lock = threading.Lock()
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
@@ -69,9 +62,9 @@ def _get_gpu_info() -> dict:
     }
 
 
-def load_qwen_pipeline():
-    """Load Qwen-Image-Edit in FULL LOSSLESS bfloat16 with group offloading + fused Lightning 8-Step LoRA."""
-    global _pipeline, _lora_active
+def load_qwen21_pipeline():
+    """Load official Qwen/Qwen-Image-2.1-Turbo in FULL lossless bfloat16 for RTX 3090 (24GB VRAM)."""
+    global _pipeline
     if _pipeline is not None:
         return _pipeline
 
@@ -82,72 +75,23 @@ def load_qwen_pipeline():
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA GPU not detected on this server.")
 
-        from diffusers import FlowMatchEulerDiscreteScheduler, QwenImageEditPipeline
+        from diffusers import QwenImage21Pipeline
 
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        logger.info("Loading %s in FULL LOSSLESS %s (lightning=%s, zero 4-bit quantization)...", MODEL_ID, dtype, USE_LIGHTNING_LORA)
+        logger.info("Loading %s (full lossless %s)...", MODEL_ID, dtype)
         t0 = time.perf_counter()
 
-        load_kwargs: dict[str, Any] = {"torch_dtype": dtype}
+        pipe = QwenImage21Pipeline.from_pretrained(
+            MODEL_ID,
+            torch_dtype=dtype,
+        )
 
-        # Distilled FlowMatch scheduler required for exact 8-step Lightning LoRA sharpness
-        if USE_LIGHTNING_LORA:
-            scheduler_config = {
-                "base_image_seq_len": 256,
-                "base_shift": math.log(3),
-                "invert_sigmas": False,
-                "max_image_seq_len": 8192,
-                "max_shift": math.log(3),
-                "num_train_timesteps": 1000,
-                "shift": 1.0,
-                "shift_terminal": None,
-                "stochastic_sampling": False,
-                "time_shift_type": "exponential",
-                "use_beta_sigmas": False,
-                "use_dynamic_shifting": True,
-                "use_exponential_sigmas": False,
-                "use_karras_sigmas": False,
-            }
-            load_kwargs["scheduler"] = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
-
-        # Load full lossless bfloat16 weights (NO bitsandbytes 4-bit -> eliminates dark/grainy artifacts!)
-        pipe = QwenImageEditPipeline.from_pretrained(MODEL_ID, **load_kwargs)
-
-        # Load & FUSE official Lightning 8-Step BF16 LoRA for zero-overhead 8-step studio sharpness
-        if USE_LIGHTNING_LORA:
-            try:
-                logger.info("Loading & fusing Lightning LoRA: %s / %s", LIGHTNING_LORA_REPO, LIGHTNING_LORA_WEIGHT)
-                pipe.load_lora_weights(LIGHTNING_LORA_REPO, weight_name=LIGHTNING_LORA_WEIGHT)
-                pipe.fuse_lora()
-                pipe.unload_lora_weights()
-                _lora_active = True
-                logger.info("Lightning 8-Step LoRA fused into full bfloat16 weights successfully!")
-            except Exception as exc:
-                _lora_active = False
-                logger.warning("Failed to load Lightning LoRA (%s); continuing with base model.", exc)
-
-        # Stream blocks asynchronously from CPU RAM -> RTX 3090 VRAM (fits 40GB BF16 cleanly inside 24GB VRAM!)
-        try:
-            cuda_dev = torch.device("cuda")
-            cpu_dev = torch.device("cpu")
-            pipe.transformer.enable_group_offload(
-                onload_device=cuda_dev,
-                offload_device=cpu_dev,
-                offload_type="block_level",
-                num_blocks_per_group=2,
-                use_stream=True,
-            )
-            pipe.text_encoder.enable_group_offload(
-                onload_device=cuda_dev,
-                offload_device=cpu_dev,
-                offload_type="leaf_level",
-                use_stream=True,
-            )
-            pipe.vae.to(cuda_dev)
-            logger.info("Enabled async group_offload (full bfloat16 streaming on RTX 3090 24GB VRAM).")
-        except Exception as exc:
-            logger.warning("group_offload unavailable (%s); falling back to sequential CPU offload.", exc)
-            pipe.enable_sequential_cpu_offload()
+        # Model-level CPU offload keeps the active 7B DiT / text encoder 100% in full BF16 on RTX 3090 24GB VRAM
+        if hasattr(pipe, "enable_model_cpu_offload"):
+            pipe.enable_model_cpu_offload()
+            logger.info("Enabled model_cpu_offload (full bfloat16 on RTX 3090 24GB VRAM).")
+        else:
+            pipe.to("cuda")
 
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
             pipe.vae.enable_slicing()
@@ -155,15 +99,17 @@ def load_qwen_pipeline():
             pipe.vae.enable_tiling()
 
         _pipeline = pipe
-        logger.info("Model %s ready in %.2fs (full_bf16=True, lightning_lora=%s).", MODEL_ID, time.perf_counter() - t0, _lora_active)
+        logger.info("Model %s ready in %.2fs.", MODEL_ID, time.perf_counter() - t0)
         return _pipeline
 
 
 def _prepare_ref_image(raw_bytes: bytes) -> Image.Image:
-    ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGB")
+    """Decode and preserve RGBA format as recommended by official Qwen-Image-2.1 docs."""
+    ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGBA")
     w, h = ref_img.size
-    if max(w, h) > MAX_EDGE:
-        scale = MAX_EDGE / float(max(w, h))
+    max_in = 1280
+    if max(w, h) > max_in:
+        scale = max_in / float(max(w, h))
         ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
     return ref_img
 
@@ -171,35 +117,31 @@ def _prepare_ref_image(raw_bytes: bytes) -> Image.Image:
 def _run_inference_sync(
     ref_img: Image.Image,
     prompt: str,
-    negative_prompt: str,
-    steps: int,
-    guidance_scale: float,
     seed: Optional[int],
 ) -> tuple[bytes, dict[str, str]]:
-    """Run full-BF16 Qwen-Image-Edit under GPU lock and return crisp PNG bytes + headers."""
-    pipe = load_qwen_pipeline()
+    """Run official Qwen-Image-2.1-Turbo 8-step editing with KV cache and return crisp PNG bytes."""
+    pipe = load_qwen21_pipeline()
     used_seed = seed if seed is not None else int(time.time()) % 1000000
-    generator = torch.Generator(device="cuda").manual_seed(used_seed)
+    # Official Qwen-Image-2.1 README uses CPU generator for deterministic reproducibility
+    generator = torch.Generator("cpu").manual_seed(used_seed)
 
-    # Exact 8 steps + cfg=1.0 for Lightning 8-step LoRA; 36 steps + cfg=4.0 for base model
-    if _lora_active:
-        actual_steps = 8
-        actual_cfg = 1.0
-    else:
-        actual_steps = max(24, min(50, int(steps)))
-        actual_cfg = float(guidance_scale) if float(guidance_scale) > 1.0 else 4.0
-
-    neg = negative_prompt if negative_prompt and negative_prompt.strip() else " "
-    logger.info("Running inference (steps=%d, cfg=%.1f, size=%s) | prompt: %.160s...", actual_steps, actual_cfg, ref_img.size, prompt)
+    logger.info(
+        "Running Qwen-Image-2.1-Turbo (size=%dx%d, in=%s) | prompt: %.200s...",
+        OUTPUT_WIDTH,
+        OUTPUT_HEIGHT,
+        ref_img.size,
+        prompt,
+    )
 
     t0 = time.perf_counter()
     with _pipe_lock, torch.inference_mode():
+        # Uses Turbo's built-in official 8-step schedule & default CFG=1 automatically
         result = pipe(
-            image=ref_img,
             prompt=prompt,
-            negative_prompt=neg,
-            num_inference_steps=actual_steps,
-            true_cfg_scale=actual_cfg,
+            image=ref_img,
+            width=OUTPUT_WIDTH,
+            height=OUTPUT_HEIGHT,
+            use_kv_cache=True,
             generator=generator,
         )
         out_img: Image.Image = result.images[0]
@@ -211,7 +153,7 @@ def _run_inference_sync(
     buf = io.BytesIO()
     out_img.save(buf, format="PNG")
     headers = {
-        "X-Model-Name": f"{MODEL_ID}+Lightning-8step-BF16" if _lora_active else f"{MODEL_ID}-BF16",
+        "X-Model-Name": MODEL_ID,
         "X-GPU-Name": gpu_info["gpu_name"],
         "X-Inference-Time-Sec": str(elapsed),
         "X-Seed": str(used_seed),
@@ -220,7 +162,6 @@ def _run_inference_sync(
 
 
 def _prune_old_jobs() -> None:
-    """Keep memory tidy by dropping finished jobs older than 10 minutes."""
     now = time.time()
     with _jobs_lock:
         stale = [jid for jid, j in _jobs.items() if now - j["created_at"] > 600]
@@ -232,9 +173,6 @@ def _background_job_runner(
     job_id: str,
     ref_img: Image.Image,
     prompt: str,
-    negative_prompt: str,
-    steps: int,
-    guidance_scale: float,
     seed: Optional[int],
 ) -> None:
     with _jobs_lock:
@@ -245,9 +183,6 @@ def _background_job_runner(
         png_bytes, headers = _run_inference_sync(
             ref_img=ref_img,
             prompt=prompt,
-            negative_prompt=negative_prompt,
-            steps=steps,
-            guidance_scale=guidance_scale,
             seed=seed,
         )
         with _jobs_lock:
@@ -269,7 +204,7 @@ def _background_job_runner(
 def _startup_preload():
     if PRELOAD_MODEL:
         try:
-            load_qwen_pipeline()
+            load_qwen21_pipeline()
         except Exception as exc:
             logger.error("Startup preload failed (will retry on first request): %s", exc)
 
@@ -282,10 +217,8 @@ def health(x_api_key: Optional[str] = Header(default=None)):
         "status": "ok",
         "model_id": MODEL_ID,
         "precision": "full_bfloat16",
-        "lightning_lora": _lora_active,
         "model_loaded": _pipeline is not None,
-        "default_steps": DEFAULT_STEPS,
-        "max_edge": MAX_EDGE,
+        "output_size": f"{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}",
         **gpu,
     }
 
@@ -294,13 +227,12 @@ def health(x_api_key: Optional[str] = Header(default=None)):
 async def submit_job(
     image: UploadFile = File(...),
     prompt: str = Form(...),
-    negative_prompt: str = Form(DEFAULT_NEGATIVE_PROMPT),
-    steps: int = Form(DEFAULT_STEPS),
-    guidance_scale: float = Form(DEFAULT_CFG),
+    steps: int = Form(8),
+    guidance_scale: float = Form(1.0),
     seed: Optional[int] = Form(None),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Submit an async GPU generation job (returns immediately — never hits Cloudflare 524!)."""
+    """Submit an async Qwen-Image-2.1-Turbo generation job (immune to Cloudflare 524!)."""
     _verify_api_key(x_api_key)
     _prune_old_jobs()
 
@@ -326,7 +258,7 @@ async def submit_job(
 
     thread = threading.Thread(
         target=_background_job_runner,
-        args=(job_id, ref_img, prompt, negative_prompt, steps, guidance_scale, seed),
+        args=(job_id, ref_img, prompt, seed),
         daemon=True,
     )
     thread.start()
@@ -335,7 +267,6 @@ async def submit_job(
 
 @app.get("/jobs/{job_id}")
 def get_job_status(job_id: str, x_api_key: Optional[str] = Header(default=None)):
-    """Check status of an async GPU generation job."""
     _verify_api_key(x_api_key)
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -351,7 +282,6 @@ def get_job_status(job_id: str, x_api_key: Optional[str] = Header(default=None))
 
 @app.get("/jobs/{job_id}/result")
 def get_job_result(job_id: str, x_api_key: Optional[str] = Header(default=None)):
-    """Download the generated PNG once job status is 'done'."""
     _verify_api_key(x_api_key)
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -372,13 +302,12 @@ def get_job_result(job_id: str, x_api_key: Optional[str] = Header(default=None))
 async def generate_garment(
     image: UploadFile = File(..., description="Original model-worn reference image."),
     prompt: str = Form(..., description="Detailed garment extraction prompt from ChatGPT Vision + studio rules."),
-    negative_prompt: str = Form(DEFAULT_NEGATIVE_PROMPT),
-    steps: int = Form(DEFAULT_STEPS),
-    guidance_scale: float = Form(DEFAULT_CFG),
+    steps: int = Form(8),
+    guidance_scale: float = Form(1.0),
     seed: Optional[int] = Form(None),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Run synchronous Qwen-Image-Edit generation on RTX 3090."""
+    """Run synchronous Qwen-Image-2.1-Turbo generation on RTX 3090."""
     _verify_api_key(x_api_key)
 
     raw_bytes = await image.read()
@@ -395,13 +324,10 @@ async def generate_garment(
         png_bytes, headers = _run_inference_sync(
             ref_img=ref_img,
             prompt=prompt,
-            negative_prompt=negative_prompt,
-            steps=steps,
-            guidance_scale=guidance_scale,
             seed=seed,
         )
     except Exception as exc:
-        logger.exception("Qwen inference error: %s", exc)
+        logger.exception("Qwen-Image-2.1-Turbo inference error: %s", exc)
         raise HTTPException(status_code=500, detail=f"GPU inference failed: {exc}") from exc
 
     return Response(content=png_bytes, media_type="image/png", headers=headers)

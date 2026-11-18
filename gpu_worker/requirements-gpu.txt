@@ -1,6 +1,5 @@
 # =============================================================================
-# Arangtik Qwen GPU Worker Requirements (AIC Cloud RTX 3090 - 24GB VRAM)
-# NOTE: Uses the GPU server's pre-installed CUDA PyTorch (do NOT install CPU torch!)
+# Arangtik Qwen-Image-2.1-Turbo GPU Worker Requirements (Python 3.11 + RTX 3090)
 # =============================================================================
 
 fastapi==0.115.6
@@ -9,12 +8,10 @@ python-multipart>=0.0.9
 python-dotenv>=1.0.0
 Pillow>=10.0.0
 
-# Qwen-Image-Edit (diffusers + 4-bit NF4 VRAM optimization for RTX 3090)
-diffusers>=0.35.0,<0.38.0
-transformers>=4.51.3,<5.0.0
+# Official Qwen-Image-2.1-Turbo stack (requires Python >= 3.11)
+transformers>=5.17.0
+git+https://github.com/huggingface/diffusers.git
 accelerate>=1.0.0
 safetensors>=0.4.5
-bitsandbytes>=0.45.0
-peft>=0.14.0
 sentencepiece>=0.2.0
-protobuf<6
+protobuf>=4.25.0
