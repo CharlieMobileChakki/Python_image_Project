@@ -18,27 +18,27 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Fixed backend studio rules appended to every Flow B garment generation prompt
+# Fixed backend studio rules (empty 3D invisible-mannequin product shot, Myntra/Meesho style)
 COMMON_STUDIO_RULES = (
-    "Transform this into a sharp, ultra-clear, high-resolution ghost-mannequin e-commerce studio product photograph "
-    "of ONLY this exact garment centered on a pure solid white background (#FFFFFF). "
-    "Remove the woman/person, face, head, hair, skin, hands, arms, feet, necklace, jewelry, and outdoor/room background completely. "
-    "Keep the EXACT same color shade, smooth fabric finish, neckline shape, sleeve trims/borders, silhouette, and proportions as worn in the input photo — "
-    "do NOT invent new patterns, speckles, or extra textures that are not in the original photo. "
-    "Crisp studio lighting, clean sharp fabric edges, photorealistic retail catalog quality."
+    "Empty hollow inner neckline, empty open sleeve cuffs, and empty open bottom hems with NO human body inside. "
+    "Reconstruct smooth continuous fabric across the chest and waist where hands or arms previously overlapped. "
+    "Strictly preserve the exact original bright color shade, smooth fabric finish, neckline shape, borders, "
+    "prints, embroidery, and silhouette from the reference image — do NOT alter color or invent new patterns. "
+    "Centered upright 3D invisible-mannequin studio product shot, crisp Myntra/Meesho e-commerce lighting, "
+    "pure solid white background (#FFFFFF), completely empty of any human, face, hair, skin, hands, feet, or jewelry."
 )
 
-SYSTEM_VISION_PROMPT = """You are a senior e-commerce fashion catalog analyst writing concise image-editing instructions.
-Inspect the photograph of the person wearing clothing and describe the main wearable garment(s) with 100% factual accuracy.
+SYSTEM_VISION_PROMPT = """You are a senior e-commerce fashion catalog analyst writing image-editing instructions for Myntra/Meesho invisible ghost-mannequin product photos.
+Inspect the photograph and describe ONLY the clothing garment(s) with 100% factual accuracy (never mention the person or model).
 
 Rules:
-1. If the person wears a matching ethnic suit set (kurta + matching salwar/pants + matching dupatta), dress, gown, jumpsuit, or saree, return 1 combined garment item so the complete matching outfit stays faithful.
-2. Only split into 2 items if the person clearly wears contrasting western separates (e.g., white shirt + blue denim jeans). Never list shoes, bags, necklaces, jewelry, or hats.
-3. For each garment, accurately specify:
-   - Exact color shade (e.g., solid deep magenta-purple, navy blue)
+1. If the outfit is a matching ethnic suit set (kurta + matching salwar/pants + matching dupatta), dress, gown, jumpsuit, or saree, return 1 combined garment item so the complete matching outfit stays faithful.
+2. Only split into 2 items if there are clearly contrasting western separates (e.g., white shirt + blue denim jeans). Never list shoes, bags, necklaces, jewelry, or hats.
+3. Accurately specify:
+   - Exact bright color shade (e.g., bright solid magenta-purple, navy blue)
    - Fabric surface: explicitly say "smooth plain solid fabric" if it has NO print, OR describe the exact print/embroidery if present
    - Exact neckline/collar shape (e.g., V-neck slit, round neck, mandarin collar)
-   - Exact sleeves and any borders/trim/stripes (e.g., three-quarter sleeves with thin gold zari stripe border, matching draped dupatta with gold border)
+   - Exact sleeves and any borders/trim/stripes (e.g., three-quarter sleeves with thin gold zari stripe border, matching draped dupatta with gold striped border and tassels)
    - Exact lower portion if included (e.g., matching straight salwar/pants)
 4. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
 
@@ -48,7 +48,7 @@ Return strictly valid JSON:
     {
       "category": "dress",
       "recognized_label": "Magenta Kurta Suit Set with Gold Border",
-      "garment_description": "Solid smooth deep magenta-purple straight-cut ethnic kurta with slit V-neckline, three-quarter sleeves featuring a thin gold zari stripe border, matching magenta dupatta with gold striped border and tassels, and matching magenta salwar pants."
+      "garment_description": "Bright solid smooth magenta-purple straight-cut ethnic kurta with slit V-neckline, three-quarter sleeves featuring a thin gold zari stripe border, matching magenta dupatta with gold striped border and tassels, and matching magenta salwar pants."
     }
   ]
 }"""
@@ -68,10 +68,12 @@ def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1024) -> st
 
 
 def _build_final_prompt(garment_description: str, category: str) -> str:
-    """Combine garment-specific description with common studio rules."""
+    """Put the empty 3D ghost-mannequin person-removal instruction FIRST so Qwen-Image-2.1 obeys 100%."""
     return (
-        f"Extract ONLY the following garment worn by the person in the reference image: "
-        f"{garment_description.strip()} (category: {category}). "
+        "Generate an empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
+        "garment floating upright on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
+        "NO head, NO face, NO hair, NO neck, NO hands, NO arms, NO legs, NO feet, and NO jewelry anywhere in the image. "
+        f"Exact garment to isolate from the reference photo: {garment_description.strip()} (category: {category}). "
         f"{COMMON_STUDIO_RULES}"
     )
 
