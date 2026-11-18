@@ -28,11 +28,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
-from app.core.model_manager import (
-    are_models_loaded,
-    is_inpainter_loaded,
-    load_segmenter_models,
-)
+from app.core.flow_b import check_gpu_worker_health
+from app.core.model_manager import are_models_loaded, load_flow_a
 from app.schemas import HealthResponse
 from app.services.extraction import MODEL_NAME as FLOW_A_MODEL_NAME, load_model
 
@@ -49,19 +46,16 @@ OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Preload AI models once during server startup."""
-    print("Preloading Arangtik Garment AI models...")
+    """Preload Flow A (BiRefNet Lite) model once during server startup."""
+    print("Preloading Arangtik Garment AI (Flow A: BiRefNet Lite)...")
     await run_in_threadpool(load_model)
     try:
-        await run_in_threadpool(load_segmenter_models)
-        print("  - SegFormer B2 Clothes & BiRefNet Lite loaded.")
+        await run_in_threadpool(load_flow_a)
+        print("  - BiRefNet Lite loaded.")
     except Exception as exc:
-        print(f"  - Warning: Failed to preload segmentation models: {exc}")
+        print(f"  - Warning: Failed to preload BiRefNet Lite: {exc}")
 
-    # Note: LaMa ONNX is no longer loaded during application startup.
-    # Qwen-Image-2.1 serves as the primary generative reconstruction engine, loaded on-demand on GPU.
-
-    print("Arangtik Garment AI ready for requests.")
+    print("Arangtik Garment AI ready for requests (Flow B delegates to ChatGPT Vision + Remote GPU Qwen).")
     yield
 
 
@@ -132,36 +126,32 @@ async def ui_redirect():
 @app.get("/health", response_model=HealthResponse)
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
-    """Unified system health check and loaded AI model status."""
-    seg_status = are_models_loaded()
-    lama_status = is_inpainter_loaded()
+    """Unified system health check and Flow A / Flow B GPU Worker readiness status."""
+    flow_a_status = are_models_loaded()
+    gpu_health = await run_in_threadpool(check_gpu_worker_health)
+    openai_ready = bool(os.getenv("OPENAI_API_KEY", "").strip())
 
-    has_cuda = False
-    gpu_name = "N/A"
-    try:
-        import torch
-        has_cuda = torch.cuda.is_available()
-        if has_cuda:
-            gpu_name = torch.cuda.get_device_name(0)
-    except Exception:
-        pass
+    remote_gpu_online = bool(gpu_health.get("online", False))
+    gpu_name = gpu_health.get("gpu_name", "Remote GPU Offline") if remote_gpu_online else "Not Connected"
 
     return HealthResponse(
         status="ok",
         service="arangtik-garment-ai",
-        flow="Unified Pipeline",
-        version="1.0.0",
+        flow="Flow A (BiRefNet Lite) + Flow B (ChatGPT Vision + Remote GPU Qwen)",
+        version="2.0.0",
         model=MODEL_NAME,
         docs_url="/docs",
         ui_url="/ui",
         models_loaded={
-            **seg_status,
-            "lama_inpainter": lama_status,
+            **flow_a_status,
+            "openai_vision_configured": openai_ready,
+            "qwen_gpu_worker_online": remote_gpu_online,
         },
         hardware={
             "cpu_cores": os.cpu_count() or 1,
-            "device": "cuda" if has_cuda else "cpu",
-            "cuda_available": has_cuda,
+            "device": "remote_cuda" if remote_gpu_online else "cpu",
+            "cuda_available": remote_gpu_online,
             "gpu_name": gpu_name,
+            "gpu_worker_url": gpu_health.get("url", "not_set"),
         },
     )

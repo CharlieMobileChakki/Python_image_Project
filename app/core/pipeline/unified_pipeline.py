@@ -14,12 +14,11 @@ from app.core.background_removal import (
     extract_isolated_flow_a,
     validate_garment_background,
 )
-from app.core.garment_extraction import (
-    analyze_semantic_map,
-    classify_outfit_structure,
-    detect_multi_garment_layout,
-    extract_garment_cutout_guided,
+from app.core.flow_b import (
+    analyze_garment_and_build_prompts,
+    generate_garment_via_gpu,
 )
+from app.core.garment_extraction import detect_multi_garment_layout
 from app.core.image_processing import (
     detect_rotation_angle,
     image_to_base64_data_uri,
@@ -27,14 +26,8 @@ from app.core.image_processing import (
     normalize_to_1024,
     straighten_garment,
 )
-from app.core.inpainting import (
-    compute_arm_occlusion_mask,
-    repair_garment_cutout,
-)
-from app.core.person_parsing import run_segformer_inference
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
 from app.core.pipeline.pipeline_router import resolve_execution_flow
-from app.experimental.qwen_generation import get_qwen_garment_engine
 
 logger = logging.getLogger(__name__)
 
@@ -261,179 +254,53 @@ def execute_flow_b_with_person(
     auto_straighten: bool = True,
     include_base64: bool = False,
     t_start: float | None = None,
+    custom_prompt: str | None = None,
 ) -> dict[str, Any]:
-    """Execute Flow B: Person parsing & fabric inpainting for model-worn garments.
+    """Execute Flow B: Direct ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Extraction.
 
-    Workflow:
-    1. Isolate person foreground via BiRefNet Lite to strip background clutter.
-    2. Execute SegFormer B2 Clothes parsing on isolated person foreground.
-    3. Classify outfit structure (independent garments vs traditional ensembles).
-    4. Extract confidence-guided garment cutout with boundary snapping.
-    5. Inpaint occluded fabric (crossed arms, hands, accessories) using LaMa FFC ONNX.
-    6. Auto-deskew angle correction & 1024x1024 transparent canvas normalization.
+    Clean generative workflow for model-worn photos (zero SegFormer/LaMa bloat):
+    1. ChatGPT Vision analyzes the model-worn photo and creates garment-specific prompt(s)
+       combined with common studio background-removal rules.
+    2. Remote RTX 3090 GPU Worker runs Qwen-Image-Edit using the original photo as visual
+       reference + the ChatGPT prompt to generate a clean standalone studio garment.
+    3. BiRefNet Lite strips the solid white studio background into a crisp transparent PNG.
+    4. Auto-deskew + 1024x1024 transparent canvas normalization.
     """
     if t_start is None:
         t_start = time.perf_counter()
 
     orig_w, orig_h = image_rgb.size
 
-    # Step 1: Background Removal with BiRefNet Lite to isolate clean person foreground
-    t_fg_start = time.perf_counter()
-    fg_cutout = extract_isolated_flow_a(image_rgb)
-    fg_alpha = np.array(fg_cutout.split()[3])
-    fg_time_ms = round((time.perf_counter() - t_fg_start) * 1000, 2)
-
-    # Isolate clean person foreground onto white canvas to avoid background edge noise
-    person_rgb = Image.new("RGB", image_rgb.size, (255, 255, 255))
-    person_rgb.paste(image_rgb, mask=Image.fromarray(fg_alpha))
-
-    # Step 2: Person Parsing (SegFormer B2 Clothes) on extracted person foreground
-    t_seg_start = time.perf_counter()
-    pred_map, probs_tensor = run_segformer_inference(person_rgb, fg_alpha=fg_alpha)
-    scene_info = analyze_semantic_map(pred_map)
-    seg_time_ms = round((time.perf_counter() - t_seg_start) * 1000, 2)
-
-    # Automatic safety fallback: If no human body (face, arms, hair, skin) is present,
-    # the image is an isolated product, flat-lay, or mannequin mistakenly sent as Flow B.
-    # Route gracefully to Flow A (BiRefNet Lite) rather than hallucinating garments on background noise.
-    has_human_detected = scene_info.get("has_human", True)
-    if not has_human_detected:
-        logger.info(
-            "Flow B invoked on image with no human detected (scene_type=%s, human_pixels=%s). "
-            "Gracefully delegating to Flow A (isolated background removal).",
-            scene_info.get("scene_type"),
-            scene_info.get("human_pixel_count", 0),
-        )
-        return execute_flow_a_without_person(
-            image_rgb=image_rgb,
-            image_bytes=image_bytes,
-            job_id=job_id,
-            target_garment=target_garment,
-            auto_straighten=auto_straighten,
-            include_base64=include_base64,
-            t_start=t_start,
-        )
-
-    detected_garments = scene_info["detected_garments"]
-
-    # Step 3: Outfit Structure Classification
-    classification = classify_outfit_structure(
-        pred_map=pred_map,
-        probs_tensor=probs_tensor,
-        detected_garments=detected_garments,
-        scene_type="person",
-        target_filter=target_garment,
+    # Step 1: ChatGPT Vision garment analysis & prompt generation
+    t_prompt_start = time.perf_counter()
+    planned_garments = analyze_garment_and_build_prompts(
+        image_rgb=image_rgb,
+        target_garment=target_garment,
+        custom_prompt=custom_prompt,
     )
-    outfit_mode = classification["outfit_mode"]
-    ensemble_type = classification["ensemble_type"]
-    planned_items = classification["planned_items"]
+    prompt_time_ms = round((time.perf_counter() - t_prompt_start) * 1000, 2)
 
     processed_items: list[dict[str, Any]] = []
+    gpu_time_ms = 0.0
 
-    # Step 4: Extract and repair each planned garment item
-    if planned_items:
-        for idx, item in enumerate(planned_items):
-            cat_key = item["key"]
-            cat_label = item["label"]
-            target_cids = item["target_class_ids"]
-            is_fused = item["is_fused"]
-            coverage_pct = item.get("coverage_percentage", 100.0)
-            priority = item.get("priority", "first_priority")
+    for idx, plan in enumerate(planned_garments):
+        cat_key = plan["category"]
+        cat_label = plan["recognized_label"]
+        qwen_prompt = plan["prompt"]
+        g_id = f"garment_{idx + 1:03d}"
 
-            # 4A. Confidence-Aware Mask Fusion on person foreground with boundary snapping
-            cutout_rgba = extract_garment_cutout_guided(
-                image_rgb=person_rgb,
-                probs_tensor=probs_tensor,
-                target_class_ids=target_cids,
-                foreground_cutout=fg_cutout,
-                solid_threshold=0.38 if is_fused else 0.45,
-                edge_threshold=0.15,
-                min_component_area=150,
-            )
+        # Step 2: Generate clean studio garment on remote RTX 3090 GPU (Qwen-Image-Edit)
+        t_gpu_start = time.perf_counter()
+        generated_raw, gpu_meta = generate_garment_via_gpu(
+            reference_image=image_rgb,
+            prompt=qwen_prompt,
+        )
+        gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
-            # 4B. Occlusion Inspection & Qwen-Image-2.1 Fabric Reconstruction
-            repaired = False
-            repair_method = None
-            if auto_repair:
-                alpha_arr = np.array(cutout_rgba.split()[3])
-                garment_pixel_area = (alpha_arr > 20).sum()
-                notch_mask = compute_arm_occlusion_mask(
-                    pred_map, garment_class_id=target_cids, cutout_alpha=alpha_arr
-                )
-                notch_px = (notch_mask > 0).sum()
-                if 60 < notch_px < int(0.35 * garment_pixel_area):
-                    qwen_engine = get_qwen_garment_engine()
-                    is_avail, _ = qwen_engine.is_available()
-                    if is_avail:
-                        # Primary: Qwen-Image-2.1 reference-guided reconstruction on GPU
-                        q_res = qwen_engine.reconstruct_garment(
-                            original_image=person_rgb,
-                            garment_cutout=cutout_rgba,
-                            repair_mask=notch_mask,
-                        )
-                        if q_res.status == "success":
-                            cutout_rgba = q_res.image
-                            repaired = True
-                            repair_method = "qwen_image_2_1"
-                    else:
-                        # Graceful dev environment fallback without locking CPU
-                        try:
-                            cutout_rgba, _ = repair_garment_cutout(cutout_rgba, notch_mask, original_rgb=person_rgb)
-                            repaired = True
-                            repair_method = "qwen_image_2_1_pending_gpu (dev_fallback: cpu_safe)"
-                        except Exception:
-                            repaired = False
-                            repair_method = "unrepaired (pending_gpu)"
+        # Step 3: Strip studio white background cleanly via BiRefNet Lite
+        cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
 
-            # 4C. Auto-Deskewing
-            angle_deg = 0.0
-            if auto_straighten:
-                angle_deg = detect_rotation_angle(cutout_rgba)
-                if abs(angle_deg) > 0.5:
-                    cutout_rgba = straighten_garment(cutout_rgba, angle_deg)
-
-            # 4D. 1024x1024 Transparent Canvas Normalization
-            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-
-            # 4E. Background Quality Validation & Edge Inspection
-            val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
-            final_cutout = val_res.get("refined_cutout", normalized_1024)
-
-            out_filename = f"{job_id}_{cat_key}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", optimize=True)
-
-            b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
-            conf_score = round(float(sum(probs_tensor[cid].mean() for cid in target_cids) / len(target_cids)), 3)
-
-            processed_items.append({
-                "garment_id": f"{cat_key}_{idx}",
-                "category": cat_key,
-                "recognized_label": cat_label,
-                "image": out_filename,
-                "confidence": conf_score,
-                "coverage_percentage": coverage_pct,
-                "priority": priority,
-                "is_fused": is_fused,
-                "rotation_angle_deg": angle_deg,
-                "repaired": repaired,
-                "repair_method": repair_method,
-                "width": 1024,
-                "height": 1024,
-                "image_dimensions": [1024, 1024],
-                "output_png_url": f"/api/outputs/{out_filename}",
-                "output_png_base64": b64_data,
-                "background_removal_status": val_res["status"],
-                "background_removal_confidence": val_res["confidence"],
-                "garment_preservation_status": val_res["preservation_status"],
-                "validation_errors": val_res["validation_errors"],
-            })
-
-    else:
-        # Fallback if no specific garment class met solid threshold: use full foreground
-        cutout_rgba = fg_cutout
-        cat_key = "upper_clothes"
-        cat_label = "Garment"
+        # Step 4: Auto-deskew & 1024x1024 transparent canvas normalization
         angle_deg = 0.0
         if auto_straighten:
             angle_deg = detect_rotation_angle(cutout_rgba)
@@ -441,26 +308,27 @@ def execute_flow_b_with_person(
                 cutout_rgba = straighten_garment(cutout_rgba, angle_deg)
 
         normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-        val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
+        val_res = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
         final_cutout = val_res.get("refined_cutout", normalized_1024)
 
-        out_filename = f"{job_id}_{cat_key}.png"
+        out_filename = f"{job_id}_{g_id}.png"
         out_path = OUTPUT_DIR / out_filename
         final_cutout.save(out_path, format="PNG", optimize=True)
 
         b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
+
         processed_items.append({
-            "garment_id": f"{cat_key}_0",
+            "garment_id": g_id,
             "category": cat_key,
             "recognized_label": cat_label,
             "image": out_filename,
-            "confidence": 0.95,
-            "coverage_percentage": 100.0,
+            "confidence": val_res["confidence"],
+            "coverage_percentage": round(100.0 / max(1, len(planned_garments)), 1),
             "priority": "first_priority",
             "is_fused": False,
             "rotation_angle_deg": angle_deg,
-            "repaired": False,
-            "repair_method": None,
+            "repaired": True,
+            "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
             "width": 1024,
             "height": 1024,
             "image_dimensions": [1024, 1024],
@@ -475,16 +343,15 @@ def execute_flow_b_with_person(
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
     return {
         "success": True,
-        "job_id": job_id,
-        "execution_time_ms": total_time_ms,
-        "total_garments": len(processed_items),
-        "garments": processed_items,
         "status": "success",
+        "message": "Background removed successfully",
+        "job_id": job_id,
         "mode": "with_person",
         "has_human": True,
         "scene_type": "person",
-        "outfit_mode": outfit_mode,
+        "outfit_mode": "flow_b_chatgpt_qwen_gpu",
         "execution_time_ms": total_time_ms,
+        "total_garments": len(processed_items),
         "total_detected": len(processed_items),
         "total_extracted": len(processed_items),
         "total_background_removed": sum(1 for g in processed_items if g.get("background_removal_status") == "success"),
@@ -496,10 +363,8 @@ def execute_flow_b_with_person(
             "original_width": orig_w,
             "original_height": orig_h,
             "scene_type": "person",
-            "outfit_mode": outfit_mode,
-            "ensemble_type": ensemble_type,
-            "segmentation_time_ms": seg_time_ms,
-            "foreground_time_ms": fg_time_ms,
+            "prompt_time_ms": prompt_time_ms,
+            "gpu_generation_time_ms": round(gpu_time_ms, 2),
         },
     }
 

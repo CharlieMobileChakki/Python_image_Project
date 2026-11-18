@@ -6,10 +6,6 @@ from app.schemas.pipeline_schemas import (
     HealthResponse,
     ProcessGarmentResponse,
 )
-from app.schemas.qwen_garment_generation import (
-    QwenGarmentGenerationRequest,
-    QwenGarmentGenerationResponse,
-)
 
 __all__ = [
     "DownstreamPackageRequest",
@@ -17,6 +13,4 @@ __all__ = [
     "GarmentItem",
     "HealthResponse",
     "ProcessGarmentResponse",
-    "QwenGarmentGenerationRequest",
-    "QwenGarmentGenerationResponse",
 ]
