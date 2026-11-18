@@ -4,8 +4,11 @@ Run on AIC Cloud RTX 3090 GPU Server (24GB VRAM):
     uvicorn server:app --host 0.0.0.0 --port 8001
 
 Endpoints:
-    GET  /health    -> GPU VRAM & Qwen model status
-    POST /generate  -> Reference Photo + ChatGPT Prompt -> Clean Studio Garment PNG
+    GET  /health               -> GPU VRAM & Qwen model status
+    POST /jobs                 -> Async submit (immune to Cloudflare 100s 524 timeout!)
+    GET  /jobs/{job_id}        -> Poll job status
+    GET  /jobs/{job_id}/result -> Fetch generated PNG bytes
+    POST /generate             -> Direct synchronous generation
 """
 from __future__ import annotations
 
@@ -14,7 +17,8 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
+import uuid
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
@@ -32,15 +36,19 @@ MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-Edit").strip()
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
 QUANTIZE_4BIT = os.getenv("QWEN_QUANTIZE_4BIT", "true").strip().lower() in ("1", "true", "yes")
 PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
+MAX_EDGE = int(os.getenv("QWEN_MAX_EDGE", "768"))
+DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "18"))
 DEFAULT_NEGATIVE_PROMPT = (
     "person, human, model, face, head, hands, fingers, arms, legs, skin, hair, mannequin, "
     "hanger, cluttered background, shadows, watermark, text, blurry, distorted pattern"
 )
 
-app = FastAPI(title="Arangtik Qwen GPU Worker", version="2.0.0")
+app = FastAPI(title="Arangtik Qwen GPU Worker", version="2.1.0")
 
 _pipeline = None
 _pipe_lock = threading.Lock()
+_jobs: dict[str, dict[str, Any]] = {}
+_jobs_lock = threading.Lock()
 
 
 def _verify_api_key(x_api_key: Optional[str]) -> None:
@@ -81,7 +89,7 @@ def load_qwen_pipeline():
         logger.info("Loading %s (dtype=%s, 4bit=%s)...", MODEL_ID, dtype, QUANTIZE_4BIT)
         t0 = time.perf_counter()
 
-        load_kwargs = {"torch_dtype": dtype}
+        load_kwargs: dict[str, Any] = {"torch_dtype": dtype}
 
         # 4-bit NF4 quantization keeps 20B Qwen-Image-Edit safely within RTX 3090 24GB VRAM
         if QUANTIZE_4BIT:
@@ -119,6 +127,101 @@ def load_qwen_pipeline():
         return _pipeline
 
 
+def _prepare_ref_image(raw_bytes: bytes) -> Image.Image:
+    ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGB")
+    w, h = ref_img.size
+    if max(w, h) > MAX_EDGE:
+        scale = MAX_EDGE / float(max(w, h))
+        ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
+    return ref_img
+
+
+def _run_inference_sync(
+    ref_img: Image.Image,
+    prompt: str,
+    negative_prompt: str,
+    steps: int,
+    guidance_scale: float,
+    seed: Optional[int],
+) -> tuple[bytes, dict[str, str]]:
+    """Run Qwen-Image-Edit under GPU lock and return PNG bytes + headers."""
+    pipe = load_qwen_pipeline()
+    used_seed = seed if seed is not None else int(time.time()) % 1000000
+    generator = torch.Generator(device="cuda").manual_seed(used_seed)
+
+    t0 = time.perf_counter()
+    with _pipe_lock, torch.inference_mode():
+        result = pipe(
+            image=ref_img,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=max(8, min(40, int(steps))),
+            true_cfg_scale=float(guidance_scale),
+            generator=generator,
+        )
+        out_img: Image.Image = result.images[0]
+        torch.cuda.empty_cache()
+
+    elapsed = round(time.perf_counter() - t0, 2)
+    gpu_info = _get_gpu_info()
+
+    buf = io.BytesIO()
+    out_img.save(buf, format="PNG")
+    headers = {
+        "X-Model-Name": MODEL_ID,
+        "X-GPU-Name": gpu_info["gpu_name"],
+        "X-Inference-Time-Sec": str(elapsed),
+        "X-Seed": str(used_seed),
+    }
+    return buf.getvalue(), headers
+
+
+def _prune_old_jobs() -> None:
+    """Keep memory tidy by dropping finished jobs older than 10 minutes."""
+    now = time.time()
+    with _jobs_lock:
+        stale = [jid for jid, j in _jobs.items() if now - j["created_at"] > 600]
+        for jid in stale:
+            _jobs.pop(jid, None)
+
+
+def _background_job_runner(
+    job_id: str,
+    ref_img: Image.Image,
+    prompt: str,
+    negative_prompt: str,
+    steps: int,
+    guidance_scale: float,
+    seed: Optional[int],
+) -> None:
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["status"] = "running"
+
+    try:
+        png_bytes, headers = _run_inference_sync(
+            ref_img=ref_img,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+        )
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "done"
+                _jobs[job_id]["png_bytes"] = png_bytes
+                _jobs[job_id]["headers"] = headers
+                _jobs[job_id]["finished_at"] = time.time()
+        logger.info("Job %s completed in %ss.", job_id, headers["X-Inference-Time-Sec"])
+    except Exception as exc:
+        logger.exception("Job %s failed: %s", job_id, exc)
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "error"
+                _jobs[job_id]["error"] = str(exc)
+
+
 @app.on_event("startup")
 def _startup_preload():
     if PRELOAD_MODEL:
@@ -137,8 +240,88 @@ def health(x_api_key: Optional[str] = Header(default=None)):
         "model_id": MODEL_ID,
         "model_loaded": _pipeline is not None,
         "quantize_4bit": QUANTIZE_4BIT,
+        "default_steps": DEFAULT_STEPS,
+        "max_edge": MAX_EDGE,
         **gpu,
     }
+
+
+@app.post("/jobs")
+async def submit_job(
+    image: UploadFile = File(...),
+    prompt: str = Form(...),
+    negative_prompt: str = Form(DEFAULT_NEGATIVE_PROMPT),
+    steps: int = Form(DEFAULT_STEPS),
+    guidance_scale: float = Form(4.0),
+    seed: Optional[int] = Form(None),
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """Submit an async GPU generation job (returns immediately — never hits Cloudflare 524!)."""
+    _verify_api_key(x_api_key)
+    _prune_old_jobs()
+
+    raw_bytes = await image.read()
+    await image.close()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty image uploaded.")
+
+    try:
+        ref_img = _prepare_ref_image(raw_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
+
+    job_id = uuid.uuid4().hex[:12]
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "status": "queued",
+            "created_at": time.time(),
+            "error": None,
+            "png_bytes": None,
+            "headers": {},
+        }
+
+    thread = threading.Thread(
+        target=_background_job_runner,
+        args=(job_id, ref_img, prompt, negative_prompt, steps, guidance_scale, seed),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/jobs/{job_id}")
+def get_job_status(job_id: str, x_api_key: Optional[str] = Header(default=None)):
+    """Check status of an async GPU generation job."""
+    _verify_api_key(x_api_key)
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found.")
+        return {
+            "job_id": job_id,
+            "status": job["status"],
+            "elapsed_sec": round(time.time() - job["created_at"], 1),
+            "error": job["error"],
+        }
+
+
+@app.get("/jobs/{job_id}/result")
+def get_job_result(job_id: str, x_api_key: Optional[str] = Header(default=None)):
+    """Download the generated PNG once job status is 'done'."""
+    _verify_api_key(x_api_key)
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found.")
+        if job["status"] == "error":
+            raise HTTPException(status_code=500, detail=job["error"] or "GPU job failed.")
+        if job["status"] != "done" or not job["png_bytes"]:
+            raise HTTPException(status_code=202, detail=f"Job still {job['status']}.")
+        png_bytes = job["png_bytes"]
+        headers = dict(job["headers"])
+        _jobs.pop(job_id, None)
+
+    return Response(content=png_bytes, media_type="image/png", headers=headers)
 
 
 @app.post("/generate")
@@ -146,12 +329,12 @@ async def generate_garment(
     image: UploadFile = File(..., description="Original model-worn reference image."),
     prompt: str = Form(..., description="Detailed garment extraction prompt from ChatGPT Vision + studio rules."),
     negative_prompt: str = Form(DEFAULT_NEGATIVE_PROMPT),
-    steps: int = Form(28),
+    steps: int = Form(DEFAULT_STEPS),
     guidance_scale: float = Form(4.0),
     seed: Optional[int] = Form(None),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Run Qwen-Image-Edit on RTX 3090 and return clean studio garment PNG."""
+    """Run synchronous Qwen-Image-Edit generation on RTX 3090."""
     _verify_api_key(x_api_key)
 
     raw_bytes = await image.read()
@@ -160,56 +343,21 @@ async def generate_garment(
         raise HTTPException(status_code=400, detail="Empty image uploaded.")
 
     try:
-        ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGB")
+        ref_img = _prepare_ref_image(raw_bytes)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
-    # Cap max input edge to 1024px for crisp, fast 24GB VRAM inference
-    w, h = ref_img.size
-    if max(w, h) > 1024:
-        scale = 1024 / float(max(w, h))
-        ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
-
     try:
-        pipe = load_qwen_pipeline()
-    except Exception as exc:
-        logger.exception("Model load failed: %s", exc)
-        raise HTTPException(status_code=503, detail=f"Failed to load Qwen model: {exc}") from exc
-
-    used_seed = seed if seed is not None else int(time.time()) % 1000000
-    generator = torch.Generator(device="cuda").manual_seed(used_seed)
-
-    t0 = time.perf_counter()
-    try:
-        with _pipe_lock, torch.inference_mode():
-            result = pipe(
-                image=ref_img,
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                num_inference_steps=max(8, min(50, int(steps))),
-                true_cfg_scale=float(guidance_scale),
-                generator=generator,
-            )
-            out_img: Image.Image = result.images[0]
-            torch.cuda.empty_cache()
+        png_bytes, headers = _run_inference_sync(
+            ref_img=ref_img,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+        )
     except Exception as exc:
         logger.exception("Qwen inference error: %s", exc)
         raise HTTPException(status_code=500, detail=f"GPU inference failed: {exc}") from exc
 
-    elapsed = round(time.perf_counter() - t0, 2)
-    gpu_info = _get_gpu_info()
-
-    buf = io.BytesIO()
-    out_img.save(buf, format="PNG")
-
-    return Response(
-        content=buf.getvalue(),
-        media_type="image/png",
-        headers={
-            "X-Model-Name": MODEL_ID,
-            "X-GPU-Name": gpu_info["gpu_name"],
-            "X-Inference-Time-Sec": str(elapsed),
-            "X-Seed": str(used_seed),
-        },
-    )
-
+    return Response(content=png_bytes, media_type="image/png", headers=headers)

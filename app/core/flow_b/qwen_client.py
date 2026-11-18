@@ -1,14 +1,15 @@
 """Remote GPU Worker client for Flow B Qwen-Image-Edit generation.
 
 Connects Server 1 (Contabo CPU API) to Server 2 (AIC Cloud RTX 3090 GPU Worker)
-over HTTP with API Key authentication. Zero heavy diffusers/GPU weights are loaded
-on Server 1.
+using an async job-submit + poll pattern (POST /jobs -> GET /jobs/{id} -> GET /jobs/{id}/result),
+making Cloudflare 100s (HTTP 524) proxy timeouts completely impossible.
 """
 from __future__ import annotations
 
 import io
 import logging
 import os
+import time
 from typing import Any
 
 import httpx
@@ -27,9 +28,9 @@ def _get_api_key() -> str:
 
 def _get_timeout() -> float:
     try:
-        return float(os.getenv("QWEN_TIMEOUT_SECONDS", "180"))
+        return float(os.getenv("QWEN_TIMEOUT_SECONDS", "300"))
     except ValueError:
-        return 180.0
+        return 300.0
 
 
 def is_gpu_worker_configured() -> tuple[bool, str]:
@@ -73,16 +74,18 @@ def check_gpu_worker_health() -> dict[str, Any]:
 def generate_garment_via_gpu(
     reference_image: Image.Image,
     prompt: str,
-    steps: int = 28,
+    steps: int = 18,
     guidance_scale: float = 4.0,
     seed: int | None = None,
 ) -> tuple[Image.Image, dict[str, Any]]:
-    """Send reference photo + ChatGPT prompt to the RTX 3090 GPU Worker and receive generated garment PNG.
+    """Submit reference photo + ChatGPT prompt to RTX 3090 GPU Worker and poll until PNG is ready.
+
+    Uses short-lived HTTP calls (submit -> poll -> fetch) so Cloudflare Tunnel never hits HTTP 524.
 
     Args:
         reference_image: Original model-worn PIL image.
         prompt: Detailed garment extraction prompt (from ChatGPT Vision + studio rules).
-        steps: Denoising inference steps on GPU.
+        steps: Denoising inference steps on GPU (default 18 for fast, crisp RTX 3090 output).
         guidance_scale: Guidance scale for Qwen-Image-Edit.
         seed: Optional deterministic random seed.
 
@@ -90,13 +93,12 @@ def generate_garment_via_gpu(
         Tuple of (generated PIL Image, metadata dict).
 
     Raises:
-        RuntimeError: If GPU worker is not configured, offline, or returns an error.
+        RuntimeError: If GPU worker is not configured, offline, or fails.
     """
     configured, remote_url = is_gpu_worker_configured()
     if not configured:
         raise RuntimeError(remote_url)
 
-    # Encode reference image as high-quality PNG/JPEG for upload
     ref_rgb = reference_image.convert("RGB")
     buf = io.BytesIO()
     ref_rgb.save(buf, format="PNG")
@@ -115,43 +117,65 @@ def generate_garment_via_gpu(
     if seed is not None:
         form_data["seed"] = str(seed)
 
-    endpoint = f"{remote_url}/generate"
-    timeout_sec = _get_timeout()
+    max_wait_sec = _get_timeout()
+    t_start = time.perf_counter()
 
-    logger.info("Sending Flow B garment generation request to GPU worker: %s", endpoint)
+    logger.info("Submitting Flow B async job to GPU worker: %s/jobs", remote_url)
     try:
-        with httpx.Client(timeout=timeout_sec) as client:
-            resp = client.post(
-                endpoint,
+        with httpx.Client(timeout=30.0) as client:
+            # 1. Submit job (completes in < 0.5s — immune to Cloudflare 524!)
+            submit_resp = client.post(
+                f"{remote_url}/jobs",
                 headers=headers,
                 files={"image": ("reference.png", img_bytes, "image/png")},
                 data=form_data,
             )
+            if submit_resp.status_code != 200:
+                raise RuntimeError(f"GPU Worker /jobs returned HTTP {submit_resp.status_code}: {submit_resp.text[:300]}")
+
+            job_id = submit_resp.json()["job_id"]
+            logger.info("GPU job %s queued; polling status...", job_id)
+
+            # 2. Poll job status every 2.5s until done or error
+            while True:
+                if time.perf_counter() - t_start > max_wait_sec:
+                    raise RuntimeError(f"GPU Worker job {job_id} timed out after {max_wait_sec}s.")
+
+                time.sleep(2.5)
+                status_resp = client.get(f"{remote_url}/jobs/{job_id}", headers=headers)
+                if status_resp.status_code != 200:
+                    raise RuntimeError(f"GPU Worker status check failed ({status_resp.status_code}): {status_resp.text[:200]}")
+
+                state = status_resp.json()
+                job_status = state.get("status")
+                if job_status == "done":
+                    break
+                if job_status == "error":
+                    raise RuntimeError(f"GPU Worker job failed: {state.get('error', 'Unknown GPU error')}")
+
+            # 3. Fetch final PNG bytes
+            result_resp = client.get(f"{remote_url}/jobs/{job_id}/result", headers=headers, timeout=60.0)
+            if result_resp.status_code != 200:
+                raise RuntimeError(f"GPU Worker result fetch failed ({result_resp.status_code}): {result_resp.text[:200]}")
+
     except httpx.ConnectError as exc:
         raise RuntimeError(
-            f"Cannot connect to GPU Worker at {remote_url}. Ensure the AIC Cloud RTX 3090 instance is started and port 8001 is open."
+            f"Cannot connect to GPU Worker at {remote_url}. Ensure the AIC Cloud RTX 3090 instance is started."
         ) from exc
-    except httpx.TimeoutException as exc:
-        raise RuntimeError(
-            f"GPU Worker timed out after {timeout_sec}s while generating garment."
-        ) from exc
+    except RuntimeError:
+        raise
     except Exception as exc:
         raise RuntimeError(f"GPU Worker communication error: {exc}") from exc
 
-    if resp.status_code != 200:
-        detail = resp.text[:300]
-        raise RuntimeError(f"GPU Worker returned HTTP {resp.status_code}: {detail}")
-
     try:
-        generated_img = Image.open(io.BytesIO(resp.content)).convert("RGBA")
+        generated_img = Image.open(io.BytesIO(result_resp.content)).convert("RGBA")
     except Exception as exc:
         raise RuntimeError(f"Invalid image received from GPU Worker: {exc}") from exc
 
     metadata = {
-        "model": resp.headers.get("X-Model-Name", "Qwen-Image-Edit"),
-        "inference_time_sec": resp.headers.get("X-Inference-Time-Sec", "0"),
-        "gpu_name": resp.headers.get("X-GPU-Name", "RTX 3090"),
-        "seed": resp.headers.get("X-Seed", str(seed or "")),
+        "model": result_resp.headers.get("X-Model-Name", "Qwen-Image-Edit"),
+        "inference_time_sec": result_resp.headers.get("X-Inference-Time-Sec", "0"),
+        "gpu_name": result_resp.headers.get("X-GPU-Name", "RTX 3090"),
+        "seed": result_resp.headers.get("X-Seed", str(seed or "")),
     }
     return generated_img, metadata
-

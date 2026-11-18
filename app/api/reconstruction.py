@@ -95,7 +95,7 @@ async def qwen_image_endpoint(
     original_image: UploadFile = File(..., description="Original model-worn photograph."),
     target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', 'lehenga'."),
     prompt: Optional[str] = Form(None, description="Optional custom prompt override (auto-generated via ChatGPT Vision if omitted)."),
-    steps: int = Form(28, description="Denoising inference steps on GPU."),
+    steps: int = Form(18, description="Denoising inference steps on GPU."),
     guidance_scale: float = Form(4.0, description="Guidance scale for Qwen-Image-Edit."),
     seed: Optional[int] = Form(None, description="Optional random seed."),
 ):
