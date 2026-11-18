@@ -1,4 +1,4 @@
-"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Qwen-Image-Edit).
+"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Qwen-Image-Edit + Lightning 8-Step LoRA).
 
 Run on AIC Cloud RTX 3090 GPU Server (24GB VRAM):
     uvicorn server:app --host 0.0.0.0 --port 8001
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import os
 import threading
 import time
@@ -33,19 +34,22 @@ logger = logging.getLogger("qwen-gpu-worker")
 
 # Configuration via environment variables
 MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-Edit").strip()
+USE_LIGHTNING_LORA = os.getenv("QWEN_USE_LIGHTNING", "true").strip().lower() in ("1", "true", "yes")
+LIGHTNING_LORA_REPO = os.getenv("QWEN_LORA_REPO", "lightx2v/Qwen-Image-Lightning").strip()
+LIGHTNING_LORA_WEIGHT = os.getenv("QWEN_LORA_WEIGHT", "Qwen-Image-Edit-Lightning-8steps-V1.0.safetensors").strip()
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
 QUANTIZE_4BIT = os.getenv("QWEN_QUANTIZE_4BIT", "true").strip().lower() in ("1", "true", "yes")
 PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
-MAX_EDGE = int(os.getenv("QWEN_MAX_EDGE", "768"))
-DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "18"))
-DEFAULT_NEGATIVE_PROMPT = (
-    "person, human, model, face, head, hands, fingers, arms, legs, skin, hair, mannequin, "
-    "hanger, cluttered background, shadows, watermark, text, blurry, distorted pattern"
-)
+MAX_EDGE = int(os.getenv("QWEN_MAX_EDGE", "1024"))
+DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "8" if USE_LIGHTNING_LORA else "40"))
+DEFAULT_CFG = float(os.getenv("QWEN_DEFAULT_CFG", "1.0" if USE_LIGHTNING_LORA else "4.0"))
+# Official Qwen-Image-Edit requires a single space negative_prompt for razor-sharp texture fidelity
+DEFAULT_NEGATIVE_PROMPT = " "
 
-app = FastAPI(title="Arangtik Qwen GPU Worker", version="2.1.0")
+app = FastAPI(title="Arangtik Qwen GPU Worker (Lightning 8-Step)", version="2.2.0")
 
 _pipeline = None
+_lora_active = False
 _pipe_lock = threading.Lock()
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
@@ -71,8 +75,8 @@ def _get_gpu_info() -> dict:
 
 
 def load_qwen_pipeline():
-    """Load Qwen-Image-Edit optimized for 24GB VRAM (RTX 3090)."""
-    global _pipeline
+    """Load Qwen-Image-Edit + Lightning 8-Step LoRA optimized for RTX 3090 (24GB VRAM)."""
+    global _pipeline, _lora_active
     if _pipeline is not None:
         return _pipeline
 
@@ -83,13 +87,33 @@ def load_qwen_pipeline():
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA GPU not detected on this server.")
 
-        from diffusers import QwenImageEditPipeline
+        from diffusers import FlowMatchEulerDiscreteScheduler, QwenImageEditPipeline
 
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        logger.info("Loading %s (dtype=%s, 4bit=%s)...", MODEL_ID, dtype, QUANTIZE_4BIT)
+        logger.info("Loading %s (dtype=%s, 4bit=%s, lightning=%s)...", MODEL_ID, dtype, QUANTIZE_4BIT, USE_LIGHTNING_LORA)
         t0 = time.perf_counter()
 
         load_kwargs: dict[str, Any] = {"torch_dtype": dtype}
+
+        # Distilled FlowMatch scheduler required for Lightning 8-step LoRA sharpness
+        if USE_LIGHTNING_LORA:
+            scheduler_config = {
+                "base_image_seq_len": 256,
+                "base_shift": math.log(3),
+                "invert_sigmas": False,
+                "max_image_seq_len": 8192,
+                "max_shift": math.log(3),
+                "num_train_timesteps": 1000,
+                "shift": 1.0,
+                "shift_terminal": None,
+                "stochastic_sampling": False,
+                "time_shift_type": "exponential",
+                "use_beta_sigmas": False,
+                "use_dynamic_shifting": True,
+                "use_exponential_sigmas": False,
+                "use_karras_sigmas": False,
+            }
+            load_kwargs["scheduler"] = FlowMatchEulerDiscreteScheduler.from_config(scheduler_config)
 
         # 4-bit NF4 quantization keeps 20B Qwen-Image-Edit safely within RTX 3090 24GB VRAM
         if QUANTIZE_4BIT:
@@ -111,19 +135,30 @@ def load_qwen_pipeline():
 
         pipe = QwenImageEditPipeline.from_pretrained(MODEL_ID, **load_kwargs)
 
+        # Attach official Lightning 8-Step LoRA (unfused — compatible with 4-bit NF4 weights!)
+        if USE_LIGHTNING_LORA:
+            try:
+                logger.info("Loading Lightning LoRA: %s / %s", LIGHTNING_LORA_REPO, LIGHTNING_LORA_WEIGHT)
+                pipe.load_lora_weights(LIGHTNING_LORA_REPO, weight_name=LIGHTNING_LORA_WEIGHT)
+                _lora_active = True
+                logger.info("Lightning 8-Step LoRA attached successfully!")
+            except Exception as exc:
+                _lora_active = False
+                logger.warning("Failed to load Lightning LoRA (%s); continuing with base model.", exc)
+
         # CPU offload guarantees zero OOM spikes on 24GB VRAM + 31GB System RAM
         if hasattr(pipe, "enable_model_cpu_offload"):
             pipe.enable_model_cpu_offload()
         else:
             pipe.to("cuda")
 
-        if hasattr(pipe, "enable_vae_slicing"):
-            pipe.enable_vae_slicing()
-        if hasattr(pipe, "enable_vae_tiling"):
-            pipe.enable_vae_tiling()
+        if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
+            pipe.vae.enable_slicing()
+        if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
+            pipe.vae.enable_tiling()
 
         _pipeline = pipe
-        logger.info("Model %s loaded in %.2fs.", MODEL_ID, time.perf_counter() - t0)
+        logger.info("Model %s ready in %.2fs (lightning_lora=%s).", MODEL_ID, time.perf_counter() - t0, _lora_active)
         return _pipeline
 
 
@@ -144,19 +179,31 @@ def _run_inference_sync(
     guidance_scale: float,
     seed: Optional[int],
 ) -> tuple[bytes, dict[str, str]]:
-    """Run Qwen-Image-Edit under GPU lock and return PNG bytes + headers."""
+    """Run Qwen-Image-Edit under GPU lock and return crisp PNG bytes + headers."""
     pipe = load_qwen_pipeline()
     used_seed = seed if seed is not None else int(time.time()) % 1000000
     generator = torch.Generator(device="cuda").manual_seed(used_seed)
+
+    # Enforce optimal steps & CFG for Lightning 8-step LoRA vs base model
+    actual_steps = max(4, min(50, int(steps)))
+    actual_cfg = float(guidance_scale)
+    if _lora_active and actual_steps <= 12:
+        actual_cfg = 1.0
+    elif not _lora_active and actual_steps < 28:
+        actual_steps = 36
+        actual_cfg = 4.0
+
+    # Official Qwen-Image-Edit works sharpest with blank single-space negative_prompt
+    neg = negative_prompt if negative_prompt and negative_prompt.strip() else " "
 
     t0 = time.perf_counter()
     with _pipe_lock, torch.inference_mode():
         result = pipe(
             image=ref_img,
             prompt=prompt,
-            negative_prompt=negative_prompt,
-            num_inference_steps=max(8, min(40, int(steps))),
-            true_cfg_scale=float(guidance_scale),
+            negative_prompt=neg,
+            num_inference_steps=actual_steps,
+            true_cfg_scale=actual_cfg,
             generator=generator,
         )
         out_img: Image.Image = result.images[0]
@@ -168,7 +215,7 @@ def _run_inference_sync(
     buf = io.BytesIO()
     out_img.save(buf, format="PNG")
     headers = {
-        "X-Model-Name": MODEL_ID,
+        "X-Model-Name": f"{MODEL_ID}+Lightning-8step" if _lora_active else MODEL_ID,
         "X-GPU-Name": gpu_info["gpu_name"],
         "X-Inference-Time-Sec": str(elapsed),
         "X-Seed": str(used_seed),
@@ -238,6 +285,7 @@ def health(x_api_key: Optional[str] = Header(default=None)):
     return {
         "status": "ok",
         "model_id": MODEL_ID,
+        "lightning_lora": _lora_active,
         "model_loaded": _pipeline is not None,
         "quantize_4bit": QUANTIZE_4BIT,
         "default_steps": DEFAULT_STEPS,
@@ -252,7 +300,7 @@ async def submit_job(
     prompt: str = Form(...),
     negative_prompt: str = Form(DEFAULT_NEGATIVE_PROMPT),
     steps: int = Form(DEFAULT_STEPS),
-    guidance_scale: float = Form(4.0),
+    guidance_scale: float = Form(DEFAULT_CFG),
     seed: Optional[int] = Form(None),
     x_api_key: Optional[str] = Header(default=None),
 ):
@@ -330,7 +378,7 @@ async def generate_garment(
     prompt: str = Form(..., description="Detailed garment extraction prompt from ChatGPT Vision + studio rules."),
     negative_prompt: str = Form(DEFAULT_NEGATIVE_PROMPT),
     steps: int = Form(DEFAULT_STEPS),
-    guidance_scale: float = Form(4.0),
+    guidance_scale: float = Form(DEFAULT_CFG),
     seed: Optional[int] = Form(None),
     x_api_key: Optional[str] = Header(default=None),
 ):

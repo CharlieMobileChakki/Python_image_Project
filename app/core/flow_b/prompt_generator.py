@@ -20,33 +20,35 @@ logger = logging.getLogger(__name__)
 
 # Fixed backend studio rules appended to every Flow B garment generation prompt
 COMMON_STUDIO_RULES = (
-    "Create a clean, photorealistic, centered flat-lay ghost-mannequin e-commerce product photograph "
-    "of ONLY this exact garment from the reference image on a pure solid white background (#FFFFFF). "
-    "Completely remove the person, human body, skin, face, neck, hands, arms, hair, jewelry, bags, "
-    "hangers, and original background. "
-    "Naturally reconstruct any fabric area, folds, pleats, sleeves, or waistline that were covered "
-    "by hands, arms, or hair in the original photo. "
-    "Strictly preserve the exact original color, fabric texture, weave, prints, embroidery, borders, "
-    "buttons, neckline, collar, and silhouette from the reference photo. "
-    "Studio catalog lighting, crisp clean edges, no extra objects, pure solid white background."
+    "Transform this into a sharp, ultra-clear, high-resolution ghost-mannequin e-commerce studio product photograph "
+    "of ONLY this exact garment centered on a pure solid white background (#FFFFFF). "
+    "Remove the woman/person, face, head, hair, skin, hands, arms, feet, necklace, jewelry, and outdoor/room background completely. "
+    "Keep the EXACT same color shade, smooth fabric finish, neckline shape, sleeve trims/borders, silhouette, and proportions as worn in the input photo — "
+    "do NOT invent new patterns, speckles, or extra textures that are not in the original photo. "
+    "Crisp studio lighting, clean sharp fabric edges, photorealistic retail catalog quality."
 )
 
-SYSTEM_VISION_PROMPT = """You are a senior e-commerce fashion catalog analyst.
-Inspect the provided photograph of a person wearing clothing and identify the main wearable garment(s).
+SYSTEM_VISION_PROMPT = """You are a senior e-commerce fashion catalog analyst writing concise image-editing instructions.
+Inspect the photograph of the person wearing clothing and describe the main wearable garment(s) with 100% factual accuracy.
 
 Rules:
-1. If the person wears a single full outfit (dress, gown, jumpsuit, saree, anarkali, kurta-set shown as one piece), return 1 garment item.
-2. If the person wears distinct separate garments (e.g., shirt/top + jeans/pants/skirt, or jacket + pants), list each main wearable garment separately (maximum 3 items). Do NOT list shoes, bags, glasses, hats, or jewelry.
-3. For each garment, write a precise visual description covering: exact garment type, exact color/shade, fabric material/texture, neckline/collar, sleeve length/style, prints/patterns/embroidery/borders, buttons/zippers, and fit/silhouette.
+1. If the person wears a matching ethnic suit set (kurta + matching salwar/pants + matching dupatta), dress, gown, jumpsuit, or saree, return 1 combined garment item so the complete matching outfit stays faithful.
+2. Only split into 2 items if the person clearly wears contrasting western separates (e.g., white shirt + blue denim jeans). Never list shoes, bags, necklaces, jewelry, or hats.
+3. For each garment, accurately specify:
+   - Exact color shade (e.g., solid deep magenta-purple, navy blue)
+   - Fabric surface: explicitly say "smooth plain solid fabric" if it has NO print, OR describe the exact print/embroidery if present
+   - Exact neckline/collar shape (e.g., V-neck slit, round neck, mandarin collar)
+   - Exact sleeves and any borders/trim/stripes (e.g., three-quarter sleeves with thin gold zari stripe border, matching draped dupatta with gold border)
+   - Exact lower portion if included (e.g., matching straight salwar/pants)
 4. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
 
-Return strictly valid JSON in this exact format:
+Return strictly valid JSON:
 {
   "garments": [
     {
-      "category": "upper_clothes",
-      "recognized_label": "Navy Blue Cotton Kurta",
-      "garment_description": "Navy blue straight-cut cotton kurta with mandarin collar, three-quarter sleeves, white floral thread embroidery along the placket and hem, side slits."
+      "category": "dress",
+      "recognized_label": "Magenta Kurta Suit Set with Gold Border",
+      "garment_description": "Solid smooth deep magenta-purple straight-cut ethnic kurta with slit V-neckline, three-quarter sleeves featuring a thin gold zari stripe border, matching magenta dupatta with gold striped border and tassels, and matching magenta salwar pants."
     }
   ]
 }"""
