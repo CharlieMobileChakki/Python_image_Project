@@ -30,8 +30,8 @@ from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
 from app.core.flow_b import check_gpu_worker_health
 from app.core.model_manager import are_models_loaded, load_flow_a
+from app.core.model_manager.model_registry import FLOW_A_MODEL_NAME
 from app.schemas import HealthResponse
-from app.services.extraction import MODEL_NAME as FLOW_A_MODEL_NAME, load_model
 
 MODEL_NAME = FLOW_A_MODEL_NAME
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -48,7 +48,6 @@ OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 async def lifespan(app: FastAPI):
     """Preload Flow A (BiRefNet Lite) model once during server startup."""
     print("Preloading Arangtik Garment AI (Flow A: BiRefNet Lite)...")
-    await run_in_threadpool(load_model)
     try:
         await run_in_threadpool(load_flow_a)
         print("  - BiRefNet Lite loaded.")
