@@ -25,55 +25,56 @@ COMMON_STUDIO_RULES = (
     "Strictly preserve the exact original colors, high-contrast repeating print motifs, embroidery stitches, textile texture, neckline shape, borders, "
     "and authentic garment silhouette from the reference photograph — do NOT smooth out, blur, or wash out intricate prints or motifs. "
     "Centered upright 3D ghost-mannequin studio product photograph, crisp professional e-commerce studio lighting, "
-    "pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, or shadows."
+    "pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
 
 SYSTEM_VISION_PROMPT = """You are a master e-commerce fashion catalog director and senior textile analyst creating image-editing prompts for high-end 3D ghost-mannequin catalog photography (Myntra, Ajio, Meesho, Zara, Amazon Fashion).
 
-Your job is to analyze the clothing worn in the reference photograph and produce a forensic-grade, textile-accurate description of each garment so that an AI diffusion image editor can reconstruct the EXACT standalone 3D garment without any human body parts.
+Your job is to analyze the clothing in the reference photograph (whether worn by a person OR laid flat on a bed, table, floor, or hanger) and produce a forensic-grade, textile-accurate description of each REAL stitched garment so that an AI diffusion image editor can reconstruct the EXACT standalone 3D garment without any human body parts and without any background surfaces.
 
-CRITICAL TEXTILE & PATTERN RULES:
-1. Fabric Surface & Motif Breakdown (DO NOT GENERALIZE):
-   - Never say just "printed" or "floral". You must dissect the exact motifs:
-     * Base fabric color and texture (e.g., crisp white cotton, textured linen weave, pure raw slub silk, georgette, denim wash).
-     * Exact motif type: e.g., botanical leaves and palm fronds, miniature traditional Indian floral booti/buta, bandhani dots, geometric jaal, block print, paisley, ikat, or embroidery stitches.
-     * Specific motif colors: e.g., soft sky-blue, royal indigo, terracotta-red, or chocolate-brown motifs.
-     * Pattern layout & density: e.g., dense repeating botanical foliage evenly distributed across the entire body and sleeves.
-     * If the garment is PLAIN SOLID with no pattern (like denim jeans or plain t-shirt), explicitly state: "pure solid smooth fabric with no print, no pattern, and no motif".
+CRITICAL RULES:
 
-2. Silhouette & Construction Anatomy:
-   - Neckline / Collar: Exact shape (e.g., standard turn-down shirt point collar, Mandarin band collar, V-neck slit, round crew neck, polo collar, sweetheart neckline).
+1. BACKGROUND & SURFACE DISCRIMINATION (BEDSHEETS, FLOORS, RUGS, FURNITURE):
+   - The photo may show clothing laid flat on a bed, mattress, floor, table, or sofa.
+   - STRICT RULE: The bedsheet, bed cover, blanket, quilt, floor rug, carpet, or wooden bed frame is 100% BACKGROUND FURNITURE.
+   - NEVER, UNDER ANY CIRCUMSTANCES, MISTAKE A BEDSHEET OR BED COVER PATTERN FOR A GARMENT!
+     * Even if the bedsheet has intricate geometric patterns (e.g., honeycomb hexagons, mandalas, block prints, florals, or decorative borders), it is STRICTLY BACKGROUND.
+     * DO NOT extract the bedsheet as a shirt, kurta, top, dupatta, or fabric!
+     * DO NOT transfer the bedsheet's pattern, prints, or colors onto any garment description!
+   - ONLY analyze genuine, stitched, wearable clothing items (e.g., an olive green kurta laid on the bed).
+   - If only ONE garment is present in the photo (e.g., only a kurta lying on a bed), return ONLY THAT SINGLE GARMENT in the "garments" list. DO NOT hallucinate or invent a second garment out of the bedsheet!
+
+2. Fabric Surface & Motif Breakdown (ON THE ACTUAL GARMENT ONLY):
+   - Analyze the authentic stitched garment fabric:
+     * Base fabric color and texture (e.g., solid olive-green cotton slub weave, crisp white cotton, royal blue raw silk, denim wash).
+     * Exact motif type on the garment: botanical leaves, miniature Indian floral booti, bandhani dots, geometric jaal, block print, or embroidery stitches.
+     * Specific motif colors on the garment.
+     * Pattern layout & density on the garment.
+     * If the garment is PLAIN SOLID with no pattern (like a plain olive-green kurta or plain jeans), explicitly state: "pure solid smooth fabric with no print, no pattern, and no motif".
+
+3. Silhouette & Construction Anatomy:
+   - Neckline / Collar: Exact shape (e.g., Mandarin stand band collar / Nehru collar with small front slit, standard turn-down point collar, round crew neck, polo collar).
    - Placket & Fastenings: e.g., front chest button placket with small round matching buttons, contrast stitching, or hook closures.
-   - Sleeves: Full-length, three-quarter, or half/short sleeves; specify if the pattern continues seamlessly to the open cuffs.
-   - Slits & Hemline: Straight knee-length hem, side seam slits, flared A-line hem, curved casual shirt hem, or straight-leg ankle cuffs.
+   - Sleeves: Full-length, three-quarter, or half/short sleeves; specify if pattern/color continues seamlessly to open cuffs.
+   - Slits & Hemline: Straight knee-length hem, side seam slits, flared A-line hem, curved casual shirt hem, or straight leg cuffs.
 
-3. Outfit Mode & Separates (STRICT MULTI-GARMENT RULE):
-   - IF THE PERSON IS WEARING CONTRASTING SEPARATES (e.g. Shirt/T-shirt/Top AND Jeans/Pants/Trousers/Shorts/Skirt):
-     YOU MUST ALWAYS OUTPUT SEPARATE ENTRIES IN THE "garments" LIST:
-     * One entry for the upper garment (category: "upper_clothes"). NEVER describe or mention the pants/jeans in this entry!
-     * One entry for the lower garment (category: "pants" or "skirt"). NEVER describe or mention the shirt/top in this entry!
-     Separates of different colors or types (such as a printed shirt paired with dark denim jeans) MUST NEVER be combined into a single entry.
-   - IF THE PERSON IS WEARING A SINGLE-PIECE ENSEMBLE (e.g. full-length dress, gown, jumpsuit, romper):
-     Output a single entry with category "dress".
-   - IF THE PERSON IS WEARING A SAREE OR LEHENGA:
-     Output a single entry with category "saree" or "lehenga".
-   - IF THE PERSON IS WEARING AN ETHNIC SUIT / KURTA SET:
-     If the kurta is paired with contrasting pyjama/pants, split into "upper_clothes" (the kurta) and "pants" (the pyjama/salwar). If matching co-ord, provide the primary kurta as "upper_clothes".
+4. Outfit Mode & Separates (STRICT REALITY RULE):
+   - IF AND ONLY IF the person is actually wearing contrasting separates (e.g. shirt + jeans) OR two distinct garments are clearly laid out:
+     Output separate entries for the upper garment ("upper_clothes") and lower garment ("pants").
+   - IF ONLY ONE GARMENT IS VISIBLE OR LAID OUT (e.g., a single kurta, a single dress, a single shirt):
+     Output ONLY that one garment! Do NOT invent a second garment.
+   - IF THE OUTFIT IS A ONE-PIECE ENSEMBLE (dress, gown, jumpsuit, saree, lehenga):
+     Output a single entry with category "dress", "saree", or "lehenga".
 
-4. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
+5. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
 
 Return strictly valid JSON format:
 {
   "garments": [
     {
       "category": "upper_clothes",
-      "recognized_label": "Light Blue Leaf Print Short-Sleeve Shirt",
-      "garment_description": "Men's casual short-sleeve button-down shirt crafted from crisp white cotton fabric, adorned with all-over botanical leaf and palm frond motifs printed in soft sky-blue. Features a standard turn-down collar, front chest placket with small white buttons, short hemmed sleeves, and a curved casual shirt hem."
-    },
-    {
-      "category": "pants",
-      "recognized_label": "Dark Indigo Denim Jeans",
-      "garment_description": "Men's classic five-pocket straight-fit denim jeans in a deep indigo-blue wash with subtle natural fading, contrast copper-gold stitching, standard waistband with belt loops, front metal button and zip fly, and clean straight leg hems."
+      "recognized_label": "Olive Green Cotton Slub Kurta",
+      "garment_description": "Men's traditional straight-cut knee-length ethnic kurta crafted from solid olive-green textured cotton slub fabric with no prints or patterns. Features a stiff mandarin stand band collar with a subtle front neckline slit, front chest button placket with matching buttons, full-length straight sleeves, and clean side seam slits."
     }
   ]
 }"""
@@ -116,11 +117,18 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
     else:
         isolation_rule = ""
 
+    surface_rejection = (
+        "STRICT SURFACE REJECTION: If the reference photo shows clothing placed on a bedsheet, mattress, blanket, floor, rug, carpet, or table, "
+        "COMPLETELY IGNORE the bedsheet and its background patterns! Do NOT apply any bedsheet print, geometric shapes, or bedding colors to the garment. "
+        "Reconstruct ONLY the authentic stitched garment itself."
+    )
+
     return (
         "Generate an empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
         "garment floating upright in natural 3D volume on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
-        "NO head, NO face, NO hair, NO neck, NO skin, NO hands, NO arms, NO legs, NO feet, and NO jewelry anywhere in the image. "
+        "NO head, NO face, NO hair, NO neck, NO skin, NO hands, NO arms, NO legs, NO feet, NO bed, NO bedsheet, NO blanket, NO carpet, NO floor, and NO jewelry anywhere in the image. "
         f"{isolation_rule} "
+        f"{surface_rejection} "
         f"Exact standalone garment and intricate textile pattern to isolate and faithfully reconstruct from the reference photo: {garment_description.strip()} (category: {category}). "
         f"{COMMON_STUDIO_RULES}"
     )
@@ -191,30 +199,36 @@ def analyze_garment_and_build_prompts(
     target_norm = (target_garment or "all").strip().lower()
     if target_norm == "upper_clothes":
         user_instruction = (
-            "Analyze ONLY the UPPER-BODY garment (shirt, t-shirt, top, kurta, jacket) worn by the person in this image. "
-            "Completely IGNORE and exclude the pants, jeans, trousers, or bottom wear. "
-            "Examine the fabric at high resolution: identify the exact base color, print/booti motifs, "
-            "pattern density, collar shape, buttons/placket, and sleeve style so the 3D ghost mannequin replicates the exact authentic design."
+            "Analyze ONLY the UPPER-BODY garment (shirt, t-shirt, top, kurta, jacket) in this image. "
+            "Completely IGNORE and exclude any pants, jeans, trousers, or bottom wear. "
+            "STRICT BACKGROUND RULE: If the clothing is placed on a bedsheet, mattress, blanket, floor, or table, "
+            "the bedsheet / floor is 100% BACKGROUND. Do NOT mistake bedsheet patterns for garment motifs! "
+            "Examine the actual garment fabric at high resolution: identify the exact base color, print/booti motifs, "
+            "collar shape, buttons/placket, and sleeve style so the 3D ghost mannequin replicates the authentic design."
         )
     elif target_norm in ("pants", "skirt"):
         user_instruction = (
-            "Analyze ONLY the LOWER-BODY garment (pants, jeans, trousers, shorts, skirt) worn by the person in this image. "
-            "Completely IGNORE and exclude the upper-body shirt, top, or kurta. "
-            "Examine the fabric at high resolution: identify the exact denim/fabric wash, color, fit, pockets, stitching, and hems."
+            "Analyze ONLY the LOWER-BODY garment (pants, jeans, trousers, shorts, skirt) in this image. "
+            "Completely IGNORE and exclude any upper-body shirt, top, or kurta. "
+            "STRICT BACKGROUND RULE: If placed on a bedsheet, blanket, or floor, IGNORE the bedsheet completely. "
+            "Examine the actual pants fabric at high resolution: identify the exact fabric wash, color, fit, pockets, stitching, and hems."
         )
     elif target_norm in ("dress", "saree", "lehenga"):
         user_instruction = (
-            f"Analyze the full {target_norm} worn by the person in this image. "
-            "Examine the fabric at high resolution: identify the exact colors, intricate borders, prints, embroidery, and drape."
+            f"Analyze the full {target_norm} in this image. "
+            "STRICT BACKGROUND RULE: If placed on a bedsheet, blanket, or floor, IGNORE the background bedsheet completely. "
+            "Examine the fabric at high resolution: identify exact colors, borders, prints, embroidery, and drape."
         )
     else:  # "all"
         user_instruction = (
-            "Analyze the clothing worn by the person in this image. "
-            "CRITICAL: If the person is wearing contrasting separates (such as shirt/t-shirt/kurta + jeans/pants/trousers), "
-            "you MUST return TWO separate items in the 'garments' list: one for 'upper_clothes' and one for 'pants'. "
-            "Never merge contrasting tops and bottoms into a single item. "
-            "If the person is wearing a single-piece dress, saree, or lehenga, return that single item. "
-            "For each item, examine fabric at high resolution: base color, motifs, collar, buttons, and cut."
+            "Analyze the clothing in this image. "
+            "CRITICAL BACKGROUND RULE: If the clothing is laid flat on a bed, mattress, floor, rug, or table, "
+            "the bedsheet, blanket, or floor is 100% BACKGROUND. NEVER treat bedsheet patterns (hexagons, mandalas, geometric prints, borders) as clothing! "
+            "Only identify genuine stitched wearable clothing items. "
+            "If only ONE garment is present (e.g. an olive green kurta on a bed), return ONLY THAT SINGLE GARMENT in 'garments'. "
+            "DO NOT hallucinate or invent a second garment out of the bedsheet. "
+            "If contrasting separates (e.g. shirt + jeans) are actually present, return separate items for 'upper_clothes' and 'pants'. "
+            "Examine the genuine clothing fabric at high resolution: base color, true motifs, collar, and cut."
         )
 
     payload: dict[str, Any] = {
