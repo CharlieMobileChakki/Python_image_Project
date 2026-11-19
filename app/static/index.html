@@ -966,7 +966,7 @@ select.studio-select:focus {
     </div>
 
     <div class="header-actions">
-      <div id="gpuPill" class="gpu-pill" title="Checking GPU Worker status...">
+      <div id="gpuPill" class="gpu-pill" onclick="updateGpuUrl()" style="cursor: pointer;" title="Click to update GPU Worker URL">
         <span id="gpuDot" class="pulse-dot amber"></span>
         <span id="gpuText">Checking GPU Status...</span>
       </div>
@@ -1178,11 +1178,11 @@ select.studio-select:focus {
         if (gpuOnline) {
           gpuDot.className = 'pulse-dot';
           gpuText.textContent = `${gpuName} • 24GB VRAM (Connected)`;
-          document.getElementById('gpuPill').title = `Connected to GPU Worker at ${data.hardware.gpu_worker_url}`;
+          document.getElementById('gpuPill').title = `Connected to ${data.hardware.gpu_worker_url} (Click to change)`;
         } else {
           gpuDot.className = 'pulse-dot amber';
-          gpuText.textContent = `Contabo CPU • Flow A Active`;
-          document.getElementById('gpuPill').title = 'GPU Worker offline or connecting...';
+          gpuText.textContent = `GPU Offline • Click to Reconnect`;
+          document.getElementById('gpuPill').title = `GPU Offline (${data.hardware.gpu_worker_url}). Click to paste new Cloudflare URL.`;
         }
       } catch (err) {
         gpuDot.className = 'pulse-dot amber';
@@ -1190,6 +1190,34 @@ select.studio-select:focus {
       }
     }
     window.addEventListener('DOMContentLoaded', checkHardware);
+
+    let currentGpuUrl = '';
+
+    async function updateGpuUrl() {
+      const newUrl = prompt('Enter active Cloudflare GPU Worker URL:\n(Example: https://xxxx-xxxx.trycloudflare.com)', currentGpuUrl || 'https://');
+      if (!newUrl || !newUrl.trim() || newUrl.trim() === 'https://') return;
+      
+      const gpuText = document.getElementById('gpuText');
+      const gpuDot = document.getElementById('gpuDot');
+      gpuText.textContent = 'Connecting to new GPU URL...';
+      gpuDot.className = 'pulse-dot amber';
+      
+      try {
+        const formData = new FormData();
+        formData.append('url', newUrl.trim());
+        const res = await fetch('/api/set-gpu-url', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.online) {
+          alert('🎉 GPU Worker Connected Successfully!\nGPU: ' + (data.gpu_health.gpu_name || 'NVIDIA RTX 3090'));
+        } else {
+          alert('⚠️ GPU URL saved, but worker returned offline:\n' + (data.gpu_health.detail || 'Could not connect. Make sure uvicorn is running on port 8001.'));
+        }
+        checkHardware();
+      } catch (err) {
+        alert('Failed to update GPU URL: ' + err.message);
+        checkHardware();
+      }
+    }
 
     // Unified 3D Studio Pipeline (Always active)
     function setPipelineMode(mode) {

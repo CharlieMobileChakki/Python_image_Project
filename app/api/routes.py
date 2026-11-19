@@ -222,3 +222,43 @@ async def forward_downstream_endpoint(
             }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Downstream forward failed: {exc}") from exc
+
+
+@router.post("/set-gpu-url")
+async def set_gpu_url_endpoint(
+    url: str = Form(..., description="New Cloudflare GPU Worker URL"),
+) -> Any:
+    """Dynamically update the remote GPU worker URL in-memory and in .env without server restart."""
+    from app.core.flow_b import check_gpu_worker_health
+    cleaned_url = url.strip().rstrip("/")
+    if not (cleaned_url.startswith("http://") or cleaned_url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+
+    os.environ["QWEN_REMOTE_URL"] = cleaned_url
+
+    # Persist into .env file
+    env_file = Path(".env")
+    if env_file.exists():
+        try:
+            lines = env_file.read_text(encoding="utf-8").splitlines()
+            new_lines = []
+            found = False
+            for line in lines:
+                if line.startswith("QWEN_REMOTE_URL="):
+                    new_lines.append(f"QWEN_REMOTE_URL={cleaned_url}")
+                    found = True
+                else:
+                    new_lines.append(line)
+            if not found:
+                new_lines.append(f"QWEN_REMOTE_URL={cleaned_url}")
+            env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+    health = await run_in_threadpool(check_gpu_worker_health)
+    return {
+        "status": "ok",
+        "configured_url": cleaned_url,
+        "online": health.get("online", False),
+        "gpu_health": health,
+    }
