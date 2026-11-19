@@ -35,21 +35,30 @@ Your job is to analyze the clothing worn in the reference photograph and produce
 CRITICAL TEXTILE & PATTERN RULES:
 1. Fabric Surface & Motif Breakdown (DO NOT GENERALIZE):
    - Never say just "printed" or "floral". You must dissect the exact motifs:
-     * Base fabric color and texture (e.g., warm ivory/cream raw slub cotton, textured linen weave, pure silk, georgette).
-     * Exact motif type: e.g., miniature traditional Indian floral booti/buta, bandhani dots, geometric jaal, block print, paisley, ikat, or embroidery.
-     * Specific motif colors: e.g., miniature brick-red, terracotta, and dark chocolate-brown motifs.
-     * Pattern layout & density: e.g., dense repeating miniature bootis arranged in neat parallel vertical linear rows spaced ~1 to 1.5 cm apart across the entire body and sleeves.
-     * If the garment is PLAIN SOLID with no pattern, explicitly state: "pure solid smooth fabric with no print, no pattern, and no texture".
+     * Base fabric color and texture (e.g., crisp white cotton, textured linen weave, pure raw slub silk, georgette, denim wash).
+     * Exact motif type: e.g., botanical leaves and palm fronds, miniature traditional Indian floral booti/buta, bandhani dots, geometric jaal, block print, paisley, ikat, or embroidery stitches.
+     * Specific motif colors: e.g., soft sky-blue, royal indigo, terracotta-red, or chocolate-brown motifs.
+     * Pattern layout & density: e.g., dense repeating botanical foliage evenly distributed across the entire body and sleeves.
+     * If the garment is PLAIN SOLID with no pattern (like denim jeans or plain t-shirt), explicitly state: "pure solid smooth fabric with no print, no pattern, and no motif".
 
 2. Silhouette & Construction Anatomy:
-   - Neckline / Collar: Exact shape (e.g., Mandarin stand band collar / Nehru collar, V-neck slit, round crew neck, polo collar, sweetheart neckline).
+   - Neckline / Collar: Exact shape (e.g., standard turn-down shirt point collar, Mandarin band collar, V-neck slit, round crew neck, polo collar, sweetheart neckline).
    - Placket & Fastenings: e.g., front chest button placket with small round matching buttons, contrast stitching, or hook closures.
-   - Sleeves: Full-length, three-quarter, or half; specify if the pattern continues seamlessly to the open cuffs.
-   - Slits & Hemline: Straight knee-length hem, side seam slits, flared A-line hem, or curved shirt hem.
+   - Sleeves: Full-length, three-quarter, or half/short sleeves; specify if the pattern continues seamlessly to the open cuffs.
+   - Slits & Hemline: Straight knee-length hem, side seam slits, flared A-line hem, curved casual shirt hem, or straight-leg ankle cuffs.
 
-3. Outfit Mode & Separates:
-   - For matching ethnic kurta sets, dresses, gowns, or sarees, prioritize the primary hero garment (the kurta/dress).
-   - If contrasting separates are present (e.g., printed kurta + plain white trousers/pajama), analyze each separate item accurately.
+3. Outfit Mode & Separates (STRICT MULTI-GARMENT RULE):
+   - IF THE PERSON IS WEARING CONTRASTING SEPARATES (e.g. Shirt/T-shirt/Top AND Jeans/Pants/Trousers/Shorts/Skirt):
+     YOU MUST ALWAYS OUTPUT SEPARATE ENTRIES IN THE "garments" LIST:
+     * One entry for the upper garment (category: "upper_clothes"). NEVER describe or mention the pants/jeans in this entry!
+     * One entry for the lower garment (category: "pants" or "skirt"). NEVER describe or mention the shirt/top in this entry!
+     Separates of different colors or types (such as a printed shirt paired with dark denim jeans) MUST NEVER be combined into a single entry.
+   - IF THE PERSON IS WEARING A SINGLE-PIECE ENSEMBLE (e.g. full-length dress, gown, jumpsuit, romper):
+     Output a single entry with category "dress".
+   - IF THE PERSON IS WEARING A SAREE OR LEHENGA:
+     Output a single entry with category "saree" or "lehenga".
+   - IF THE PERSON IS WEARING AN ETHNIC SUIT / KURTA SET:
+     If the kurta is paired with contrasting pyjama/pants, split into "upper_clothes" (the kurta) and "pants" (the pyjama/salwar). If matching co-ord, provide the primary kurta as "upper_clothes".
 
 4. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
 
@@ -58,8 +67,13 @@ Return strictly valid JSON format:
   "garments": [
     {
       "category": "upper_clothes",
-      "recognized_label": "Cream Miniature Booti Print Ethnic Kurta",
-      "garment_description": "Men's traditional knee-length straight-cut ethnic kurta crafted from warm ivory-cream textured cotton slub fabric, adorned with all-over dense miniature terracotta-red and chocolate-brown ethnic floral booti motifs arranged in repeating vertical linear stripes. Features a stiff mandarin band collar, front chest placket with 4 small buttons, long straight sleeves with identical all-over booti print, and clean straight side seam slits."
+      "recognized_label": "Light Blue Leaf Print Short-Sleeve Shirt",
+      "garment_description": "Men's casual short-sleeve button-down shirt crafted from crisp white cotton fabric, adorned with all-over botanical leaf and palm frond motifs printed in soft sky-blue. Features a standard turn-down collar, front chest placket with small white buttons, short hemmed sleeves, and a curved casual shirt hem."
+    },
+    {
+      "category": "pants",
+      "recognized_label": "Dark Indigo Denim Jeans",
+      "garment_description": "Men's classic five-pocket straight-fit denim jeans in a deep indigo-blue wash with subtle natural fading, contrast copper-gold stitching, standard waistband with belt loops, front metal button and zip fly, and clean straight leg hems."
     }
   ]
 }"""
@@ -80,10 +94,33 @@ def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> st
 
 def _build_final_prompt(garment_description: str, category: str) -> str:
     """Put the empty 3D ghost-mannequin person-removal instruction FIRST so Qwen-Image-2.1 obeys 100%."""
+    cat = (category or "").strip().lower()
+    if cat == "upper_clothes":
+        isolation_rule = (
+            "STRICT CATEGORY ISOLATION: Generate ONLY the upper-body garment (shirt / top / t-shirt / kurta / jacket). "
+            "COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, shorts, skirts, belt, waistline of pants, legs, or bottom garments! "
+            "The 3D invisible ghost-mannequin terminates cleanly at the bottom hem of the shirt/top with an open hollow hem aperture, "
+            "and the bottom half of the image MUST BE completely empty, clean, pure solid white (#FFFFFF)."
+        )
+    elif cat in ("pants", "skirt"):
+        isolation_rule = (
+            "STRICT CATEGORY ISOLATION: Generate ONLY the lower-body garment (pants / jeans / trousers / shorts / skirt). "
+            "COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any upper garments, shirt, t-shirt, top, jacket, collar, sleeves, chest, or torso! "
+            "The 3D invisible ghost-mannequin begins cleanly at the waistband of the pants/jeans with an open hollow waistband aperture, "
+            "and the upper half of the image MUST BE completely empty, clean, pure solid white (#FFFFFF)."
+        )
+    elif cat in ("dress", "saree", "lehenga"):
+        isolation_rule = (
+            "STRICT CATEGORY ISOLATION: Generate the full standalone 3D ghost-mannequin outfit with no human body."
+        )
+    else:
+        isolation_rule = ""
+
     return (
         "Generate an empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
         "garment floating upright in natural 3D volume on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
         "NO head, NO face, NO hair, NO neck, NO skin, NO hands, NO arms, NO legs, NO feet, and NO jewelry anywhere in the image. "
+        f"{isolation_rule} "
         f"Exact standalone garment and intricate textile pattern to isolate and faithfully reconstruct from the reference photo: {garment_description.strip()} (category: {category}). "
         f"{COMMON_STUDIO_RULES}"
     )
@@ -151,12 +188,34 @@ def analyze_garment_and_build_prompts(
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     b64_jpeg = _encode_image_for_vision(image_rgb)
 
-    user_instruction = (
-        f"Analyze the clothing worn by the person in this image. "
-        f"Target garment filter: '{target_garment or 'all'}'. "
-        f"Examine the fabric at high resolution: identify the exact base color, exact print/booti motif colors, "
-        f"pattern density, vertical or horizontal repetition, collar shape, buttons/placket, and sleeve style so the 3D ghost mannequin replicates the exact authentic design."
-    )
+    target_norm = (target_garment or "all").strip().lower()
+    if target_norm == "upper_clothes":
+        user_instruction = (
+            "Analyze ONLY the UPPER-BODY garment (shirt, t-shirt, top, kurta, jacket) worn by the person in this image. "
+            "Completely IGNORE and exclude the pants, jeans, trousers, or bottom wear. "
+            "Examine the fabric at high resolution: identify the exact base color, print/booti motifs, "
+            "pattern density, collar shape, buttons/placket, and sleeve style so the 3D ghost mannequin replicates the exact authentic design."
+        )
+    elif target_norm in ("pants", "skirt"):
+        user_instruction = (
+            "Analyze ONLY the LOWER-BODY garment (pants, jeans, trousers, shorts, skirt) worn by the person in this image. "
+            "Completely IGNORE and exclude the upper-body shirt, top, or kurta. "
+            "Examine the fabric at high resolution: identify the exact denim/fabric wash, color, fit, pockets, stitching, and hems."
+        )
+    elif target_norm in ("dress", "saree", "lehenga"):
+        user_instruction = (
+            f"Analyze the full {target_norm} worn by the person in this image. "
+            "Examine the fabric at high resolution: identify the exact colors, intricate borders, prints, embroidery, and drape."
+        )
+    else:  # "all"
+        user_instruction = (
+            "Analyze the clothing worn by the person in this image. "
+            "CRITICAL: If the person is wearing contrasting separates (such as shirt/t-shirt/kurta + jeans/pants/trousers), "
+            "you MUST return TWO separate items in the 'garments' list: one for 'upper_clothes' and one for 'pants'. "
+            "Never merge contrasting tops and bottoms into a single item. "
+            "If the person is wearing a single-piece dress, saree, or lehenga, return that single item. "
+            "For each item, examine fabric at high resolution: base color, motifs, collar, buttons, and cut."
+        )
 
     payload: dict[str, Any] = {
         "model": model_name,
