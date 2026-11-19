@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_remote_url() -> str:
-    return os.getenv("QWEN_REMOTE_URL", "").strip().rstrip("/")
+    return (os.getenv("QWEN_REMOTE_URL") or os.getenv("QWEN_GPU_URL") or "").strip().rstrip("/")
 
 
 def _get_api_key() -> str:
