@@ -7,25 +7,28 @@ from pydantic import BaseModel, Field
 
 class GarmentItem(BaseModel):
     """Clean production metadata for a single extracted and normalized 2D garment."""
-    garment_id: str | None = Field(default=None, description="Garment identifier (e.g. garment_001)")
-    output_png_url: str = Field(..., description="Download/preview URL for the transparent 1024x1024 PNG")
-    width: int = Field(default=1024, description="Canvas width in pixels")
-    height: int = Field(default=1024, description="Canvas height in pixels")
-    category: str = Field(default="product", description="Garment category (e.g. product, upper_clothes, pants, dress)")
-    recognized_label: str = Field(default="Garment Cutout", description="Human-friendly label")
-    output_png_base64: str | None = Field(default=None, description="Optional Base64 data URI for direct client embed")
+    category: str = Field(default="product", description="Garment category (e.g. upper_clothes, pants, dress)")
+    title: str = Field(default="Garment Cutout", description="Human-friendly garment title/label")
+    url: str = Field(..., description="Direct URL to the 1024x1024 transparent PNG")
+    resolution: str = Field(default="1024x1024", description="Output canvas resolution")
+    # Optional aliases for backwards compatibility
+    output_png_url: str | None = Field(default=None, description="Alias for url")
+    recognized_label: str | None = Field(default=None, description="Alias for title")
+    garment_id: str | None = Field(default=None, description="Garment identifier")
+    output_png_base64: str | None = Field(default=None, description="Optional Base64 data URI")
 
 
 class ProcessGarmentResponse(BaseModel):
-    """Clean production response schema with only essential fields."""
-    success: bool = Field(default=True, description="Overall pipeline status boolean")
-    status: str = Field(default="success", description="Status string matching node.js client expectations")
-    message: str = Field(default="Background removed successfully", description="Status message")
-    image: str | None = Field(default=None, description="Direct Base64 data URI for node.js Option 2")
-    job_id: str = Field(..., description="Unique job identifier")
-    execution_time_ms: float = Field(..., description="Total processing time in milliseconds")
+    """Clean, lightweight production response schema for Node.js and client integration."""
+    status: str = Field(default="success", description="Status string: 'success'")
     total_garments: int = Field(default=1, description="Count of extracted clean garments")
-    garments: list[GarmentItem] = Field(default_factory=list, description="List of extracted clean 2D garments")
+    garments: list[GarmentItem] = Field(default_factory=list, description="List of extracted garments")
+    processing_time_sec: float = Field(default=0.0, description="Total end-to-end processing time in seconds")
+    # Optional fields for backwards compatibility
+    job_id: str | None = Field(default=None, description="Job identifier")
+    success: bool | None = Field(default=True, description="Success flag")
+    message: str | None = Field(default=None, description="Status message")
+    image: str | None = Field(default=None, description="Base64 data URI if requested")
 
 
 class DownstreamPackageRequest(BaseModel):

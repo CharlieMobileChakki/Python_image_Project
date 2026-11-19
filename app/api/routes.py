@@ -140,21 +140,42 @@ async def background_removal_endpoint(
                 },
             )
 
-    # For Option 2 (JSON): populate status, message, and top garment Base64 data URI
-    result.setdefault("status", "success")
-    result.setdefault("message", "Background removed successfully")
-    if result.get("garments") and not result.get("image"):
-        top_garment = result["garments"][0]
-        if top_garment.get("output_png_base64"):
-            result["image"] = top_garment["output_png_base64"]
-        else:
-            png_p = OUTPUT_DIR / Path(top_garment["output_png_url"]).name
-            if png_p.exists():
-                import base64
-                b64_str = base64.b64encode(png_p.read_bytes()).decode("utf-8")
-                result["image"] = f"data:image/png;base64,{b64_str}"
+    # Format clean production JSON response for Node.js and UI
+    base_url = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+    if forwarded_proto == "https" and base_url.startswith("http://"):
+        base_url = base_url.replace("http://", "https://", 1)
 
-    return result
+    clean_garments = []
+    for g in result.get("garments", []):
+        raw_url = g.get("url") or g.get("output_png_url") or ""
+        if raw_url.startswith("/"):
+            full_url = f"{base_url}{raw_url}"
+        else:
+            full_url = raw_url
+
+        title = g.get("title") or g.get("recognized_label") or "Garment Cutout"
+        clean_garments.append({
+            "category": g.get("category", "product"),
+            "title": title,
+            "url": full_url,
+            "resolution": "1024x1024",
+            "output_png_url": full_url,
+            "recognized_label": title,
+            "garment_id": g.get("garment_id"),
+            "output_png_base64": g.get("output_png_base64") if include_base64 else None,
+        })
+
+    total_time_sec = round(result.get("execution_time_ms", 0) / 1000.0, 1)
+
+    return {
+        "status": "success",
+        "total_garments": len(clean_garments),
+        "garments": clean_garments,
+        "processing_time_sec": total_time_sec,
+        "job_id": result.get("job_id"),
+        "success": True,
+    }
 
 
 @router.get("/outputs/{filename}")
