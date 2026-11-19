@@ -137,16 +137,33 @@ def generate_garment_via_gpu(
             job_id = submit_resp.json()["job_id"]
             logger.info("GPU job %s queued; polling status...", job_id)
 
-            # 2. Poll job status every 2.5s until done or error
+            # 2. Poll job status every 2.5s until done or error (with retry tolerance for Cloudflare blips)
+            consecutive_errors = 0
             while True:
                 if time.perf_counter() - t_start > max_wait_sec:
                     raise RuntimeError(f"GPU Worker job {job_id} timed out after {max_wait_sec}s.")
 
                 time.sleep(2.5)
-                status_resp = client.get(f"{remote_url}/jobs/{job_id}", headers=headers)
+                try:
+                    status_resp = client.get(f"{remote_url}/jobs/{job_id}", headers=headers)
+                except (httpx.RequestError, httpx.TimeoutException) as poll_exc:
+                    consecutive_errors += 1
+                    if consecutive_errors > 6:
+                        raise RuntimeError(f"GPU Worker status check connection failed after retries: {poll_exc}") from poll_exc
+                    logger.warning("Transient network glitch polling GPU (%d/6): %s", consecutive_errors, poll_exc)
+                    continue
+
+                if status_resp.status_code in (502, 503, 504):
+                    consecutive_errors += 1
+                    if consecutive_errors > 6:
+                        raise RuntimeError(f"GPU Worker status check failed ({status_resp.status_code}) after retries: {status_resp.text[:200]}")
+                    logger.warning("Transient Cloudflare HTTP %d polling GPU (%d/6), retrying in 2.5s...", status_resp.status_code, consecutive_errors)
+                    continue
+
                 if status_resp.status_code != 200:
                     raise RuntimeError(f"GPU Worker status check failed ({status_resp.status_code}): {status_resp.text[:200]}")
 
+                consecutive_errors = 0
                 state = status_resp.json()
                 job_status = state.get("status")
                 if job_status == "done":
