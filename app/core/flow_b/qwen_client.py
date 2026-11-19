@@ -101,8 +101,15 @@ def generate_garment_via_gpu(
         raise RuntimeError(remote_url)
 
     ref_rgb = reference_image.convert("RGB")
+    # Optimize reference image for fast, reliable tunnel transmission (max 1280px JPEG instead of 25MB PNG)
+    w, h = ref_rgb.size
+    max_dim = 1280
+    if max(w, h) > max_dim:
+        scale = max_dim / float(max(w, h))
+        ref_rgb = ref_rgb.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.LANCZOS)
+
     buf = io.BytesIO()
-    ref_rgb.save(buf, format="PNG")
+    ref_rgb.save(buf, format="JPEG", quality=92)
     img_bytes = buf.getvalue()
 
     headers: dict[str, str] = {}
@@ -123,29 +130,40 @@ def generate_garment_via_gpu(
 
     CLOUDFLARE_RETRY_CODES = (500, 502, 503, 504, 520, 521, 522, 523, 524, 530)
 
-    logger.info("Submitting Flow B async job to GPU worker: %s/jobs", remote_url)
+    logger.info("Submitting Flow B async job to GPU worker: %s/jobs (payload %d KB)", remote_url, len(img_bytes) // 1024)
     try:
-        with httpx.Client(timeout=30.0) as client:
-            # 1. Submit job (with retry for transient Cloudflare tunnel reconnects)
+        with httpx.Client(timeout=45.0) as client:
+            # 1. Submit job (with robust retry for transient Cloudflare tunnel reconnects)
             submit_resp = None
-            for submit_attempt in range(1, 4):
+            max_submit_attempts = 6
+            for submit_attempt in range(1, max_submit_attempts + 1):
                 try:
                     submit_resp = client.post(
                         f"{remote_url}/jobs",
                         headers=headers,
-                        files={"image": ("reference.png", img_bytes, "image/png")},
+                        files={"image": ("reference.jpg", img_bytes, "image/jpeg")},
                         data=form_data,
                     )
                     if submit_resp.status_code == 200:
                         break
-                    if submit_resp.status_code in CLOUDFLARE_RETRY_CODES and submit_attempt < 3:
-                        logger.warning("Cloudflare HTTP %d submitting job (%d/3), retrying in 2s...", submit_resp.status_code, submit_attempt)
-                        time.sleep(2.0)
+                    if submit_resp.status_code in CLOUDFLARE_RETRY_CODES and submit_attempt < max_submit_attempts:
+                        logger.warning(
+                            "Cloudflare HTTP %d submitting job (%d/%d), retrying in 3s...",
+                            submit_resp.status_code,
+                            submit_attempt,
+                            max_submit_attempts,
+                        )
+                        time.sleep(3.0)
                         continue
                 except (httpx.RequestError, httpx.TimeoutException) as submit_exc:
-                    if submit_attempt < 3:
-                        logger.warning("Network error submitting job (%d/3): %s, retrying in 2s...", submit_attempt, submit_exc)
-                        time.sleep(2.0)
+                    if submit_attempt < max_submit_attempts:
+                        logger.warning(
+                            "Network error submitting job (%d/%d): %s, retrying in 3s...",
+                            submit_attempt,
+                            max_submit_attempts,
+                            submit_exc,
+                        )
+                        time.sleep(3.0)
                         continue
                     raise RuntimeError(f"Cannot connect to GPU Worker at {remote_url}: {submit_exc}") from submit_exc
 
