@@ -1,115 +1,156 @@
 /* =============================================================================
-   Arangtik Garment AI · Studio 3.0 Modern Professional Theme
-   High-Tech AI E-Commerce Studio with Laser Scanning & Ghost Mannequin Suite
+   Arangtik Garment AI · Studio 4.0 Luxury Theme
+   Design System: Midnight Luxury (#0B1020) + Electric Emerald (#16D6A0) + Cyan (#35C8E8)
+   Engineered for Professional E-Commerce AI Fashion Creative Workspaces
    ============================================================================= */
 
 :root {
-  --bg: #0b0f19;
+  /* Core Color Palette */
+  --bg-main: #0B1020;
   --bg-secondary: #111827;
-  --surface: #1e293b;
-  --surface-card: rgba(30, 41, 59, 0.7);
-  --surface-hover: #334155;
-  --border: rgba(148, 163, 184, 0.15);
-  --border-focus: rgba(16, 185, 129, 0.5);
+  --bg-panel: #151D2E;
+  --bg-elevated: #1C2940;
+  --bg-hover: #22324E;
 
-  --primary: #10b981;
-  --primary-glow: rgba(16, 185, 129, 0.35);
-  --primary-hover: #059669;
-  --accent: #06b6d4;
-  --accent-glow: rgba(6, 182, 212, 0.35);
+  /* Accent Tones */
+  --accent-primary: #16D6A0;
+  --accent-primary-hover: #12B98A;
+  --accent-primary-glow: rgba(22, 214, 160, 0.25);
+  --accent-primary-soft: rgba(22, 214, 160, 0.10);
 
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  --accent-cyan: #35C8E8;
+  --accent-cyan-hover: #22B5D5;
+  --accent-cyan-glow: rgba(53, 200, 232, 0.25);
+  --accent-cyan-soft: rgba(53, 200, 232, 0.10);
 
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  /* Typography Colors */
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-dim: #475569;
 
-  --radius: 12px;
+  /* System Indicators */
+  --status-connected: #16D6A0;
+  --status-connecting: #F59E0B;
+  --status-offline: #EF4444;
+
+  /* Borders & Dividers */
+  --border: #29364A;
+  --border-light: rgba(41, 54, 74, 0.6);
+  --border-focus: rgba(22, 214, 160, 0.45);
+  --border-active: #16D6A0;
+
+  /* Radii & Geometry */
   --radius-sm: 8px;
-  --radius-lg: 18px;
+  --radius: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 
-  --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 25px rgba(16, 185, 129, 0.2);
+  /* Elevation Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 35px -5px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 24px rgba(22, 214, 160, 0.2);
+  --shadow-cyan-glow: 0 0 24px rgba(53, 200, 232, 0.2);
 }
 
-* {
+/* Base Reset & Box Sizing */
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
 body {
-  background: var(--bg);
+  background-color: var(--bg-main);
   background-image: 
-    radial-gradient(circle at 15% 10%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 90%, rgba(16, 185, 129, 0.08) 0%, transparent 40%);
-  color: var(--text);
+    radial-gradient(circle at 12% 10%, rgba(53, 200, 232, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 88% 85%, rgba(22, 214, 160, 0.05) 0%, transparent 45%);
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }
 
 /* =============================================================================
-   Header
+   1. Compact Professional Header
    ============================================================================= */
 header {
   background: rgba(17, 24, 39, 0.85);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
-  padding: 14px 28px;
+  padding: 12px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 100;
 }
 
 .logo-container {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .logo-badge {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #10b981, #06b6d4);
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-cyan));
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 20px var(--primary-glow);
+  box-shadow: var(--shadow-glow);
+  flex-shrink: 0;
 }
 
 .logo-text h1 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.4px;
-  color: #ffffff;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.logo-text h1 span.tag-pro {
-  background: linear-gradient(135deg, #10b981, #06b6d4);
-  color: #0b0f19;
-  font-size: 10px;
+.tag-studio {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-cyan));
+  color: #08101E;
+  font-size: 9.5px;
   font-weight: 800;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
 }
 
 .logo-text p {
   font-size: 11px;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
 }
 
 .header-actions {
@@ -118,88 +159,100 @@ header {
   gap: 14px;
 }
 
+/* GPU Telemetry Pill */
 .gpu-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(30, 41, 59, 0.8);
+  gap: 9px;
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 6px 14px;
+  padding: 5px 14px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text);
-  box-shadow: var(--shadow);
+  color: var(--text-primary);
+  transition: all 0.2s;
+  cursor: default;
+}
+
+.gpu-pill:hover {
+  border-color: var(--accent-primary);
 }
 
 .pulse-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 10px #10b981;
-  animation: pulse 2s infinite;
+  background: var(--status-connected);
+  box-shadow: 0 0 10px var(--status-connected);
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  flex-shrink: 0;
 }
 
 .pulse-dot.amber {
-  background: #f59e0b;
-  box-shadow: 0 0 10px #f59e0b;
+  background: var(--status-connecting);
+  box-shadow: 0 0 10px var(--status-connecting);
 }
 
-@keyframes pulse {
-  0% { transform: scale(0.95); opacity: 0.7; }
-  50% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.7; }
+.pulse-dot.red {
+  background: var(--status-offline);
+  box-shadow: 0 0 10px var(--status-offline);
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.75; }
+  50% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.75; }
 }
 
 .api-link {
-  color: var(--text-muted);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.15s;
 }
 
 .api-link:hover {
-  color: var(--primary);
+  color: var(--accent-primary);
 }
 
 /* =============================================================================
-   Main Studio Container
+   2. Main Studio Workspace
    ============================================================================= */
 main {
   flex: 1;
-  padding: 22px 28px;
-  max-width: 1720px;
+  padding: 18px 28px;
+  max-width: 1760px;
   margin: 0 auto;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 /* =============================================================================
-   Mode Selector Cards (Flow B vs Flow A)
+   3. Processing Engine Selector (Flow B vs Flow A)
    ============================================================================= */
 .mode-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 14px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .mode-grid { grid-template-columns: 1fr; }
 }
 
 .mode-card {
-  background: var(--surface-card);
-  border: 1.5px solid var(--border);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 14px 18px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -213,23 +266,23 @@ main {
   right: 0;
   height: 3px;
   background: transparent;
-  transition: background 0.25s;
+  transition: background 0.2s;
 }
 
 .mode-card:hover {
-  border-color: rgba(16, 185, 129, 0.4);
-  background: rgba(30, 41, 59, 0.95);
-  transform: translateY(-2px);
+  border-color: rgba(53, 200, 232, 0.4);
+  background: var(--bg-elevated);
+  transform: translateY(-1.5px);
 }
 
 .mode-card.active {
-  border-color: var(--primary);
-  background: rgba(16, 185, 129, 0.08);
-  box-shadow: 0 0 25px rgba(16, 185, 129, 0.15);
+  border-color: var(--accent-primary);
+  background: rgba(22, 214, 160, 0.06);
+  box-shadow: 0 0 24px rgba(22, 214, 160, 0.12);
 }
 
 .mode-card.active::before {
-  background: linear-gradient(90deg, #10b981, #06b6d4);
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-cyan));
 }
 
 .mode-content {
@@ -239,73 +292,77 @@ main {
 }
 
 .mode-icon {
-  font-size: 28px;
-  width: 50px;
-  height: 50px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  font-size: 26px;
+  width: 46px;
+  height: 46px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border-light);
 }
 
 .mode-card.active .mode-icon {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(22, 214, 160, 0.12);
+  border-color: rgba(22, 214, 160, 0.3);
 }
 
 .mode-details h3 {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
-  color: var(--text);
-  margin-bottom: 3px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
 }
 
 .mode-details p {
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.35;
 }
 
 .mode-pill {
   font-size: 11px;
   font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: 4px 11px;
+  border-radius: 16px;
   white-space: nowrap;
   letter-spacing: 0.3px;
+  flex-shrink: 0;
 }
 
 .mode-pill.flow-b {
-  background: rgba(6, 182, 212, 0.15);
-  color: #22d3ee;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: var(--accent-cyan-soft);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(53, 200, 232, 0.3);
 }
 
 .mode-pill.flow-a {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--accent-primary-soft);
+  color: var(--accent-primary);
+  border: 1px solid rgba(22, 214, 160, 0.3);
 }
 
 /* =============================================================================
-   Control Bar & Settings
+   4. Studio Processing Toolbar
    ============================================================================= */
 .control-bar {
-  background: var(--surface-card);
-  backdrop-filter: blur(12px);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 20px;
+  padding: 10px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 14px;
 }
 
 .control-group {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
@@ -313,30 +370,31 @@ main {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
+  font-size: 12.5px;
+  color: var(--text-secondary);
 }
 
 .setting-item label {
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 select.studio-select {
   background: var(--bg-secondary);
-  color: var(--text);
+  color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   outline: none;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: all 0.15s;
 }
 
 select.studio-select:focus {
-  border-color: var(--primary);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
 }
 
 .toggle-switch {
@@ -347,51 +405,60 @@ select.studio-select:focus {
   user-select: none;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.toggle-switch:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .toggle-switch input {
-  accent-color: var(--primary);
-  width: 16px;
-  height: 16px;
+  accent-color: var(--accent-primary);
+  width: 15px;
+  height: 15px;
   cursor: pointer;
 }
 
-/* Buttons */
+/* Action Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--accent-primary), #0EA5E9);
+  color: #08101E;
   border: none;
   border-radius: var(--radius-sm);
   padding: 8px 18px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-  transition: all 0.2s;
+  gap: 7px;
+  box-shadow: 0 3px 12px rgba(22, 214, 160, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  letter-spacing: 0.2px;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+  box-shadow: 0 5px 18px rgba(22, 214, 160, 0.5);
+  filter: brightness(1.06);
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 7px 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
@@ -401,7 +468,7 @@ select.studio-select:focus {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
   border-color: rgba(255, 255, 255, 0.2);
 }
 
@@ -411,13 +478,13 @@ select.studio-select:focus {
 }
 
 /* =============================================================================
-   3-Column Studio Workspace
+   5. Three-Column Studio Workspace Grid
    ============================================================================= */
 .studio-grid {
   display: grid;
-  grid-template-columns: 290px 1fr 1fr;
-  gap: 18px;
-  min-height: 640px;
+  grid-template-columns: 280px 1fr 1fr;
+  gap: 16px;
+  min-height: 650px;
 }
 
 @media (max-width: 1200px) {
@@ -427,30 +494,29 @@ select.studio-select:focus {
 }
 
 .studio-panel {
-  background: var(--surface-card);
-  backdrop-filter: blur(12px);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(17, 24, 39, 0.4);
+  background: rgba(17, 24, 39, 0.45);
 }
 
 .panel-header h3 {
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--text);
+  letter-spacing: 0.2px;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -463,26 +529,26 @@ select.studio-select:focus {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 16px;
+  padding: 14px;
 }
 
 /* =============================================================================
-   Panel 1: Queue Sidebar
+   6. Left Panel – Image Queue
    ============================================================================= */
 .queue-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 7px;
+  padding: 10px;
 }
 
 .dropzone {
-  border: 2px dashed rgba(16, 185, 129, 0.3);
-  border-radius: var(--radius);
-  background: rgba(16, 185, 129, 0.03);
-  padding: 24px 16px;
+  border: 2px dashed rgba(22, 214, 160, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(22, 214, 160, 0.03);
+  padding: 22px 14px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
@@ -490,22 +556,22 @@ select.studio-select:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .dropzone:hover, .dropzone.drag-active {
-  border-color: var(--primary);
-  background: rgba(16, 185, 129, 0.08);
-  box-shadow: inset 0 0 20px rgba(16, 185, 129, 0.1);
+  border-color: var(--accent-primary);
+  background: rgba(22, 214, 160, 0.08);
+  box-shadow: inset 0 0 20px rgba(22, 214, 160, 0.08);
 }
 
 .dropzone .icon-upload {
-  font-size: 32px;
-  filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.5));
+  font-size: 28px;
+  filter: drop-shadow(0 0 8px rgba(22, 214, 160, 0.4));
 }
 
 .queue-item {
-  background: rgba(17, 24, 39, 0.6);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
@@ -517,22 +583,23 @@ select.studio-select:focus {
 }
 
 .queue-item:hover {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--bg-elevated);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .queue-item.active {
-  border-color: var(--primary);
-  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--accent-primary);
+  background: rgba(22, 214, 160, 0.08);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
 }
 
 .queue-thumb {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: 6px;
   object-fit: cover;
   background: #000;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .queue-info {
@@ -543,7 +610,7 @@ select.studio-select:focus {
 .queue-name {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -555,37 +622,39 @@ select.studio-select:focus {
   gap: 6px;
   margin-top: 3px;
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .status-badge {
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 10px;
   text-transform: uppercase;
 }
 
-.status-badge.pending { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
-.status-badge.processing { background: rgba(6, 182, 212, 0.2); color: #22d3ee; animation: pulse 1.5s infinite; }
-.status-badge.done { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-.status-badge.error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.status-badge.pending { background: rgba(148, 163, 184, 0.15); color: #CBD5E1; }
+.status-badge.processing { background: rgba(53, 200, 232, 0.2); color: var(--accent-cyan); animation: pulse-ring 1.5s infinite; }
+.status-badge.done { background: rgba(22, 214, 160, 0.2); color: var(--accent-primary); }
+.status-badge.error { background: rgba(239, 68, 68, 0.2); color: #F87171; }
 
 .queue-remove-btn {
   background: transparent;
   border: none;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 16px;
   cursor: pointer;
   padding: 4px;
+  line-height: 1;
+  transition: color 0.15s;
 }
 
 .queue-remove-btn:hover {
-  color: var(--danger);
+  color: var(--status-offline);
 }
 
 /* =============================================================================
-   Panel 2: Input Viewer + SCANNING LASER ANIMATION
+   7. Center Panel – Original Image Viewer + AI Scanning Animation
    ============================================================================= */
 .image-viewport {
   width: 100%;
@@ -603,7 +672,7 @@ select.studio-select:focus {
   max-height: 520px;
   object-fit: contain;
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
 }
 
 /* === LASER SCANNING OVERLAY === */
@@ -619,7 +688,6 @@ select.studio-select:focus {
   display: block;
 }
 
-/* Moving Laser Light Beam */
 .scan-beam {
   position: absolute;
   top: 0;
@@ -627,12 +695,12 @@ select.studio-select:focus {
   width: 100%;
   height: 100%;
   background: linear-gradient(180deg, 
-    rgba(16, 185, 129, 0) 0%, 
-    rgba(6, 182, 212, 0.05) 50%, 
-    rgba(16, 185, 129, 0.18) 95%, 
-    rgba(16, 185, 129, 0.85) 100%
+    rgba(22, 214, 160, 0) 0%, 
+    rgba(53, 200, 232, 0.04) 50%, 
+    rgba(22, 214, 160, 0.16) 94%, 
+    rgba(22, 214, 160, 0.85) 100%
   );
-  animation: scanLoop 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+  animation: laserScan 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
   transform: translateY(-100%);
 }
 
@@ -642,42 +710,42 @@ select.studio-select:focus {
   left: 0;
   width: 100%;
   height: 3px;
-  background: linear-gradient(90deg, #06b6d4, #10b981, #34d399, #06b6d4);
-  box-shadow: 0 0 14px #10b981, 0 0 28px #06b6d4, 0 0 4px #ffffff;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-primary), #6EE7B7, var(--accent-cyan));
+  box-shadow: 0 0 14px var(--accent-primary), 0 0 28px var(--accent-cyan), 0 0 4px #FFFFFF;
 }
 
-@keyframes scanLoop {
+@keyframes laserScan {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(0%); }
 }
 
-/* Tech HUD Corner Brackets */
+/* HUD Tech Corner Brackets */
 .hud-corner {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  border-color: #10b981;
+  width: 18px;
+  height: 18px;
+  border-color: var(--accent-primary);
   border-style: solid;
   opacity: 0.9;
-  filter: drop-shadow(0 0 6px #10b981);
+  filter: drop-shadow(0 0 6px var(--accent-primary));
 }
 
-.hud-corner.tl { top: 14px; left: 14px; border-width: 2.5px 0 0 2.5px; }
-.hud-corner.tr { top: 14px; right: 14px; border-width: 2.5px 2.5px 0 0; }
-.hud-corner.bl { bottom: 14px; left: 14px; border-width: 0 0 2.5px 2.5px; }
-.hud-corner.br { bottom: 14px; right: 14px; border-width: 0 2.5px 2.5px 0; }
+.hud-corner.tl { top: 12px; left: 12px; border-width: 2.5px 0 0 2.5px; }
+.hud-corner.tr { top: 12px; right: 12px; border-width: 2.5px 2.5px 0 0; }
+.hud-corner.bl { bottom: 12px; left: 12px; border-width: 0 0 2.5px 2.5px; }
+.hud-corner.br { bottom: 12px; right: 12px; border-width: 0 2.5px 2.5px 0; }
 
 .hud-badge {
   position: absolute;
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(11, 15, 25, 0.92);
+  background: rgba(11, 16, 32, 0.92);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #34d399;
+  border: 1px solid rgba(22, 214, 160, 0.4);
+  color: var(--accent-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 1px;
   padding: 5px 14px;
@@ -686,32 +754,33 @@ select.studio-select:focus {
   align-items: center;
   gap: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
 }
 
 /* =============================================================================
-   Panel 3: Output Viewer (Checkerboard, Split Slider, Stages)
+   8. Right Panel – AI Output Studio
    ============================================================================= */
 .checkerboard-bg {
-  background-color: #0d131f;
+  background-color: #0E1524;
   background-image: 
-    linear-gradient(45deg, #151d2d 25%, transparent 25%), 
-    linear-gradient(-45deg, #151d2d 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #151d2d 75%), 
-    linear-gradient(-45deg, transparent 75%, #151d2d 75%);
+    linear-gradient(45deg, #172238 25%, transparent 25%), 
+    linear-gradient(-45deg, #172238 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #172238 75%), 
+    linear-gradient(-45deg, transparent 75%, #172238 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
 }
 
 .white-bg {
-  background-color: #ffffff !important;
+  background-color: #FFFFFF !important;
   background-image: none !important;
 }
 
-/* View Mode Switcher in Output Header */
+/* View Mode Switcher */
 .view-tabs {
   display: flex;
-  gap: 4px;
-  background: rgba(0, 0, 0, 0.3);
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.35);
   padding: 2px;
   border-radius: 6px;
 }
@@ -719,18 +788,18 @@ select.studio-select:focus {
 .view-tab {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
-  padding: 4px 10px;
+  padding: 4px 9px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .view-tab.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
 }
 
 /* Multi-garment tabs (for Flow A catalog splits) */
@@ -743,38 +812,39 @@ select.studio-select:focus {
 }
 
 .garment-tab-btn {
-  background: rgba(30, 41, 59, 0.8);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   padding: 4px 12px;
   border-radius: 14px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.15s;
 }
 
 .garment-tab-btn.active {
-  border-color: var(--primary);
-  background: rgba(16, 185, 129, 0.2);
-  color: #ffffff;
+  border-color: var(--accent-primary);
+  background: rgba(22, 214, 160, 0.15);
+  color: var(--text-primary);
 }
 
-/* Generation Progress Box */
+/* Three-Stage AI Progress Card */
 .progress-card {
   text-align: center;
-  max-width: 380px;
+  max-width: 390px;
   padding: 24px 20px;
 }
 
 .pulse-spinner {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   margin: 0 auto 16px;
-  border: 3px solid rgba(16, 185, 129, 0.15);
-  border-top-color: #10b981;
+  border: 3px solid rgba(22, 214, 160, 0.15);
+  border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  box-shadow: 0 0 20px var(--primary-glow);
+  box-shadow: 0 0 20px var(--accent-primary-glow);
 }
 
 @keyframes spin {
@@ -787,7 +857,7 @@ select.studio-select:focus {
   gap: 10px;
   text-align: left;
   margin-top: 18px;
-  background: rgba(17, 24, 39, 0.5);
+  background: var(--bg-secondary);
   padding: 14px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -799,43 +869,44 @@ select.studio-select:focus {
   gap: 10px;
   font-size: 12px;
   color: var(--text-muted);
+  transition: color 0.2s;
 }
 
 .tracker-item.active {
-  color: #34d399;
+  color: var(--accent-cyan);
   font-weight: 600;
 }
 
 .tracker-item.done {
-  color: #10b981;
+  color: var(--accent-primary);
 }
 
-/* Metadata Bar */
+/* Telemetry Badges Row */
 .telemetry-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .telemetry-badge {
-  background: rgba(17, 24, 39, 0.8);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .telemetry-badge strong {
-  color: var(--text);
+  color: var(--text-primary);
   margin-left: 4px;
 }
 
 /* =============================================================================
-   Interactive Before / After Split Slider
+   9. Interactive Before / After Split Slider
    ============================================================================= */
 .compare-container {
   position: relative;
@@ -864,7 +935,7 @@ select.studio-select:focus {
   height: 100%;
   width: 50%;
   overflow: hidden;
-  border-right: 2px solid #ffffff;
+  border-right: 2px solid #FFFFFF;
   box-shadow: 2px 0 15px rgba(0, 0, 0, 0.5);
 }
 
@@ -873,16 +944,16 @@ select.studio-select:focus {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 36px;
-  height: 36px;
-  background: #ffffff;
+  width: 34px;
+  height: 34px;
+  background: #FFFFFF;
   border-radius: 50%;
-  box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0b0f19;
-  font-size: 14px;
+  color: var(--bg-main);
+  font-size: 13px;
   font-weight: 800;
   cursor: ew-resize;
   pointer-events: none;
