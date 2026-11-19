@@ -3,473 +3,336 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arangtik Garment AI · Studio</title>
+  <title>Arangtik Garment AI · Studio 3.0</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <link rel="alternate icon" href="/favicon.ico" />
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Header -->
   <header>
     <div class="logo-container">
       <div class="logo-badge">
-        <svg width="22" height="22" viewBox="0 0 64 64" fill="none">
-          <path d="M32 17 C29 17 27 19.5 27 22.5 C27 25 29 27 32 27.5 L32 30" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+        <svg width="24" height="24" viewBox="0 0 64 64" fill="none">
+          <path d="M32 17 C29 17 27 19.5 27 22.5 C27 25 29 27 32 27.5 L32 30" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round"/>
           <path d="M14 43 L32 30 L50 43 C49 46 47 46 45 46 L19 46 C17 46 15 46 14 43 Z" fill="#ffffff"/>
-          <path d="M47 13 Q47 19 41 19 Q47 19 47 25 Q47 19 53 19 Q47 19 47 13 Z" fill="#fef08a"/>
+          <path d="M47 13 Q47 19 41 19 Q47 19 47 25 Q47 19 53 19 Q47 19 47 13 Z" fill="#22d3ee"/>
         </svg>
       </div>
       <div class="logo-text">
-        <h1>Arangtik Garment AI</h1>
-        <span>Studio Pipeline</span>
+        <h1>Arangtik Garment AI <span class="tag-pro">STUDIO 3.0</span></h1>
+        <p>E-Commerce 3D Ghost-Mannequin &amp; Background Removal Suite</p>
       </div>
     </div>
+
     <div class="header-actions">
-      <span class="badge badge-green"><span class="badge-dot"></span> Port 8000 Ready</span>
-      <a href="/docs" target="_blank" style="color: var(--accent); font-size: 13px; text-decoration: none; font-weight: 600;">API Docs ↗</a>
+      <div id="gpuPill" class="gpu-pill">
+        <span id="gpuDot" class="pulse-dot"></span>
+        <span id="gpuText">Connecting to GPU...</span>
+      </div>
+      <a href="/docs" target="_blank" class="api-link">API Docs ↗</a>
     </div>
   </header>
 
+  <!-- Main Studio Workspace -->
   <main>
-    <!-- Pipeline Mode & Settings -->
-    <div class="panel">
-      <div class="mode-select-row">
-        <div class="mode-btn active" data-mode="with_person" onclick="setMode('with_person')">
-          <strong>👗 Flow B: With Person</strong>
-          <small>Model-Worn: Person Parsing + Fabric Repair</small>
+    <!-- Dual Pipeline Mode Selector -->
+    <div class="mode-grid">
+      <!-- Flow B: Model Photo to 3D Ghost Mannequin -->
+      <div id="modeCardFlowB" class="mode-card active" onclick="setPipelineMode('with_person')">
+        <div class="mode-content">
+          <div class="mode-icon">👗</div>
+          <div class="mode-details">
+            <h3>Flow B: Model Photo ➔ 3D Ghost Mannequin</h3>
+            <p>ChatGPT Vision + RTX 3090 Qwen-2.1 Turbo &bull; Completely eliminates person, creates 3D hollow drape</p>
+          </div>
         </div>
-        <div class="mode-btn" data-mode="without_person" onclick="setMode('without_person')">
-          <strong>👔 Flow A: Without Person</strong>
-          <small>Flat-lay / Product: Fast Pure BG Removal</small>
-        </div>
+        <span class="mode-pill flow-b">Primary Engine &bull; RTX 3090</span>
       </div>
 
-      <div class="options-row">
-        <div>
-          <label style="color: var(--text-muted); margin-right: 6px; font-weight: 600;">Target:</label>
-          <select id="targetGarmentSelect">
+      <!-- Flow A: Pure Flat-Lay Background Removal -->
+      <div id="modeCardFlowA" class="mode-card" onclick="setPipelineMode('without_person')">
+        <div class="mode-content">
+          <div class="mode-icon">👔</div>
+          <div class="mode-details">
+            <h3>Flow A: Flat-Lay &amp; Catalog Cutout</h3>
+            <p>BiRefNet Lite &bull; Fast 1.5s background removal &bull; Catalog collage multi-garment auto-split</p>
+          </div>
+        </div>
+        <span class="mode-pill flow-a">Fast CPU &bull; ~1.5s</span>
+      </div>
+    </div>
+
+    <!-- Studio Controls & Batch Toolbar -->
+    <div class="control-bar">
+      <div class="control-group">
+        <div class="setting-item">
+          <label for="targetGarmentSelect">Target Garment:</label>
+          <select id="targetGarmentSelect" class="studio-select">
             <option value="all">All Garments (Auto Detect)</option>
-            <option value="saree">Saree / Traditional</option>
-            <option value="lehenga">Lehenga / Ethnic</option>
-            <option value="dress">Dress / Gown / Anarkali</option>
-            <option value="upper_clothes">Upper Clothes (Top / Shirt)</option>
-            <option value="pants">Pants / Trousers / Jeans</option>
-            <option value="skirt">Skirt</option>
+            <option value="dress">Dress / Ethnic Kurta / Anarkali</option>
+            <option value="saree">Saree / Lehenga / Traditional</option>
+            <option value="upper_clothes">Upper Clothes (Top / Shirt / Jacket)</option>
+            <option value="pants">Bottoms (Pants / Jeans / Salwar)</option>
           </select>
         </div>
 
-        <label class="checkbox-label">
-          <input type="checkbox" id="autoRepairCheck" checked />
-          <span>Inpaint Hand Occlusions</span>
-        </label>
-
-        <label class="checkbox-label">
-          <input type="checkbox" id="autoStraightenCheck" checked />
-          <span>Auto-Deskew Tilt</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="bgModeToggle" onchange="toggleBackgroundMode()" />
+          <span>⬜ Studio Pure White BG</span>
         </label>
       </div>
-    </div>
 
-    <!-- Step-by-Step AI Testing Studio -->
-    <div class="panel stepwise-panel">
-      <div class="stepwise-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="step-badge-icon">🧪</span>
-          <div>
-            <h2 style="font-size: 15px; font-weight: 700; color: var(--text);">Interactive AI Studio</h2>
-            <span style="font-size: 11px; color: var(--text-muted);">Step-by-step model testing for GPU deployment</span>
-          </div>
-        </div>
-        <div id="gpuStatusIndicator" class="gpu-badge badge-amber">
-          <span class="badge-dot badge-dot-amber"></span> Checking Server Hardware...
-        </div>
-      </div>
-
-      <div class="stepwise-grid">
-        <!-- FLOW A: PURE BACKGROUND REMOVAL (Active when Flat-lay / Hanger is selected) -->
-        <div id="flowACard" class="step-card" style="display: none; grid-column: 1 / -1; border-color: #a7f3d0; background: #f0fdf4;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
-            <div>
-              <div class="step-card-header">
-                <span class="step-number" style="background: #059669; color: #fff;">FLOW A</span>
-                <h3 style="color: #065f46;">Direct Product Cutout (BiRefNet Lite)</h3>
-              </div>
-              <p class="step-desc" style="margin-top: 6px; color: #047857; font-size: 13px;">
-                Designed for Flat-lay, Ghost Mannequin, Hanger, and Catalog Product Photos.
-                Bypasses Person Parsing completely to deliver a clean 1024×1024 transparent studio cutout in ~2 seconds.
-              </p>
-            </div>
-            <span class="engine-tier-tag tag-ready" style="white-space: nowrap;">Zero Person Parsing &bull; ~2s</span>
-          </div>
-          <div class="step-actions" style="margin-top: 10px;">
-            <button id="runFlowABtn" class="primary-btn" style="background: linear-gradient(135deg, #059669, #0284c7); padding: 8px 18px;" onclick="runFlowABackgroundRemoval()">
-              <span>⚡</span> Run Background Removal (Flow A)
-            </button>
-            <span id="flowAStatus" class="step-status-pill pill-idle">Ready for direct cutout</span>
-          </div>
-        </div>
-
-        <!-- STEP 1: HUMAN PARSING (Active when Model Worn is selected) -->
-        <div id="step1Card" class="step-card">
-          <div>
-            <div class="step-card-header">
-              <span class="step-number">STEP 1</span>
-              <h3>Human Parsing</h3>
-            </div>
-            <p class="step-desc" style="margin-top: 4px;">Removes human body &amp; isolates garment cutout.</p>
-          </div>
-          <div class="step-actions">
-            <button id="runStep1Btn" class="primary-btn" onclick="runStep1Parsing()">
-              <span>👤</span> Run Step 1
-            </button>
-            <span id="step1Status" class="step-status-pill pill-idle">Ready</span>
-          </div>
-        </div>
-
-        <!-- STEP 2: INPAINTING & GENERATION ENGINES (Active when Model Worn is selected) -->
-        <div id="step2Card" class="step-card">
-          <div>
-            <div class="step-card-header">
-              <span class="step-number step-number-purple">STEP 2</span>
-              <h3>Choose Inpainting / Generation Engine</h3>
-            </div>
-            <p class="step-desc" style="margin-top: 4px;">Select model to test on the garment:</p>
-
-            <div class="engine-options-grid" style="margin-top: 8px;">
-              <!-- Option 1: Qwen-Image-2.1 (Primary Reconstruction Engine) -->
-              <div class="engine-option-card active" data-engine="qwen" onclick="selectStep2Engine('qwen')">
-                <div class="engine-radio-row">
-                  <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="radio" name="step2EngineRadio" value="qwen" id="engine_qwen" checked />
-                    <label for="engine_qwen" style="cursor: pointer;"><strong>🌟 1. Qwen-2.1</strong></label>
-                  </div>
-                  <span class="engine-tier-tag tag-ready">Primary &bull; RTX 3090</span>
-                </div>
-                <small>Reference-guided fabric reconstruction.</small>
-              </div>
-
-              <!-- Option 2: SDXL + IP-Adapter -->
-              <div class="engine-option-card" data-engine="sdxl" onclick="selectStep2Engine('sdxl')">
-                <div class="engine-radio-row">
-                  <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="radio" name="step2EngineRadio" value="sdxl" id="engine_sdxl" />
-                    <label for="engine_sdxl" style="cursor: pointer;"><strong>🎨 2. SDXL</strong></label>
-                  </div>
-                  <span class="engine-tier-tag tag-gpu">RTX 4090</span>
-                </div>
-                <small>Latent diffusion inpaint.</small>
-              </div>
-
-              <!-- Option 3: LaMa (Fallback) -->
-              <div class="engine-option-card" data-engine="lama" onclick="selectStep2Engine('lama')">
-                <div class="engine-radio-row">
-                  <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="radio" name="step2EngineRadio" value="lama" id="engine_lama" />
-                    <label for="engine_lama" style="cursor: pointer;"><strong>🦙 3. LaMa FFC</strong></label>
-                  </div>
-                  <span class="engine-tier-tag tag-ready">CPU / Fallback</span>
-                </div>
-                <small>Fast deterministic fabric repair.</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="step-actions" style="margin-top: 8px;">
-            <button id="runStep2Btn" class="primary-btn" style="background: linear-gradient(135deg, #059669, #0284c7);" onclick="runStep2Inpainting()">
-              <span>✨</span> Run Selected (<span id="selectedEngineName">Qwen-Image-2.1</span>)
-            </button>
-            <span id="step2Status" class="step-status-pill pill-idle">Select an engine above</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Batch Action Toolbar -->
-    <div class="batch-bar">
-      <div class="batch-status-group">
-        <strong id="batchCountText" style="font-size: 13px;">Queue: 0 images</strong>
-        <div class="progress-track">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <span id="batchProgressText" style="font-size: 11px; color: var(--text-muted);">0 / 0 completed</span>
-      </div>
-
-      <div class="btn-group">
-        <button class="secondary-btn" onclick="document.getElementById('fileInput').click()">
+      <div class="control-group">
+        <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp" style="display: none;" onchange="handleFileSelect(event)" />
+        <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">
           <span>➕</span> Add Images
         </button>
-        <button id="processAllBtn" class="primary-btn" onclick="processAllBatch()" disabled>
-          <span>▶</span> Process All
+        <button id="processCurrentBtn" class="btn-primary" onclick="processCurrentImage()" disabled>
+          <span>⚡</span> Generate 3D Garment
         </button>
-        <button id="downloadAllBtn" class="secondary-btn" onclick="downloadAllCleanGarments()" disabled>
+        <button id="processAllBtn" class="btn-secondary" onclick="processAllBatch()" disabled>
+          <span>▶</span> Process All (<span id="batchCountNum">0</span>)
+        </button>
+        <button id="downloadAllBtn" class="btn-secondary" onclick="downloadAllCompleted()" disabled>
           <span>⬇</span> Download Clean PNGs
         </button>
-        <button class="secondary-btn" style="color: var(--text-muted);" onclick="clearAllQueue()">
+        <button class="btn-secondary" style="color: var(--text-dim);" onclick="clearAllQueue()">
           Clear
         </button>
       </div>
     </div>
 
-    <!-- 3-Column Studio Workspace -->
+    <!-- 3-Column Studio Grid -->
     <div class="studio-grid">
-      <!-- Column 1: Uploaded Images Queue Sidebar -->
-      <div class="queue-card">
-        <div class="queue-header">
+      <!-- Column 1: Image Queue Sidebar -->
+      <div class="studio-panel">
+        <div class="panel-header">
           <h3>Queue (<span id="queueBadgeCount">0</span>)</h3>
-          <span style="font-size: 11px; color: var(--text-muted);">Select to inspect</span>
+          <span style="font-size: 11px; color: var(--text-dim);">Select to inspect</span>
         </div>
         <div class="queue-list" id="queueList">
-          <div class="queue-empty-dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 28px; margin-bottom: 6px;">📁</div>
-            <strong style="font-size: 13px;">Drop Images Here</strong>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse JPG, PNG, WEBP</p>
+          <div class="dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
+            <div class="icon-upload">📁</div>
+            <strong style="font-size: 13px;">Drop Photos Here</strong>
+            <p style="font-size: 11px; color: var(--text-muted);">JPG, PNG, or WEBP (up to 15MB)</p>
           </div>
         </div>
       </div>
 
-      <!-- Column 2: Selected Original Image -->
-      <div class="view-card">
-        <div class="view-card-header">
+      <!-- Column 2: Input Photo View + Scanning Laser Animation -->
+      <div class="studio-panel">
+        <div class="panel-header">
           <h3>Input Photo</h3>
           <span id="selectedMeta" style="font-size: 11px; color: var(--text-muted);">No image selected</span>
         </div>
-        <div class="view-card-body" id="inputViewBody">
-          <div id="noSelectionInputPlaceholder" style="text-align: center; color: var(--text-muted);">
-            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">📷</div>
-            <p style="font-size: 12px;">Select an image from the queue.</p>
+        <div class="panel-body">
+          <div class="image-viewport" id="inputViewport">
+            <div id="noSelectionInputPlaceholder" style="text-align: center; color: var(--text-dim);">
+              <div style="font-size: 36px; margin-bottom: 8px; opacity: 0.5;">📷</div>
+              <p style="font-size: 13px;">Select or drop an image in the queue.</p>
+            </div>
+            <img id="selectedInputPreview" class="viewport-img" style="display: none;" alt="Selected Input" />
+
+            <!-- Laser Scanning HUD Overlay -->
+            <div id="scanOverlay" class="scan-overlay">
+              <div class="hud-corner tl"></div>
+              <div class="hud-corner tr"></div>
+              <div class="hud-corner bl"></div>
+              <div class="hud-corner br"></div>
+              <div class="hud-badge">✦ AI SCANNING FABRIC &amp; CONTOURS...</div>
+              <div class="scan-beam">
+                <div class="scan-line"></div>
+              </div>
+            </div>
           </div>
-          <img id="selectedInputPreview" class="preview-img" style="display: none;" alt="Selected Input" />
         </div>
       </div>
 
-      <!-- Column 3: Normalized 1024x1024 Transparent 2D Cutout -->
-      <div class="view-card">
-        <div class="view-card-header">
+      <!-- Column 3: 3D Garment Studio Output -->
+      <div class="studio-panel">
+        <div class="panel-header">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <h3>Garment Output</h3>
-            <span id="activeModelBadge" class="status-badge" style="background: #ecfdf5; color: #047857; font-size: 10px;">Master</span>
+            <h3>Studio Output</h3>
+            <span id="activeModelBadge" class="status-badge done" style="font-size: 10px;">3D Ghost Mannequin</span>
           </div>
-          <button id="downloadCurrentBtn" class="primary-btn" style="padding: 4px 10px; font-size: 11px; display: none;" onclick="downloadActiveGarment()">
-            ⬇ Download PNG
-          </button>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="view-tabs" id="viewModeTabs">
+              <button class="view-tab active" data-view="cutout" onclick="switchOutputView('cutout')">✦ Cutout</button>
+              <button class="view-tab" data-view="compare" onclick="switchOutputView('compare')">↔ Compare</button>
+            </div>
+            <button id="downloadCurrentBtn" class="btn-primary" style="padding: 4px 10px; font-size: 11px; display: none;" onclick="downloadActiveGarment()">
+              ⬇ Download PNG
+            </button>
+          </div>
         </div>
-        <div class="view-card-body checkerboard-bg" id="outputViewBody">
-          <div class="comparative-tab-bar" id="comparativeTabBar">
-            <button class="comp-tab-btn active" data-tab="auto" onclick="switchComparativeTab('auto')">⚡ Master</button>
-            <button class="comp-tab-btn flow-b-tab" data-tab="parsing" onclick="switchComparativeTab('parsing')">👤 Step 1</button>
-            <button class="comp-tab-btn flow-b-tab tab-gpu" data-tab="qwen" onclick="switchComparativeTab('qwen')">🌟 Qwen-2.1 (Primary)</button>
-            <button class="comp-tab-btn flow-b-tab tab-gpu" data-tab="sdxl" onclick="switchComparativeTab('sdxl')">🎨 SDXL</button>
-            <button class="comp-tab-btn flow-b-tab" data-tab="lama" onclick="switchComparativeTab('lama')">🦙 LaMa</button>
+
+        <div class="panel-body checkerboard-bg" id="outputPanelBody">
+          <!-- Multi-garment tabs (for Flow A catalog splits) -->
+          <div id="garmentTabsContainer" class="garment-tabs" style="display: none;"></div>
+
+          <!-- Empty Output Placeholder -->
+          <div id="outputPlaceholder" style="text-align: center; color: var(--text-dim);">
+            <div style="font-size: 36px; margin-bottom: 8px; opacity: 0.5;">✨</div>
+            <p style="font-size: 13px;">Processed 3D garment will appear here.</p>
+            <p style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">Click "Generate 3D Garment" to start.</p>
           </div>
 
-          <div id="outputPlaceholder" style="text-align: center; color: var(--text-muted); margin: auto;">
-            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">✨</div>
-            <p style="font-size: 12px;">Processed garment will appear here.</p>
-          </div>
-
+          <!-- Active Result Viewport -->
           <div id="activeResultContainer" style="display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center;">
-            <div class="garment-tabs" id="garmentTabs"></div>
-            <img id="activeOutputPreview" class="preview-img" alt="Garment Cutout" />
-            <div class="meta-badges" id="metaBadges"></div>
+            <!-- Single Cutout Image -->
+            <img id="activeOutputPreview" class="viewport-img" alt="3D Garment Cutout" />
+
+            <!-- Interactive Before / After Split Slider -->
+            <div id="compareContainer" class="compare-container" style="display: none;">
+              <img id="compareBeforeImg" class="compare-img" alt="Before Original" />
+              <div id="compareOverlay" class="compare-overlay">
+                <img id="compareAfterImg" class="compare-img" alt="After Cutout" />
+              </div>
+              <div id="compareHandle" class="compare-handle">⟨ ⟩</div>
+            </div>
+
+            <!-- Telemetry Badges -->
+            <div class="telemetry-row" id="telemetryRow"></div>
+          </div>
+
+          <!-- Live Progress & Step Tracker (During Generation) -->
+          <div id="progressContainer" class="progress-card" style="display: none;">
+            <div class="pulse-spinner"></div>
+            <h4 id="progressTitle" style="font-size: 14px; font-weight: 700; color: var(--text);">Generating 3D Studio Garment...</h4>
+            <p id="progressSubtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Delegating to RTX 3090 GPU Worker</p>
+
+            <div class="step-tracker">
+              <div class="tracker-item" id="trackerStep1">
+                <span id="trackerDot1">○</span>
+                <span>1. OpenAI Vision analyzing garment &amp; drape</span>
+              </div>
+              <div class="tracker-item" id="trackerStep2">
+                <span id="trackerDot2">○</span>
+                <span>2. RTX 3090 Qwen-2.1 Turbo 3D synthesis</span>
+              </div>
+              <div class="tracker-item" id="trackerStep3">
+                <span id="trackerDot3">○</span>
+                <span>3. BiRefNet Lite alpha edge extraction (1024x1024)</span>
+              </div>
+            </div>
+            <span id="elapsedTimer" style="display: inline-block; margin-top: 12px; font-size: 11px; font-family: monospace; color: #34d399;">Time: 0.0s</span>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Footer info -->
-    <div class="footer-api-info">
-      <div>
-        <strong>API:</strong> POST <code>/api/background-removal</code> | POST <code>/api/qwen-image</code>
-      </div>
-      <div id="statusTelemetry">System Ready</div>
     </div>
   </main>
 
-  <!-- Multiple file input -->
-  <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp" onchange="handleFileSelect(event)" />
-
   <script>
-    // State management
-    let fileQueue = []; // array of { id, file, objectUrl, status: 'pending'|'processing'|'done'|'error', result: null, errorMsg: null, stepwiseResults: {}, activeCompTab: 'auto' }
+    // State Management
+    let fileQueue = [];
     let selectedIndex = -1;
-    let selectedMode = 'with_person';
-    let activeGarmentTab = 0;
-    let isProcessingBatch = false;
-    let selectedStep2Engine = 'qwen';
+    let selectedMode = 'with_person'; // 'with_person' (Flow B) or 'without_person' (Flow A)
+    let currentOutputView = 'cutout'; // 'cutout' or 'compare'
+    let activeGarmentIndex = 0;
+    let isProcessing = false;
+    let timerInterval = null;
 
-    // Query server hardware capability on load
-    async function checkBackendHardware() {
+    // Initialize Hardware Status on page load
+    async function checkHardware() {
+      const gpuDot = document.getElementById('gpuDot');
+      const gpuText = document.getElementById('gpuText');
       try {
         const res = await fetch('/health');
-        if (res.ok) {
-          const data = await res.json();
-          const hw = data.hardware || {};
-          const ind = document.getElementById('gpuStatusIndicator');
-          if (ind) {
-            if (hw.cuda_available) {
-              ind.className = 'gpu-badge badge-green';
-              ind.innerHTML = `<span class="badge-dot"></span> 🟢 GPU Active: ${hw.gpu_name || 'CUDA Enabled'} (RTX 3090 Ready)`;
-            } else {
-              ind.className = 'gpu-badge badge-amber';
-              ind.innerHTML = `<span class="badge-dot badge-dot-amber"></span> 🟡 CPU Mode (Qwen Primary &bull; RTX 3090 Deployment Ready)`;
-            }
-          }
+        if (!res.ok) throw new Error('Health check failed');
+        const data = await res.json();
+        const gpuOnline = data.models_loaded && data.models_loaded.qwen_gpu_worker_online;
+        const gpuName = (data.hardware && data.hardware.gpu_name) || 'RTX 3090';
+
+        if (gpuOnline) {
+          gpuDot.className = 'pulse-dot';
+          gpuText.textContent = `RTX 3090 • 24GB VRAM (Turbo Active)`;
+          document.getElementById('gpuPill').title = `Connected to GPU Worker at ${data.hardware.gpu_worker_url}`;
+        } else {
+          gpuDot.className = 'pulse-dot amber';
+          gpuText.textContent = `Contabo CPU • Flow A Active`;
+          document.getElementById('gpuPill').title = 'GPU Worker offline or connecting...';
         }
-      } catch (e) {
-        console.warn('Failed to query backend health:', e);
+      } catch (err) {
+        gpuDot.className = 'pulse-dot amber';
+        gpuText.textContent = 'Server Online (Checking GPU)';
       }
     }
-    window.addEventListener('DOMContentLoaded', checkBackendHardware);
+    window.addEventListener('DOMContentLoaded', checkHardware);
 
-    function selectStep2Engine(engine) {
-      selectedStep2Engine = engine;
-      document.querySelectorAll('.engine-option-card').forEach(c => {
-        const isMatch = c.dataset.engine === engine;
-        c.classList.toggle('active', isMatch);
-        const radio = c.querySelector('input[type="radio"]');
-        if (radio) radio.checked = isMatch;
-      });
-      const nameMap = { qwen: 'Qwen-Image-2.1', sdxl: 'SDXL + IP-Adapter', lama: 'LaMa FFC' };
-      const el = document.getElementById('selectedEngineName');
-      if (el) el.textContent = nameMap[engine] || engine;
-    }
+    // Switch between Flow B (With Person) and Flow A (Without Person)
+    function setPipelineMode(mode) {
+      selectedMode = mode;
+      document.getElementById('modeCardFlowB').classList.toggle('active', mode === 'with_person');
+      document.getElementById('modeCardFlowA').classList.toggle('active', mode === 'without_person');
 
-    function setMode(mode) {
-      if (mode === 'without_person' || mode === 'isolated' || mode === 'flow_a') {
-        selectedMode = 'without_person';
-      } else {
-        selectedMode = 'with_person';
-      }
-
-      document.querySelectorAll('.mode-btn').forEach(btn => {
-        const bMode = btn.dataset.mode;
-        const isMatch = (selectedMode === 'without_person' && (bMode === 'without_person' || bMode === 'isolated')) ||
-                        (selectedMode === 'with_person' && (bMode === 'with_person' || bMode === 'worn'));
-        btn.classList.toggle('active', isMatch);
-      });
-
-      const flowACard = document.getElementById('flowACard');
-      const step1Card = document.getElementById('step1Card');
-      const step2Card = document.getElementById('step2Card');
-      const repairCheck = document.getElementById('autoRepairCheck');
+      const processBtn = document.getElementById('processCurrentBtn');
       const targetSelect = document.getElementById('targetGarmentSelect');
-      const repairLabel = repairCheck ? repairCheck.closest('.checkbox-label') : null;
-      const targetLabel = targetSelect ? targetSelect.previousElementSibling : null;
 
-      if (selectedMode === 'without_person') {
-        // Flow A: Direct Background Removal (BiRefNet Lite) - Zero Person Parsing
-        if (flowACard) flowACard.style.display = 'block';
-        if (step1Card) step1Card.style.display = 'none';
-        if (step2Card) step2Card.style.display = 'none';
-
-        // Hide Step 1 and Step 2 tabs when in Flow A (pure background removal mode)
-        document.querySelectorAll('.flow-b-tab').forEach(tab => {
-          tab.style.display = 'none';
-        });
-        switchComparativeTab('auto');
-
-        if (repairCheck) repairCheck.disabled = true;
-        if (repairLabel) {
-          repairLabel.style.opacity = '0.35';
-          repairLabel.style.pointerEvents = 'none';
-          repairLabel.title = 'Inpainting is disabled for Flat-lay / Hanger (Pure Background Removal)';
-        }
-        if (targetSelect) {
-          targetSelect.disabled = true;
-          targetSelect.style.opacity = '0.35';
-        }
-        if (targetLabel) targetLabel.style.opacity = '0.35';
-        document.getElementById('statusTelemetry').textContent = 'Mode: 👔 Flat-lay / Hanger (Flow A) — BiRefNet Lite Pure Background Removal (Zero Person Parsing)';
+      if (mode === 'with_person') {
+        processBtn.innerHTML = '<span>⚡</span> Generate 3D Garment';
+        targetSelect.disabled = false;
+        targetSelect.style.opacity = '1.0';
       } else {
-        // Flow B: Human Model - SegFormer Person Parsing & Fabric Repair
-        if (flowACard) flowACard.style.display = 'none';
-        if (step1Card) step1Card.style.display = 'block';
-        if (step2Card) step2Card.style.display = 'block';
-
-        // Show all tabs when in Flow B
-        document.querySelectorAll('.flow-b-tab').forEach(tab => {
-          tab.style.display = 'inline-flex';
-        });
-
-        if (repairCheck) repairCheck.disabled = false;
-        if (repairLabel) {
-          repairLabel.style.opacity = '1.0';
-          repairLabel.style.pointerEvents = 'auto';
-          repairLabel.title = '';
-        }
-        if (targetSelect) {
-          targetSelect.disabled = false;
-          targetSelect.style.opacity = '1.0';
-        }
-        if (targetLabel) targetLabel.style.opacity = '1.0';
-        document.getElementById('statusTelemetry').textContent = 'Mode: 👗 Model Worn (Flow B) — SegFormer Person Parsing & Fabric Repair';
+        processBtn.innerHTML = '<span>⚡</span> Remove Background (Flow A)';
+        targetSelect.disabled = true;
+        targetSelect.style.opacity = '0.5';
       }
     }
 
+    // File Selection & Drag-and-Drop
     function handleFileSelect(e) {
       const files = Array.from(e.target.files);
       if (!files.length) return;
       addFilesToQueue(files);
-      e.target.value = ''; // Reset input to allow selecting same files again
+      e.target.value = '';
     }
 
     function addFilesToQueue(files) {
       const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-      let addedCount = 0;
+      let added = 0;
 
       files.forEach(file => {
         if (!allowed.includes(file.type)) return;
-        const item = {
+        fileQueue.push({
           id: Math.random().toString(36).substring(2, 9),
           file: file,
           objectUrl: URL.createObjectURL(file),
           status: 'pending',
           result: null,
           errorMsg: null,
-          stepwiseResults: {
-            parsing: null,
-            lama: null,
-            sdxl: null,
-            qwen: null,
-          },
-          activeCompTab: 'auto',
-        };
-        fileQueue.push(item);
-        addedCount++;
+        });
+        added++;
       });
 
-      if (addedCount > 0 && selectedIndex === -1) {
-        selectedIndex = fileQueue.length - addedCount;
+      if (added > 0 && selectedIndex === -1) {
+        selectedIndex = fileQueue.length - added;
       }
 
       renderQueue();
-      updateBatchToolbar();
-      if (selectedIndex >= 0) {
-        displaySelectedItem(selectedIndex);
-      }
+      updateToolbar();
+      if (selectedIndex >= 0) displaySelectedItem(selectedIndex);
     }
 
-    // Drag and drop support on the queue panel
     const queueListEl = document.getElementById('queueList');
     queueListEl.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
     queueListEl.addEventListener('drop', (e) => {
       e.preventDefault();
-      if (e.dataTransfer.files.length) {
-        addFilesToQueue(Array.from(e.dataTransfer.files));
-      }
+      if (e.dataTransfer.files.length) addFilesToQueue(Array.from(e.dataTransfer.files));
     });
 
+    // Render Queue Sidebar
     function renderQueue() {
       const listEl = document.getElementById('queueList');
-      const badgeCountEl = document.getElementById('queueBadgeCount');
-      badgeCountEl.textContent = fileQueue.length;
+      document.getElementById('queueBadgeCount').textContent = fileQueue.length;
+      document.getElementById('batchCountNum').textContent = fileQueue.length;
 
       if (fileQueue.length === 0) {
         listEl.innerHTML = `
-          <div class="queue-empty-dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
-            <strong style="font-size: 13px;">Drag &amp; Drop Multiple Images</strong>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">or click to browse multiple JPG, PNG, WEBP files</p>
+          <div class="dropzone" id="emptyDropzone" onclick="document.getElementById('fileInput').click()">
+            <div class="icon-upload">📁</div>
+            <strong style="font-size: 13px;">Drop Photos Here</strong>
+            <p style="font-size: 11px; color: var(--text-muted);">JPG, PNG, or WEBP (up to 15MB)</p>
           </div>
         `;
         return;
@@ -478,22 +341,12 @@
       let html = '';
       fileQueue.forEach((item, idx) => {
         const isActive = idx === selectedIndex ? 'active' : '';
-        let pillClass = 'pill-pending';
-        let statusText = 'Pending';
-
-        if (item.status === 'processing') {
-          pillClass = 'pill-processing';
-          statusText = 'Processing...';
-        } else if (item.status === 'done') {
-          pillClass = 'pill-done';
-          const count = item.result && item.result.garments ? item.result.garments.length : 1;
-          statusText = `Done (${count} ${count > 1 ? 'items' : 'item'})`;
-        } else if (item.status === 'error') {
-          pillClass = 'pill-error';
-          statusText = 'Failed';
-        }
-
         const sizeMB = (item.file.size / (1024 * 1024)).toFixed(1);
+        let statusBadge = `<span class="status-badge ${item.status}">${item.status}</span>`;
+        if (item.status === 'done') {
+          const count = item.result && item.result.garments ? item.result.garments.length : 1;
+          statusBadge = `<span class="status-badge done">${count} ${count > 1 ? 'items' : 'cutout'}</span>`;
+        }
 
         html += `
           <div class="queue-item ${isActive}" onclick="selectQueueIndex(${idx})">
@@ -502,29 +355,27 @@
               <div class="queue-name" title="${item.file.name}">${item.file.name}</div>
               <div class="queue-meta">
                 <span>${sizeMB} MB</span>
-                <span class="status-pill ${pillClass}">${statusText}</span>
+                ${statusBadge}
               </div>
             </div>
             <button class="queue-remove-btn" onclick="removeQueueIndex(event, ${idx})" title="Remove">&times;</button>
           </div>
         `;
       });
-
       listEl.innerHTML = html;
     }
 
     function selectQueueIndex(idx) {
       if (idx < 0 || idx >= fileQueue.length) return;
       selectedIndex = idx;
-      activeGarmentTab = 0;
+      activeGarmentIndex = 0;
       renderQueue();
       displaySelectedItem(idx);
     }
 
     function removeQueueIndex(e, idx) {
       e.stopPropagation();
-      if (isProcessingBatch) return;
-
+      if (isProcessing) return;
       const removed = fileQueue.splice(idx, 1)[0];
       if (removed && removed.objectUrl) URL.revokeObjectURL(removed.objectUrl);
 
@@ -535,651 +386,138 @@
       }
 
       renderQueue();
-      updateBatchToolbar();
-      if (selectedIndex >= 0) {
-        displaySelectedItem(selectedIndex);
-      } else {
-        resetInspectionViews();
-      }
+      updateToolbar();
+      if (selectedIndex >= 0) displaySelectedItem(selectedIndex);
+      else resetViewports();
     }
 
     function clearAllQueue() {
-      if (isProcessingBatch) return;
-      fileQueue.forEach(item => {
-        if (item.objectUrl) URL.revokeObjectURL(item.objectUrl);
-      });
+      if (isProcessing) return;
+      fileQueue.forEach(item => { if (item.objectUrl) URL.revokeObjectURL(item.objectUrl); });
       fileQueue = [];
       selectedIndex = -1;
       renderQueue();
-      updateBatchToolbar();
-      resetInspectionViews();
+      updateToolbar();
+      resetViewports();
     }
 
-    function updateBatchToolbar() {
+    function updateToolbar() {
       const count = fileQueue.length;
       const completed = fileQueue.filter(i => i.status === 'done').length;
-      document.getElementById('batchCountText').textContent = `Queue: ${count} image${count !== 1 ? 's' : ''}`;
-      document.getElementById('batchProgressText').textContent = `${completed} / ${count} completed`;
-
-      const pct = count > 0 ? (completed / count) * 100 : 0;
-      document.getElementById('progressFill').style.width = `${pct}%`;
-
-      document.getElementById('processAllBtn').disabled = count === 0 || isProcessingBatch || completed === count;
+      document.getElementById('processCurrentBtn').disabled = selectedIndex < 0 || isProcessing;
+      document.getElementById('processAllBtn').disabled = count === 0 || isProcessing || completed === count;
       document.getElementById('downloadAllBtn').disabled = completed === 0;
     }
 
+    // Display selected image and its output
     function displaySelectedItem(idx) {
       const item = fileQueue[idx];
       if (!item) return;
 
-      // Update Input Column
+      // Update Input Photo View
       document.getElementById('noSelectionInputPlaceholder').style.display = 'none';
       const inputImg = document.getElementById('selectedInputPreview');
       inputImg.src = item.objectUrl;
       inputImg.style.display = 'block';
       document.getElementById('selectedMeta').textContent = `${item.file.name} (${(item.file.size / (1024*1024)).toFixed(2)} MB)`;
 
-      // Update Step 1 Status Pill
-      const step1Pill = document.getElementById('step1Status');
-      if (item.stepwiseResults && item.stepwiseResults.parsing) {
-        step1Pill.className = 'step-status-pill pill-success';
-        const pLabel = (item.stepwiseResults.parsing.garments && item.stepwiseResults.parsing.garments[0]) ? item.stepwiseResults.parsing.garments[0].recognized_label : 'Garment';
-        step1Pill.textContent = `✓ Parsed: ${pLabel}`;
+      // Update Output View
+      if (item.status === 'done' && item.result) {
+        renderOutputResult(item.result);
+      } else if (item.status === 'error') {
+        showErrorState(item.errorMsg);
       } else {
-        step1Pill.className = 'step-status-pill pill-idle';
-        step1Pill.textContent = 'Ready';
+        showEmptyOutputState();
       }
-
-      // Update Step 2 Status Pill
-      const step2Pill = document.getElementById('step2Status');
-      if (item.stepwiseResults && item.stepwiseResults.qwen && !item.stepwiseResults.qwen.isPendingGPU) {
-        step2Pill.className = 'step-status-pill pill-success';
-        step2Pill.textContent = `✓ Qwen-2.1 Done`;
-      } else if (item.stepwiseResults && item.stepwiseResults.sdxl && !item.stepwiseResults.sdxl.isPendingGPU) {
-        step2Pill.className = 'step-status-pill pill-success';
-        step2Pill.textContent = `✓ SDXL Done`;
-      } else if (item.stepwiseResults && item.stepwiseResults.lama) {
-        step2Pill.className = 'step-status-pill pill-success';
-        step2Pill.textContent = `✓ LaMa Done`;
-      } else {
-        step2Pill.className = 'step-status-pill pill-idle';
-        step2Pill.textContent = 'Select an engine above';
-      }
-
-      // Switch to active comparative tab
-      const activeTab = (selectedMode === 'without_person') ? 'auto' : (item.activeCompTab || 'auto');
-      switchComparativeTab(activeTab);
+      updateToolbar();
     }
 
-    function switchComparativeTab(tab) {
-      const item = fileQueue[selectedIndex];
-      if (item) {
-        item.activeCompTab = tab;
-      }
-      document.querySelectorAll('.comp-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
-      });
-      renderCurrentTabOutput(tab);
-    }
-
-    function renderCurrentTabOutput(tab) {
-      const item = fileQueue[selectedIndex];
-      const modelBadge = document.getElementById('activeModelBadge');
-      const downloadBtn = document.getElementById('downloadCurrentBtn');
-      const placeholder = document.getElementById('outputPlaceholder');
-      const container = document.getElementById('activeResultContainer');
-
-      if (!item) {
-        resetInspectionViews();
-        return;
-      }
-
-      const badgeMap = {
-        auto: '⚡ Master Pipeline',
-        parsing: '👤 Step 1: Human Parsing',
-        lama: '🦙 LaMa FFC ONNX',
-        sdxl: '🎨 SDXL + IP-Adapter',
-        qwen: '🌟 Qwen-Image-2.1',
-      };
-      if (modelBadge) modelBadge.textContent = badgeMap[tab] || tab;
-
-      if (tab === 'auto') {
-        if (item.status === 'done' && item.result) {
-          renderActiveResult(item.result);
-        } else if (item.status === 'processing') {
-          placeholder.innerHTML = `
-            <div style="font-size: 32px; margin-bottom: 8px;">⏳</div>
-            <p style="font-size: 13px; color: var(--accent);">Processing through AI Pipeline...</p>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        } else if (item.status === 'error') {
-          placeholder.innerHTML = `
-            <div style="font-size: 32px; margin-bottom: 8px; color: var(--red);">⚠️</div>
-            <p style="font-size: 13px; color: var(--red);">${item.errorMsg || 'Processing failed'}</p>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        } else {
-          placeholder.innerHTML = `
-            <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
-            <p style="font-size: 13px;">Master pipeline output pending.</p>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Click "Process All Images" or test step-by-step above.</p>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        }
-        return;
-      }
-
-      if (tab === 'parsing') {
-        const pRes = item.stepwiseResults && item.stepwiseResults.parsing;
-        if (pRes && pRes.garments && pRes.garments.length > 0) {
-          placeholder.style.display = 'none';
-          container.style.display = 'flex';
-          downloadBtn.style.display = 'inline-flex';
-          const g = pRes.garments[0];
-          container.innerHTML = `
-            <div class="summary-bar">
-              <span class="summary-pill" style="border-color: #a7f3d0; color: #047857;">Step 1: Parsed</span>
-              <span class="summary-pill">Label: <strong>${g.recognized_label}</strong></span>
-              <span class="summary-pill">Confidence: <strong>${Math.round((g.confidence || 0.98)*100)}%</strong></span>
-            </div>
-            <img id="activeOutputPreview" class="preview-img" src="${g.output_png_url}" alt="Parsed Garment" />
-            <div class="meta-badges">
-              <span class="meta-badge">Model: <strong>SegFormer B2</strong></span>
-              <span class="meta-badge">Body: <strong>Removed</strong></span>
-              <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
-            </div>
-          `;
-        } else {
-          placeholder.innerHTML = `
-            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">👤</div>
-            <p style="font-size: 12px; color: var(--text-muted);">Step 1 not run yet for this image.</p>
-            <button class="primary-btn" style="margin-top: 8px;" onclick="runStep1Parsing()">
-              <span>👤</span> Run Step 1
-            </button>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        }
-        return;
-      }
-
-      if (tab === 'lama') {
-        const lRes = item.stepwiseResults && item.stepwiseResults.lama;
-        if (lRes && lRes.garments && lRes.garments.length > 0) {
-          placeholder.style.display = 'none';
-          container.style.display = 'flex';
-          downloadBtn.style.display = 'inline-flex';
-          const g = lRes.garments[0];
-          container.innerHTML = `
-            <div class="summary-bar">
-              <span class="summary-pill" style="border-color: #a7f3d0; color: #047857;">🦙 LaMa FFC</span>
-              <span class="summary-pill">Time: <strong>${Math.round(lRes.execution_time_ms)} ms</strong></span>
-              <span class="summary-pill">Repaired: <strong>${g.repaired ? 'Yes' : 'Clean'}</strong></span>
-            </div>
-            <img id="activeOutputPreview" class="preview-img" src="${g.output_png_url}" alt="LaMa Garment" />
-            <div class="meta-badges">
-              <span class="meta-badge">Engine: <strong>LaMa ONNX</strong></span>
-              <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
-            </div>
-          `;
-        } else {
-          placeholder.innerHTML = `
-            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🦙</div>
-            <p style="font-size: 12px; color: var(--text-muted);">LaMa Inpaint not run yet.</p>
-            <button class="primary-btn" style="margin-top: 8px;" onclick="runStep2Inpainting('lama')">
-              <span>🦙</span> Run LaMa
-            </button>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        }
-        return;
-      }
-
-      if (tab === 'sdxl') {
-        const sRes = item.stepwiseResults && item.stepwiseResults.sdxl;
-        if (sRes) {
-          if (sRes.isPendingGPU) {
-            placeholder.innerHTML = `
-              <div class="gpu-deployment-card">
-                <div style="font-size: 32px;">🎨</div>
-                <h4 style="font-size: 14px; font-weight: 700; color: var(--text);">SDXL Ready for GPU Server</h4>
-                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
-                  Requires NVIDIA CUDA GPU. When deployed on your RTX 4090 server, this runs live latent diffusion inpainting!
-                </p>
-                <span class="badge badge-green" style="font-size: 11px;">Pipeline: 100% Ready</span>
-              </div>
-            `;
-            placeholder.style.display = 'block';
-            container.style.display = 'none';
-            downloadBtn.style.display = 'none';
-          } else if (sRes.url) {
-            placeholder.style.display = 'none';
-            container.style.display = 'flex';
-            downloadBtn.style.display = 'inline-flex';
-            container.innerHTML = `
-              <div class="summary-bar">
-                <span class="summary-pill" style="border-color: #bfdbfe; color: #1d4ed8;">🎨 SDXL</span>
-                <span class="summary-pill">Time: <strong>${sRes.timing}s</strong></span>
-                <span class="summary-pill">Seed: <strong>${sRes.seed}</strong></span>
-              </div>
-              <img id="activeOutputPreview" class="preview-img" src="${sRes.url}" alt="SDXL Reconstruction" />
-              <div class="meta-badges">
-                <span class="meta-badge">Model: <strong>SDXL + IP-Adapter</strong></span>
-                <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
-              </div>
-            `;
-          }
-        } else {
-          placeholder.innerHTML = `
-            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🎨</div>
-            <p style="font-size: 12px; color: var(--text-muted);">SDXL not run yet for this image.</p>
-            <button class="primary-btn" style="margin-top: 8px;" onclick="runStep2Inpainting('sdxl')">
-              <span>🎨</span> Run SDXL
-            </button>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        }
-        return;
-      }
-
-      if (tab === 'qwen') {
-        const qRes = item.stepwiseResults && item.stepwiseResults.qwen;
-        if (qRes) {
-          if (qRes.isPendingGPU) {
-            placeholder.innerHTML = `
-              <div class="gpu-deployment-card">
-                <div style="font-size: 32px;">🌟</div>
-                <h4 style="font-size: 14px; font-weight: 700; color: var(--text);">Qwen-Image-2.1 Ready for GPU Server</h4>
-                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
-                  Qwen-Image-2.1 is the Primary Generative Fabric Reconstruction Engine. It is ready for deployment on your RTX 3090 GPU server!
-                </p>
-                <span class="badge badge-green" style="font-size: 11px;">Primary Engine: Configured</span>
-              </div>
-            `;
-            placeholder.style.display = 'block';
-            container.style.display = 'none';
-            downloadBtn.style.display = 'none';
-          } else if (qRes.url || qRes.output_png_url) {
-            placeholder.style.display = 'none';
-            container.style.display = 'flex';
-            downloadBtn.style.display = 'inline-flex';
-            const imgUrl = qRes.url || qRes.output_png_url;
-            container.innerHTML = `
-              <div class="summary-bar">
-                <span class="summary-pill" style="border-color: #bfdbfe; color: #1d4ed8;">🌟 Qwen-Image-2.1 (Primary)</span>
-                <span class="summary-pill">Time: <strong>${qRes.timing || qRes.inference_seconds || 0}s</strong></span>
-                <span class="summary-pill">Alpha: <strong>100% Clean RGBA</strong></span>
-              </div>
-              <img id="activeOutputPreview" class="preview-img" src="${imgUrl}" alt="Qwen Reconstructed Garment" />
-              <div class="meta-badges">
-                <span class="meta-badge">Model: <strong>Qwen-Image-2.1 (7B DiT)</strong></span>
-                <span class="meta-badge">Fabric Preservation: <strong>100% Original Pixels Preserved</strong></span>
-                <span class="meta-badge">Transparency: <strong>BiRefNet Lite Verified</strong></span>
-                <span class="meta-badge">Size: <strong>1024&times;1024 PNG</strong></span>
-              </div>
-            `;
-          }
-        } else {
-          placeholder.innerHTML = `
-            <div style="font-size: 28px; margin-bottom: 6px; opacity: 0.5;">🌟</div>
-            <p style="font-size: 12px; color: var(--text-muted);">Qwen-2.1 reconstruction not run yet for this image.</p>
-            <button class="primary-btn" style="margin-top: 8px; background: linear-gradient(135deg, #059669, #0284c7);" onclick="runStep2Inpainting('qwen')">
-              <span>🌟</span> Run Qwen-2.1 Reconstruction
-            </button>
-          `;
-          placeholder.style.display = 'block';
-          container.style.display = 'none';
-          downloadBtn.style.display = 'none';
-        }
-        return;
-      }
-    }
-
-    async function runFlowABackgroundRemoval() {
-      if (selectedIndex < 0 || !fileQueue[selectedIndex]) {
-        alert("Please select or upload an image first!");
-        return;
-      }
-      const item = fileQueue[selectedIndex];
-      const btn = document.getElementById('runFlowABtn');
-      const pill = document.getElementById('flowAStatus');
-
-      btn.disabled = true;
-      btn.innerHTML = '<span>◌</span> Removing Background...';
-      pill.className = 'step-status-pill pill-running';
-      pill.textContent = 'Removing background (Flow A)...';
-
-      try {
-        const formData = new FormData();
-        formData.append('file', item.file);
-        formData.append('person_mode', 'without_person');
-        formData.append('has_human', 'false');
-        formData.append('mode_hint', 'without_person');
-        formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
-        formData.append('response_format', 'json');
-
-        const res = await fetch('/api/background-removal', {
-          method: 'POST',
-          body: formData,
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-          throw new Error(err.detail || 'Background removal failed');
-        }
-
-        const data = await res.json();
-        item.result = data;
-        item.status = 'done';
-        pill.className = 'step-status-pill pill-success';
-        pill.textContent = `✓ Cutout Ready (${Math.round(data.execution_time_ms)}ms)`;
-
-        renderQueue();
-        updateBatchToolbar();
-        displaySelectedItem(selectedIndex);
-        switchComparativeTab('auto');
-      } catch (err) {
-        pill.className = 'step-status-pill pill-error';
-        pill.textContent = 'Failed';
-        alert('Flow A error: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>⚡</span> Run Background Removal (Flow A)';
-      }
-    }
-
-    async function runStep1Parsing() {
-      if (selectedIndex < 0 || !fileQueue[selectedIndex]) {
-        alert("Please select or upload an image first!");
-        return;
-      }
-      const item = fileQueue[selectedIndex];
-      const btn = document.getElementById('runStep1Btn');
-      const pill = document.getElementById('step1Status');
-
-      btn.disabled = true;
-      btn.innerHTML = '<span>◌</span> Parsing Model...';
-      pill.className = 'step-status-pill pill-running';
-      pill.textContent = 'Parsing...';
-
-      try {
-        const formData = new FormData();
-        formData.append('file', item.file);
-        formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
-        formData.append('auto_repair', 'false'); // Step 1: No inpainting, strictly person parsing!
-        formData.append('auto_straighten', 'true');
-        formData.append('person_mode', 'with_person');
-        formData.append('has_human', 'true');
-        formData.append('mode_hint', 'with_person');
-
-        const res = await fetch('/api/background-removal', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-          throw new Error(err.detail || 'Human parsing failed');
-        }
-
-        const data = await res.json();
-        item.stepwiseResults.parsing = data;
-        pill.className = 'step-status-pill pill-success';
-        const gLabel = (data.garments && data.garments[0]) ? data.garments[0].recognized_label : 'Garment';
-        pill.textContent = `✓ Parsed: ${gLabel} (${Math.round(data.execution_time_ms)}ms)`;
-
-        switchComparativeTab('parsing');
-      } catch (err) {
-        pill.className = 'step-status-pill pill-idle';
-        pill.textContent = 'Failed';
-        alert('Step 1 Human Parsing error: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>👤</span> Step 1: Run Human Parsing';
-      }
-    }
-
-    async function runStep2Inpainting(forcedEngine = null) {
-      if (selectedIndex < 0 || !fileQueue[selectedIndex]) {
-        alert("Please select or upload an image first!");
-        return;
-      }
-      const item = fileQueue[selectedIndex];
-      const engine = forcedEngine || selectedStep2Engine || 'lama';
-      const btn = document.getElementById('runStep2Btn');
-      const pill = document.getElementById('step2Status');
-
-      btn.disabled = true;
-      btn.innerHTML = `<span>◌</span> Running ${engine.toUpperCase()}...`;
-      pill.className = 'step-status-pill pill-running';
-      pill.textContent = `Running ${engine}...`;
-
-      try {
-        if (engine === 'lama') {
-          const formData = new FormData();
-          formData.append('file', item.file);
-          formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
-          formData.append('auto_repair', 'true');
-          formData.append('auto_straighten', 'true');
-          formData.append('person_mode', 'with_person');
-          formData.append('has_human', 'true');
-          formData.append('mode_hint', 'with_person');
-
-          const res = await fetch('/api/background-removal', {
-            method: 'POST',
-            body: formData,
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-            throw new Error(err.detail || 'LaMa Inpainting failed');
-          }
-          const data = await res.json();
-          item.stepwiseResults.lama = data;
-          pill.className = 'step-status-pill pill-success';
-          pill.textContent = `✓ LaMa Done (${Math.round(data.execution_time_ms)}ms)`;
-          switchComparativeTab('lama');
-
-        } else if (engine === 'sdxl') {
-          const formData = new FormData();
-          formData.append('original_image', item.file);
-
-          const res = await fetch('/api/qwen-image', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (res.status === 503) {
-            const errData = await res.json().catch(() => ({ detail: 'GPU server required.' }));
-            item.stepwiseResults.sdxl = { isPendingGPU: true, reason: errData.detail };
-            pill.className = 'step-status-pill pill-idle';
-            pill.textContent = 'ℹ SDXL Ready for GPU';
-            switchComparativeTab('sdxl');
-          } else if (!res.ok) {
-            const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-            throw new Error(err.detail || 'SDXL execution failed');
-          } else {
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const timing = res.headers.get('X-Inference-Seconds') || '0';
-            const device = res.headers.get('X-Model-Device') || 'cuda';
-            const seed = res.headers.get('X-Seed') || '42';
-            item.stepwiseResults.sdxl = { url, timing, device, seed };
-            pill.className = 'step-status-pill pill-success';
-            pill.textContent = `✓ SDXL Done (${timing}s)`;
-            switchComparativeTab('sdxl');
-          }
-
-        } else if (engine === 'qwen') {
-          const formData = new FormData();
-          formData.append('original_image', item.file);
-
-          const res = await fetch('/api/qwen-image', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (res.status === 503) {
-            const errData = await res.json().catch(() => ({ detail: 'GPU server required.' }));
-            item.stepwiseResults.qwen = { isPendingGPU: true, reason: errData.detail };
-            pill.className = 'step-status-pill pill-idle';
-            pill.textContent = 'ℹ Qwen Ready for GPU';
-            switchComparativeTab('qwen');
-          } else if (!res.ok) {
-            const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-            throw new Error(err.detail || 'Qwen execution failed');
-          } else {
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const timing = res.headers.get('X-Inference-Seconds') || '0';
-            const status = res.headers.get('X-Reconstruction-Status') || 'success';
-            item.stepwiseResults.qwen = { url, timing, status, has_alpha_channel: true };
-            pill.className = 'step-status-pill pill-success';
-            pill.textContent = `✓ Qwen Done (${timing}s)`;
-            switchComparativeTab('qwen');
-          }
-        }
-      } catch (err) {
-        pill.className = 'step-status-pill pill-idle';
-        pill.textContent = 'Error';
-        alert(`Engine ${engine} failed: ` + err.message);
-      } finally {
-        btn.disabled = false;
-        const nameMap = { qwen: 'Qwen-Image-2.1', sdxl: 'SDXL + IP-Adapter', lama: 'LaMa FFC' };
-        btn.innerHTML = `<span>✨</span> Run Selected Engine (${nameMap[selectedStep2Engine] || 'Qwen-Image-2.1'})`;
-      }
-    }
-
-    function renderActiveResult(result) {
-      if (!result.garments || result.garments.length === 0) {
-        document.getElementById('outputPlaceholder').innerHTML = '<p>No garments detected in this image.</p>';
-        document.getElementById('outputPlaceholder').style.display = 'block';
-        document.getElementById('activeResultContainer').style.display = 'none';
-        return;
-      }
-
-      document.getElementById('outputPlaceholder').style.display = 'none';
-      const container = document.getElementById('activeResultContainer');
-      container.style.display = 'flex';
-      container.style.flexDirection = 'column';
-      container.style.width = '100%';
-      document.getElementById('downloadCurrentBtn').style.display = 'inline-flex';
-
-      const isMulti = result.garments.length > 1;
-
-      // Summary Bar
-      const totalDet = result.total_detected || result.garments.length;
-      const totalExt = result.total_extracted || result.garments.length;
-      const totalClean = result.total_background_removed !== undefined ? result.total_background_removed : result.garments.length;
-      const totalPart = result.total_partial || 0;
-      const totalFail = result.total_failed || 0;
-
-      let summaryHtml = `
-        <div class="summary-bar">
-          <span class="summary-pill">Detected: <strong>${totalDet}</strong></span>
-          <span class="summary-pill">Extracted: <strong>${totalExt}</strong></span>
-          <span class="summary-pill" style="border-color: rgba(16, 185, 129, 0.4); color: #34d399;">Clean BG: <strong>${totalClean}</strong></span>
-          ${totalPart > 0 ? `<span class="summary-pill" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;">Partial: <strong>${totalPart}</strong></span>` : ''}
-          ${totalFail > 0 ? `<span class="summary-pill" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">Failed: <strong>${totalFail}</strong></span>` : ''}
-        </div>
-      `;
-
-      if (isMulti) {
-        // Multi-Garment Responsive Grid View
-        let gridHtml = summaryHtml + '<div class="multi-garments-grid">';
-        result.garments.forEach((g, gIdx) => {
-          const gid = g.garment_id || ('garment_' + (gIdx + 1));
-          const gidLabel = String(gid).toUpperCase();
-          const gLabel = g.recognized_label || g.category || 'Garment';
-          const statusClass = `status-${g.background_removal_status || 'success'}`;
-          const statusLabel = g.background_removal_status === 'success' ? '✓ BG Clean' :
-                              (g.background_removal_status === 'partial' ? '⚠ Partial' :
-                              (g.background_removal_status === 'failed' ? '✕ Failed' : '✓ Clean BG'));
-
-          gridHtml += `
-            <div class="garment-card">
-              <div class="garment-thumb-wrap checkerboard-bg">
-                <img class="garment-thumb-img" src="${g.output_png_url}" alt="${gid}" />
-              </div>
-              <strong style="font-size: 12px; color: var(--text);">${gidLabel}</strong>
-              <span style="font-size: 11px; color: var(--text-muted); text-align: center;">${gLabel}</span>
-              <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
-                <span class="status-badge ${statusClass}">${statusLabel}</span>
-                <span class="status-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">1024&times;1024</span>
-              </div>
-              <a href="${g.output_png_url}" download="${gid}_1024x1024.png" class="secondary-btn" style="padding: 3px 8px; font-size: 11px; text-decoration: none; margin-top: 4px; width: 100%; text-align: center; justify-content: center;">
-                ⬇ Download PNG
-              </a>
-            </div>
-          `;
-        });
-        gridHtml += '</div>';
-        container.innerHTML = gridHtml;
-
-      } else {
-        // Single Garment View
-        const g = result.garments[0];
-        const statusClass = `status-${g.background_removal_status || 'success'}`;
-        const statusLabel = g.background_removal_status === 'success' ? '✓ Background Removed' :
-                            (g.background_removal_status === 'partial' ? '⚠ Partial Background' :
-                            (g.background_removal_status === 'failed' ? '✕ Removal Failed' : '? Needs Review'));
-
-        container.innerHTML = `
-          ${summaryHtml}
-          <div class="garment-tabs" id="garmentTabs">
-            <button class="tab-btn active">${g.recognized_label} (${g.category})</button>
-          </div>
-          <img id="activeOutputPreview" class="preview-img" src="${g.output_png_url}" alt="2D Garment Cutout" />
-          <div class="meta-badges" id="metaBadges">
-            <span class="meta-badge">Category: <strong>${g.category}</strong></span>
-            <span class="meta-badge">Scene: <strong>${result.scene_type || 'flat_lay'}</strong></span>
-            <span class="meta-badge">Status: <strong class="status-badge ${statusClass}">${statusLabel}</strong></span>
-            <span class="meta-badge">Fabric Preservation: <strong>${g.garment_preservation_status || 'verified'}</strong></span>
-            <span class="meta-badge">Confidence: <strong>${Math.round((g.background_removal_confidence || 0.99) * 100)}%</strong></span>
-            <span class="meta-badge">Canvas: <strong>1024&times;1024 Transparent PNG</strong></span>
-          </div>
-        `;
-      }
-    }
-
-    function resetInspectionViews() {
+    function resetViewports() {
       document.getElementById('noSelectionInputPlaceholder').style.display = 'block';
       document.getElementById('selectedInputPreview').style.display = 'none';
       document.getElementById('selectedMeta').textContent = 'No image selected';
+      document.getElementById('scanOverlay').classList.remove('active');
+      showEmptyOutputState();
+    }
+
+    function showEmptyOutputState() {
       document.getElementById('outputPlaceholder').style.display = 'block';
-      document.getElementById('outputPlaceholder').innerHTML = `
-        <div style="font-size: 32px; margin-bottom: 6px; opacity: 0.5;">✨</div>
-        <p style="font-size: 13px;">Processed transparent garment will appear here.</p>
-      `;
       document.getElementById('activeResultContainer').style.display = 'none';
+      document.getElementById('progressContainer').style.display = 'none';
+      document.getElementById('downloadCurrentBtn').style.display = 'none';
+      document.getElementById('garmentTabsContainer').style.display = 'none';
+    }
+
+    function showErrorState(msg) {
+      document.getElementById('outputPlaceholder').innerHTML = `
+        <div style="font-size: 36px; margin-bottom: 8px; color: var(--danger);">⚠️</div>
+        <p style="font-size: 13px; color: var(--danger); font-weight: 600;">Processing Failed</p>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${msg || 'Unknown error'}</p>
+      `;
+      document.getElementById('outputPlaceholder').style.display = 'block';
+      document.getElementById('activeResultContainer').style.display = 'none';
+      document.getElementById('progressContainer').style.display = 'none';
       document.getElementById('downloadCurrentBtn').style.display = 'none';
     }
 
+    // Start / Stop Scanner Animation
+    function startScanning() {
+      document.getElementById('scanOverlay').classList.add('active');
+      document.getElementById('outputPlaceholder').style.display = 'none';
+      document.getElementById('activeResultContainer').style.display = 'none';
+      document.getElementById('progressContainer').style.display = 'block';
+      document.getElementById('downloadCurrentBtn').style.display = 'none';
+
+      // Reset Step Tracker
+      const dot1 = document.getElementById('trackerDot1');
+      const dot2 = document.getElementById('trackerDot2');
+      const dot3 = document.getElementById('trackerDot3');
+      dot1.textContent = '⟳';
+      dot1.parentElement.className = 'tracker-item active';
+      dot2.textContent = '○';
+      dot2.parentElement.className = 'tracker-item';
+      dot3.textContent = '○';
+      dot3.parentElement.className = 'tracker-item';
+
+      let startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const sec = ((Date.now() - startTime) / 1000).toFixed(1);
+        document.getElementById('elapsedTimer').textContent = `Time: ${sec}s`;
+
+        if (sec > 3.0 && dot2.textContent === '○') {
+          dot1.textContent = '✓';
+          dot1.parentElement.className = 'tracker-item done';
+          dot2.textContent = '⟳';
+          dot2.parentElement.className = 'tracker-item active';
+        }
+        if (sec > 20.0 && dot3.textContent === '○') {
+          dot2.textContent = '✓';
+          dot2.parentElement.className = 'tracker-item done';
+          dot3.textContent = '⟳';
+          dot3.parentElement.className = 'tracker-item active';
+        }
+      }, 100);
+    }
+
+    function stopScanning() {
+      document.getElementById('scanOverlay').classList.remove('active');
+      document.getElementById('progressContainer').style.display = 'none';
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
     // Process a single item
-    async function processSingleItem(item) {
+    async function processItem(item) {
       const isWithoutPerson = (selectedMode === 'without_person');
       const formData = new FormData();
       formData.append('file', item.file);
-      formData.append('target_garment', isWithoutPerson ? 'all' : document.getElementById('targetGarmentSelect').value);
-      formData.append('auto_repair', isWithoutPerson ? 'false' : document.getElementById('autoRepairCheck').checked);
-      formData.append('auto_straighten', document.getElementById('autoStraightenCheck').checked);
       formData.append('person_mode', isWithoutPerson ? 'without_person' : 'with_person');
       formData.append('has_human', isWithoutPerson ? 'false' : 'true');
       formData.append('mode_hint', isWithoutPerson ? 'without_person' : 'with_person');
+      formData.append('target_garment', isWithoutPerson ? 'all' : document.getElementById('targetGarmentSelect').value);
+      formData.append('auto_straighten', 'false');
       formData.append('response_format', 'json');
 
-      const endpoint = '/api/background-removal';
-
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/background-removal', {
         method: 'POST',
         body: formData,
       });
@@ -1188,155 +526,213 @@
         const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
         throw new Error(err.detail || 'Inference error');
       }
+      return await res.json();
+    }
 
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('image/png')) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        return {
-          mode: 'isolated_product',
-          has_human: false,
-          execution_time_ms: 0,
-          garments_found: 1,
-          garments: [{
-            garment_id: 'isolated_0',
-            category: 'product',
-            recognized_label: 'Garment Cutout',
-            confidence: 0.99,
-            rotation_angle_deg: 0,
-            repaired: false,
-            output_png_url: url,
-          }]
-        };
-      } else {
-        return await res.json();
+    // Process currently selected image
+    async function processCurrentImage() {
+      if (selectedIndex < 0 || isProcessing) return;
+      const item = fileQueue[selectedIndex];
+      if (!item) return;
+
+      isProcessing = true;
+      item.status = 'processing';
+      renderQueue();
+      updateToolbar();
+      startScanning();
+
+      try {
+        const result = await processItem(item);
+        item.result = result;
+        item.status = 'done';
+        stopScanning();
+        renderOutputResult(result);
+      } catch (err) {
+        item.status = 'error';
+        item.errorMsg = err.message;
+        stopScanning();
+        showErrorState(err.message);
+      } finally {
+        isProcessing = false;
+        renderQueue();
+        updateToolbar();
       }
     }
 
-    // Process all images sequentially
+    // Process all queue items
     async function processAllBatch() {
-      if (fileQueue.length === 0 || isProcessingBatch) return;
-
-      isProcessingBatch = true;
-      const processBtn = document.getElementById('processAllBtn');
-      processBtn.disabled = true;
-      processBtn.innerHTML = '<span>◌</span> Processing Batch...';
+      if (fileQueue.length === 0 || isProcessing) return;
+      isProcessing = true;
+      updateToolbar();
 
       for (let i = 0; i < fileQueue.length; i++) {
         const item = fileQueue[i];
-        if (item.status === 'done') continue; // Skip already finished items
+        if (item.status === 'done') continue;
 
-        item.status = 'processing';
         selectQueueIndex(i);
-        document.getElementById('statusTelemetry').textContent = `Processing ${i+1}/${fileQueue.length}: ${item.file.name}...`;
+        startScanning();
 
         try {
-          const result = await processSingleItem(item);
+          const result = await processItem(item);
           item.result = result;
           item.status = 'done';
+          stopScanning();
+          renderOutputResult(result);
         } catch (err) {
           item.status = 'error';
           item.errorMsg = err.message;
+          stopScanning();
+          showErrorState(err.message);
         }
-
         renderQueue();
-        updateBatchToolbar();
-        displaySelectedItem(i);
       }
 
-      isProcessingBatch = false;
-      processBtn.innerHTML = '<span>▶</span> Process All Images';
-      updateBatchToolbar();
-      document.getElementById('statusTelemetry').textContent = 'Batch processing complete!';
+      isProcessing = false;
+      updateToolbar();
     }
 
-    // Download individual garment or multi-garment ZIP
-    function downloadActiveGarment() {
-      const activeItem = fileQueue[selectedIndex];
-      if (!activeItem) return;
-      const tab = activeItem.activeCompTab || 'auto';
-      const baseName = activeItem.file.name.replace(/\.[^/.]+$/, "");
+    // Render output result & badges
+    function renderOutputResult(result) {
+      document.getElementById('outputPlaceholder').style.display = 'none';
+      document.getElementById('progressContainer').style.display = 'none';
+      document.getElementById('activeResultContainer').style.display = 'flex';
+      document.getElementById('downloadCurrentBtn').style.display = 'inline-flex';
 
-      let urlToDownload = null;
-      let filename = `${baseName}_1024x1024_transparent.png`;
+      const garments = result.garments || [];
+      if (!garments.length) return;
 
-      if (tab === 'auto' && activeItem.result) {
-        if (activeItem.result.garments && activeItem.result.garments.length > 1 && activeItem.result.job_id) {
-          window.location.href = `/api/download-batch-zip/${activeItem.result.job_id}`;
-          return;
-        }
-        const img = document.getElementById('activeOutputPreview');
-        if (img && img.src) urlToDownload = img.src;
-      } else if (tab === 'parsing' && activeItem.stepwiseResults && activeItem.stepwiseResults.parsing) {
-        const g = activeItem.stepwiseResults.parsing.garments[0];
-        if (g) {
-          urlToDownload = g.output_png_url;
-          filename = `${baseName}_step1_parsed.png`;
-        }
-      } else if (tab === 'lama' && activeItem.stepwiseResults && activeItem.stepwiseResults.lama) {
-        const g = activeItem.stepwiseResults.lama.garments[0];
-        if (g) {
-          urlToDownload = g.output_png_url;
-          filename = `${baseName}_lama_repaired.png`;
-        }
-      } else if (tab === 'sdxl' && activeItem.stepwiseResults && activeItem.stepwiseResults.sdxl && activeItem.stepwiseResults.sdxl.url) {
-        urlToDownload = activeItem.stepwiseResults.sdxl.url;
-        filename = `${baseName}_sdxl_reconstructed.png`;
-      } else if (tab === 'qwen' && activeItem.stepwiseResults && activeItem.stepwiseResults.qwen && activeItem.stepwiseResults.qwen.output_png_url) {
-        urlToDownload = activeItem.stepwiseResults.qwen.output_png_url;
-        filename = `${baseName}_qwen_garment.png`;
+      // Handle Multi-garment tabs (for Flow A catalog splits)
+      const tabsContainer = document.getElementById('garmentTabsContainer');
+      if (garments.length > 1) {
+        tabsContainer.style.display = 'flex';
+        tabsContainer.innerHTML = garments.map((g, idx) => `
+          <button class="garment-tab-btn ${idx === activeGarmentIndex ? 'active' : ''}" onclick="selectGarmentTab(${idx})">
+            ${g.recognized_label || g.category || 'Garment ' + (idx+1)}
+          </button>
+        `).join('');
       } else {
-        const img = document.getElementById('activeOutputPreview');
-        if (img && img.src) urlToDownload = img.src;
+        tabsContainer.style.display = 'none';
       }
 
-      if (!urlToDownload) {
-        alert('No generated garment available to download for this tab.');
-        return;
+      const activeGarment = garments[activeGarmentIndex] || garments[0];
+      const outputImg = document.getElementById('activeOutputPreview');
+      outputImg.src = activeGarment.output_png_url;
+
+      // Setup Comparison Images
+      const currentItem = fileQueue[selectedIndex];
+      if (currentItem) {
+        document.getElementById('compareBeforeImg').src = currentItem.objectUrl;
+        document.getElementById('compareAfterImg').src = activeGarment.output_png_url;
       }
+
+      // Render Telemetry Badges
+      const elapsedSec = (result.execution_time_ms / 1000).toFixed(1);
+      const isFlowB = result.mode === 'with_person' || (result.diagnostics && result.diagnostics.scene_type === 'person');
+
+      document.getElementById('telemetryRow').innerHTML = `
+        <div class="telemetry-badge">Category: <strong>${activeGarment.recognized_label || activeGarment.category}</strong></div>
+        <div class="telemetry-badge">Confidence: <strong>${Math.round((activeGarment.confidence || 0.99) * 100)}%</strong></div>
+        <div class="telemetry-badge">Canvas: <strong>1024×1024 Transparent PNG</strong></div>
+        <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
+        <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>
+      `;
+
+      switchOutputView(currentOutputView);
+    }
+
+    function selectGarmentTab(idx) {
+      activeGarmentIndex = idx;
+      const item = fileQueue[selectedIndex];
+      if (item && item.result) renderOutputResult(item.result);
+    }
+
+    // Switch between Cutout View and Before/After Split Slider
+    function switchOutputView(view) {
+      currentOutputView = view;
+      document.querySelectorAll('.view-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.view === view);
+      });
+
+      const singleImg = document.getElementById('activeOutputPreview');
+      const compareBox = document.getElementById('compareContainer');
+
+      if (view === 'compare') {
+        singleImg.style.display = 'none';
+        compareBox.style.display = 'block';
+        initCompareSlider();
+      } else {
+        singleImg.style.display = 'block';
+        compareBox.style.display = 'none';
+      }
+    }
+
+    // Interactive Comparison Slider Logic
+    function initCompareSlider() {
+      const box = document.getElementById('compareContainer');
+      const overlay = document.getElementById('compareOverlay');
+      const handle = document.getElementById('compareHandle');
+      let isDragging = false;
+
+      function updateSlider(x) {
+        const rect = box.getBoundingClientRect();
+        let pos = ((x - rect.left) / rect.width) * 100;
+        pos = Math.max(0, Math.min(100, pos));
+        overlay.style.width = `${pos}%`;
+        handle.style.left = `${pos}%`;
+      }
+
+      box.onmousedown = (e) => { isDragging = true; updateSlider(e.clientX); };
+      window.onmousemove = (e) => { if (isDragging) updateSlider(e.clientX); };
+      window.onmouseup = () => { isDragging = false; };
+
+      box.ontouchstart = (e) => { isDragging = true; updateSlider(e.touches[0].clientX); };
+      window.ontouchmove = (e) => { if (isDragging) updateSlider(e.touches[0].clientX); };
+      window.ontouchend = () => { isDragging = false; };
+    }
+
+    // Toggle Background between Transparent Checkerboard & Studio Pure White
+    function toggleBackgroundMode() {
+      const isWhite = document.getElementById('bgModeToggle').checked;
+      const panel = document.getElementById('outputPanelBody');
+      if (isWhite) {
+        panel.classList.remove('checkerboard-bg');
+        panel.classList.add('white-bg');
+      } else {
+        panel.classList.remove('white-bg');
+        panel.classList.add('checkerboard-bg');
+      }
+    }
+
+    // Download active garment
+    function downloadActiveGarment() {
+      const item = fileQueue[selectedIndex];
+      if (!item || !item.result || !item.result.garments) return;
+      const g = item.result.garments[activeGarmentIndex] || item.result.garments[0];
+      const baseName = item.file.name.replace(/\.[^/.]+$/, "");
 
       const a = document.createElement('a');
-      a.href = urlToDownload;
-      a.download = filename;
+      a.href = g.output_png_url;
+      a.download = `${baseName}_3D_ghost_mannequin_1024.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();
     }
 
-    // Download all completed clean garments
-    async function downloadAllCleanGarments() {
-      const allGarments = [];
-      fileQueue.forEach(item => {
-        if (item.status === 'done' && item.result && item.result.garments) {
-          const baseName = item.file.name.replace(/\.[^/.]+$/, "");
-          item.result.garments.forEach(g => {
-            allGarments.push({
-              url: g.output_png_url,
-              name: `${baseName}_${g.category}_1024.png`,
-            });
-          });
-        }
-      });
-
-      if (allGarments.length === 0) {
-        alert('No clean garments available to download.');
-        return;
+    // Download all completed clean PNGs
+    async function downloadAllCompleted() {
+      const completed = fileQueue.filter(i => i.status === 'done' && i.result && i.result.garments);
+      for (let item of completed) {
+        const baseName = item.file.name.replace(/\.[^/.]+$/, "");
+        item.result.garments.forEach(g => {
+          const a = document.createElement('a');
+          a.href = g.output_png_url;
+          a.download = `${baseName}_${g.category}_1024.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        });
+        await new Promise(r => setTimeout(r, 200));
       }
-
-      document.getElementById('statusTelemetry').textContent = `Downloading ${allGarments.length} files...`;
-
-      for (let i = 0; i < allGarments.length; i++) {
-        const g = allGarments[i];
-        const a = document.createElement('a');
-        a.href = g.url;
-        a.download = g.name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        await new Promise(r => setTimeout(r, 300)); // 300ms delay between downloads
-      }
-
-      document.getElementById('statusTelemetry').textContent = `All ${allGarments.length} files downloaded!`;
     }
   </script>
 </body>
