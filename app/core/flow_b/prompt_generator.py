@@ -24,7 +24,7 @@ COMMON_STUDIO_RULES = (
     "Seamlessly reconstruct the continuous repeating fabric pattern and textile weave across the chest, stomach, and sleeves where hands or arms previously overlapped. "
     "Strictly preserve the exact original dye colors, saturation levels, darkness, fabric weave, embroidery stitches, textile texture, neckline shape, borders, "
     "and authentic garment silhouette from the reference photograph — do NOT oversaturate, do NOT brighten dark/muted tones, and do NOT alter the authentic color shade. "
-    "Centered upright 3D ghost-mannequin studio product photograph, neutral balanced studio lighting, "
+    "Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly symmetrical shoulders and sleeves, strictly level horizontal hemline, "
     "pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
 
@@ -51,13 +51,21 @@ CRITICAL RULES:
      * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
      * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
 
-3. Silhouette & Construction Anatomy:
+3. STRICT DIRECT FRONTAL 0-DEGREE STRAIGHT ALIGNMENT (PERFECTLY "SIDHA", NO 3/4 ANGLE):
+   - In e-commerce catalog standards (Myntra, Amazon, Ajio), product hero photos MUST be strictly front-facing and straight.
+   - The garment must be oriented directly straight-on at a 0-degree frontal camera angle (perfectly centered, plumb, and symmetrical).
+   - Both shoulders must be at the exact same horizontal height (level shoulders).
+   - Both sleeves must hang naturally and symmetrically on both sides at equal angles.
+   - The center front placket, buttons, zipper, or collar slit must run in a perfectly straight vertical line down the center.
+   - STRICTLY FORBID: Any 3/4 perspective turn, side profile, diagonal tilt, rotated mannequin body, or dynamic turned pose. The output must be perfectly straight ("sidha") and squarely facing the viewer.
+
+4. Silhouette & Construction Anatomy:
    - Neckline / Collar: Exact shape (e.g., Mandarin stand band collar / Nehru collar with small front slit, standard turn-down point collar, round crew neck, polo collar).
    - Placket & Fastenings: e.g., front chest button placket with small round matching buttons, contrast stitching, or hook closures.
    - Sleeves: Full-length, three-quarter, or half/short sleeves; specify if pattern/color continues seamlessly to open cuffs.
    - Slits & Hemline: Straight knee-length hem, side seam slits, flared A-line hem, curved casual shirt hem, or straight leg cuffs.
 
-4. Outfit Mode & Separates (STRICT REALITY RULE):
+5. Outfit Mode & Separates (STRICT REALITY RULE):
    - IF AND ONLY IF the person is actually wearing contrasting separates (e.g. shirt + jeans) OR two distinct garments are clearly laid out:
      Output separate entries for the upper garment ("upper_clothes") and lower garment ("pants").
    - IF ONLY ONE GARMENT IS VISIBLE OR LAID OUT (e.g., a single kurta, a single dress, a single shirt):
@@ -65,7 +73,7 @@ CRITICAL RULES:
    - IF THE OUTFIT IS A ONE-PIECE ENSEMBLE (dress, gown, jumpsuit, saree, lehenga):
      Output a single entry with category "dress", "saree", or "lehenga".
 
-5. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
+6. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
 
 Return strictly valid JSON format:
 {
@@ -128,10 +136,19 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
         "The generated 3D garment must perfectly replicate the authentic real-life color and textile weave of the reference garment."
     )
 
+    straight_alignment_rule = (
+        "STRICT STRAIGHT FRONTAL ALIGNMENT (0-DEGREE DIRECT FRONT VIEW): The 3D ghost mannequin MUST face the camera directly straight-on at a strict 0-degree angle. "
+        "Perfect symmetrical front-facing catalog view: both shoulders level at identical horizontal height, both sleeves hanging symmetrically at equal angles, "
+        "and the center button placket / zipper / collar slit aligned perfectly vertical down the center line. "
+        "STRICTLY FORBIDDEN: NO 3/4 angle, NO angled perspective, NO side profile, NO rotated torso, NO tilted shoulders, NO diagonal skew. "
+        "The garment must be positioned completely straight ('sidha'), perfectly centered, and squarely facing the camera."
+    )
+
     return (
-        "Generate an empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
-        "garment floating upright in natural 3D volume on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
+        "Generate a perfectly straight 0-degree direct front-facing empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
+        "garment floating upright, squarely facing the camera with symmetrical level shoulders and symmetrical sleeves on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
         "NO head, NO face, NO hair, NO neck, NO skin, NO hands, NO arms, NO legs, NO feet, NO bed, NO bedsheet, NO blanket, NO carpet, NO floor, and NO jewelry anywhere in the image. "
+        f"{straight_alignment_rule} "
         f"{isolation_rule} "
         f"{surface_rejection} "
         f"{color_lock_rule} "
