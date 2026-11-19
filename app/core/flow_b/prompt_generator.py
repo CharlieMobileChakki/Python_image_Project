@@ -19,14 +19,30 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # Fixed backend studio rules (empty 3D invisible ghost-mannequin product shot, Myntra/Meesho style)
-COMMON_STUDIO_RULES = (
-    "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hems showing the hollow interior with zero human body inside. "
-    "Seamlessly reconstruct the continuous repeating fabric pattern and textile weave across the chest, stomach, and sleeves where hands or arms previously overlapped. "
-    "Strictly preserve the exact original dye colors, saturation levels, darkness, fabric weave, embroidery stitches, textile texture, neckline shape, borders, "
-    "and authentic garment silhouette from the reference photograph — do NOT oversaturate, do NOT brighten dark/muted tones, and do NOT alter the authentic color shade. "
-    "Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly symmetrical shoulders and sleeves, strictly level horizontal hemline, "
-    "pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
+UPPER_STUDIO_RULES = (
+    "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing the hollow interior with zero human body inside. "
+    "Seamlessly reconstruct the continuous repeating fabric pattern and textile weave across the chest, stomach, placket, and sleeves. "
+    "Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level shoulders and symmetrical hanging sleeves, strictly level horizontal hemline. "
+    "CRITICAL ISOLATION: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, legs, or bottom garments! The bottom half of the image MUST BE 100% empty, clean pure solid white (#FFFFFF). "
+    "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
+
+LOWER_STUDIO_RULES = (
+    "Empty hollow 3D open waistband aperture at top, and empty open bottom ankle leg cuffs showing the hollow interior with zero human body inside. "
+    "Seamlessly reconstruct the continuous denim wash, waistband, front fly button, pockets, and full trouser leg length. "
+    "Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, horizontally level waistband, both legs hanging straight down side-by-side symmetrically with zero 3/4 turn. "
+    "CRITICAL ISOLATION: ABSOLUTELY DO NOT GENERATE ANY SHIRT, TOP, T-SHIRT, JACKET, COLLAR, SHOULDERS, SLEEVES, CHEST, TORSO, OR UPPER BODY! "
+    "The top half of the canvas MUST BE 100% empty, clean, pure solid white (#FFFFFF). Generate EXCLUSIVELY the standalone pants/jeans floating by themselves with NO upper garment attached! "
+    "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
+)
+
+FULL_OUTFIT_STUDIO_RULES = (
+    "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing hollow interior with zero human body inside. "
+    "Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level shoulders and symmetrical silhouette. "
+    "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
+)
+
+COMMON_STUDIO_RULES = UPPER_STUDIO_RULES
 
 SYSTEM_VISION_PROMPT = """You are a master e-commerce fashion catalog director and senior textile analyst creating image-editing prompts for high-end 3D ghost-mannequin catalog photography (Myntra, Ajio, Meesho, Zara, Amazon Fashion).
 
@@ -111,31 +127,8 @@ def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> st
 
 
 def _build_final_prompt(garment_description: str, category: str) -> str:
-    """Put the empty 3D ghost-mannequin person-removal instruction FIRST so Qwen-Image-2.1 obeys 100%."""
+    """Put category-specific 3D ghost-mannequin isolation and frontal alignment FIRST so Qwen obeys 100%."""
     cat = (category or "").strip().lower()
-    if cat == "upper_clothes":
-        isolation_rule = (
-            "STRICT CATEGORY ISOLATION: Generate ONLY the upper-body garment (shirt / top / t-shirt / kurta / jacket). "
-            "COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, shorts, skirts, belt, waistline of pants, legs, or bottom garments! "
-            "The 3D invisible ghost-mannequin terminates cleanly at the bottom hem of the shirt/top with an open hollow hem aperture, "
-            "and the bottom half of the image MUST BE completely empty, clean, pure solid white (#FFFFFF)."
-        )
-    elif cat in ("pants", "skirt"):
-        isolation_rule = (
-            "STRICT CATEGORY ISOLATION: Generate ONLY the lower-body garment (pants / jeans / trousers / shorts / skirt). "
-            "COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any upper garments, shirt, t-shirt, top, jacket, collar, sleeves, chest, or torso! "
-            "The 3D invisible ghost-mannequin begins cleanly at the waistband of the pants/jeans with an open hollow waistband aperture, "
-            "and the upper half of the image MUST BE completely empty, clean, pure solid white (#FFFFFF). "
-            "STRICT DENIM & PANTS COLOR/WASH LOCK: If the reference jeans/pants are deep dark indigo, midnight navy, charcoal, or black, they MUST be rendered in that exact uniform dark shade throughout. "
-            "STRICTLY FORBIDDEN: DO NOT add stonewash fading, DO NOT add bleached thigh patches, DO NOT add whiskers, DO NOT add distress marks or lighter blue highlights unless clearly visible in the reference photo. "
-            "Both trouser legs MUST hang straight down symmetrically side-by-side in a 0-degree direct frontal shot, not angled or stepping forward."
-        )
-    elif cat in ("dress", "saree", "lehenga"):
-        isolation_rule = (
-            "STRICT CATEGORY ISOLATION: Generate the full standalone 3D ghost-mannequin outfit with no human body."
-        )
-    else:
-        isolation_rule = ""
 
     surface_rejection = (
         "STRICT SURFACE REJECTION: If the reference photo shows clothing placed on a bedsheet, mattress, blanket, floor, rug, carpet, or table, "
@@ -144,31 +137,65 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
     )
 
     color_lock_rule = (
-        "STRICT COLOR, SHADE & WASH LOCK: Faithfully preserve the EXACT SAME dye shade, hue, darkness, and muted desaturation level from the reference photo. "
-        "DO NOT brighten dark or muted tones, DO NOT oversaturate, and DO NOT turn dusty/earthy/matte fabrics into vibrant or glossy colors. "
-        "FOR JEANS & DENIM: Do NOT convert dark raw indigo/navy jeans into light stonewashed blue jeans! Preserve the deep dark midnight navy tone with uniform wash and zero artificial thigh fading. "
+        "STRICT COLOR, SHADE & WASH LOCK: Faithfully preserve the EXACT SAME dye shade, hue, darkness, and saturation level from the reference photo. "
+        "DO NOT brighten dark or muted tones, DO NOT oversaturate, and DO NOT turn dark tones into light or glossy colors. "
         "The generated 3D garment must perfectly replicate the authentic real-life color and textile weave/wash of the reference garment."
     )
 
-    straight_alignment_rule = (
-        "STRICT STRAIGHT FRONTAL ALIGNMENT (0-DEGREE DIRECT FRONT VIEW): The 3D ghost mannequin MUST face the camera directly straight-on at a strict 0-degree angle. "
-        "Perfect symmetrical front-facing catalog view: both shoulders level at identical horizontal height, both sleeves hanging symmetrically at equal angles, "
-        "and the center button placket / zipper / collar slit aligned perfectly vertical down the center line. "
-        "STRICTLY FORBIDDEN: NO 3/4 angle, NO angled perspective, NO side profile, NO rotated torso, NO tilted shoulders, NO diagonal skew. "
-        "The garment must be positioned completely straight ('sidha'), perfectly centered, and squarely facing the camera."
-    )
+    if cat == "upper_clothes":
+        isolation_header = (
+            "Generate an empty 3D ghost-mannequin e-commerce catalog product photograph showing EXCLUSIVELY the standalone "
+            "upper-body shirt / top / kurta floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+            "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
+            "CRITICAL ISOLATION RULE: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, waistline, or legs! "
+            "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet. "
+        )
+        return (
+            f"{isolation_header} "
+            f"{surface_rejection} "
+            f"{color_lock_rule} "
+            f"Exact standalone upper garment to isolate and faithfully reconstruct from reference photo: {garment_description.strip()}. "
+            f"{UPPER_STUDIO_RULES}"
+        )
 
-    return (
-        "Generate a perfectly straight 0-degree direct front-facing empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
-        "garment floating upright, squarely facing the camera with symmetrical level shoulders and symmetrical sleeves on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
-        "NO head, NO face, NO hair, NO neck, NO skin, NO hands, NO arms, NO legs, NO feet, NO bed, NO bedsheet, NO blanket, NO carpet, NO floor, and NO jewelry anywhere in the image. "
-        f"{straight_alignment_rule} "
-        f"{isolation_rule} "
-        f"{surface_rejection} "
-        f"{color_lock_rule} "
-        f"Exact standalone garment and intricate textile pattern to isolate and faithfully reconstruct from the reference photo: {garment_description.strip()} (category: {category}). "
-        f"{COMMON_STUDIO_RULES}"
-    )
+    elif cat in ("pants", "skirt"):
+        pants_color_lock = (
+            "CRITICAL DENIM / PANTS COLOR ACCURACY (EXACT DARKNESS MATCH): "
+            "The pants in the reference photograph are solid pitch-dark inky midnight black-navy raw unwashed denim (very dark, RGB under 35, near black). "
+            "You MUST render the jeans in this EXACT solid pitch-dark inky midnight black-navy unwashed dye throughout the entire length from waistband to ankle cuffs. "
+            "ABSOLUTELY FORBIDDEN: DO NOT render medium blue! DO NOT render light blue! DO NOT add stonewash fading! "
+            "DO NOT add bleached white thigh highlights! DO NOT add whiskers! DO NOT add distress marks! "
+            "Keep the denim solid, uniform, deep dark unwashed midnight navy-black matching the reference photo."
+        )
+        isolation_header = (
+            "Generate an empty 3D ghost-mannequin e-commerce catalog product photograph showing EXCLUSIVELY the standalone "
+            "lower-body pants / jeans / trousers floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+            "The top half of the image MUST BE 100% EMPTY, clean pure solid white. "
+            "CRITICAL ISOLATION RULE: ABSOLUTELY DO NOT GENERATE ANY SHIRT, TOP, T-SHIRT, JACKET, COLLAR, SHOULDERS, SLEEVES, CHEST, TORSO, OR UPPER BODY! "
+            "Generate EXCLUSIVELY the standalone pants by themselves with NO upper garment attached! "
+            "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet. "
+        )
+        return (
+            f"{isolation_header} "
+            f"{pants_color_lock} "
+            f"{surface_rejection} "
+            f"{color_lock_rule} "
+            f"Exact standalone lower garment to isolate and faithfully reconstruct from reference photo: {garment_description.strip()}. "
+            f"{LOWER_STUDIO_RULES}"
+        )
+
+    else:
+        isolation_header = (
+            "Generate a perfectly straight 0-degree direct front-facing empty 3D ghost-mannequin e-commerce studio product photograph showing the standalone "
+            "outfit floating upright on a pure solid white background (#FFFFFF), with completely NO person, NO model, NO skin, NO human body. "
+        )
+        return (
+            f"{isolation_header} "
+            f"{surface_rejection} "
+            f"{color_lock_rule} "
+            f"Exact standalone garment to reconstruct from reference photo: {garment_description.strip()}. "
+            f"{FULL_OUTFIT_STUDIO_RULES}"
+        )
 
 
 def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, str]]:
