@@ -60,12 +60,6 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     response_model_exclude_none=True,
     summary="Primary Background Removal & Garment Processing API",
 )
-@router.post(
-    "/process",
-    response_model=ProcessGarmentResponse,
-    response_model_exclude_none=True,
-    summary="Unified AI 3D Garment Studio Processing API (Node.js & UI)",
-)
 async def background_removal_endpoint(
     request: Request,
     file: UploadFile = File(..., description="Input image of garment, model, or flat-lay"),
