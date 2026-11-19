@@ -240,94 +240,71 @@ main {
 }
 
 /* =============================================================================
-   3. Processing Engine Selector (Flow B vs Flow A)
+   3. Unified 3D Garment Studio Banner (Single Flow)
    ============================================================================= */
-.mode-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-@media (max-width: 960px) {
-  .mode-grid { grid-template-columns: 1fr; }
-}
-
-.mode-card {
+.unified-studio-banner {
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(22, 214, 160, 0.25);
   border-radius: var(--radius);
-  padding: 14px 18px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 0 20px rgba(22, 214, 160, 0.04);
+  position: relative;
+  overflow: hidden;
 }
 
-.mode-card::before {
+.unified-studio-banner::before {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
-  background: transparent;
-  transition: background 0.2s;
-}
-
-.mode-card:hover {
-  border-color: rgba(53, 200, 232, 0.4);
-  background: var(--bg-elevated);
-  transform: translateY(-1.5px);
-}
-
-.mode-card.active {
-  border-color: var(--accent-primary);
-  background: rgba(22, 214, 160, 0.06);
-  box-shadow: 0 0 24px rgba(22, 214, 160, 0.12);
-}
-
-.mode-card.active::before {
+  height: 2px;
   background: linear-gradient(90deg, var(--accent-primary), var(--accent-cyan));
 }
 
-.mode-content {
+.banner-content {
   display: flex;
   align-items: center;
   gap: 14px;
 }
 
-.mode-icon {
-  font-size: 26px;
-  width: 46px;
-  height: 46px;
-  background: rgba(255, 255, 255, 0.04);
+.banner-icon {
+  font-size: 24px;
+  width: 44px;
+  height: 44px;
+  background: rgba(22, 214, 160, 0.12);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(22, 214, 160, 0.3);
 }
 
-.mode-card.active .mode-icon {
-  background: rgba(22, 214, 160, 0.12);
-  border-color: rgba(22, 214, 160, 0.3);
-}
-
-.mode-details h3 {
-  font-size: 14.5px;
+.banner-details h3 {
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 2px;
 }
 
-.mode-details p {
-  font-size: 11.5px;
+.banner-details p {
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.35;
+}
+
+.banner-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-grid {
+  display: none;
 }
 
 .mode-pill {
@@ -999,30 +976,18 @@ select.studio-select:focus {
 
   <!-- Main Studio Workspace -->
   <main>
-    <!-- Engine Selector: Flow B vs Flow A -->
-    <div class="mode-grid">
-      <!-- Flow B: Ghost Mannequin AI -->
-      <div id="modeCardFlowB" class="mode-card active" onclick="setPipelineMode('with_person')">
-        <div class="mode-content">
-          <div class="mode-icon">👗</div>
-          <div class="mode-details">
-            <h3>Flow B – Ghost Mannequin AI</h3>
-            <p>Model Photo ➔ 3D Ghost Mannequin &bull; RTX 3090 GPU Engine &bull; Garment Reconstruction &bull; Zero Person</p>
-          </div>
+    <!-- Unified 3D Garment Studio Banner -->
+    <div class="unified-studio-banner">
+      <div class="banner-content">
+        <div class="banner-icon">⚡</div>
+        <div class="banner-details">
+          <h3>Unified 3D Ghost Mannequin Studio (Node.js & UI)</h3>
+          <p>Single Production Flow: ChatGPT Vision ➔ Remote RTX 3090 GPU Qwen 2.1 ➔ BiRefNet Lite 1024x1024 Transparent PNG</p>
         </div>
-        <span class="mode-pill flow-b">RTX 3090 Turbo &bull; bfloat16</span>
       </div>
-
-      <!-- Flow A: Catalog Cutout AI -->
-      <div id="modeCardFlowA" class="mode-card" onclick="setPipelineMode('without_person')">
-        <div class="mode-content">
-          <div class="mode-icon">👔</div>
-          <div class="mode-details">
-            <h3>Flow A – Catalog Cutout AI</h3>
-            <p>Flat-Lay ➔ Background Removal &bull; BiRefNet Engine &bull; Fast CPU ~1.5s &bull; Multi-Garment Separation</p>
-          </div>
-        </div>
-        <span class="mode-pill flow-a">Fast CPU &bull; ~1.5s</span>
+      <div class="banner-tags">
+        <span class="mode-pill flow-b">RTX 3090 GPU Active</span>
+        <span class="mode-pill" style="background: rgba(53, 200, 232, 0.12); color: #35C8E8; border: 1px solid rgba(53, 200, 232, 0.3);">1024x1024 HD Output</span>
       </div>
     </div>
 
@@ -1226,23 +1191,17 @@ select.studio-select:focus {
     }
     window.addEventListener('DOMContentLoaded', checkHardware);
 
-    // Switch between Flow B (With Person) and Flow A (Without Person)
-    function setPipelineMode(mode) {
-      selectedMode = mode;
-      document.getElementById('modeCardFlowB').classList.toggle('active', mode === 'with_person');
-      document.getElementById('modeCardFlowA').classList.toggle('active', mode === 'without_person');
+    let selectedMode = 'with_person';
 
+    // Unified 3D Studio Pipeline (Always active)
+    function setPipelineMode(mode) {
+      selectedMode = 'with_person';
       const processBtn = document.getElementById('processCurrentBtn');
       const targetSelect = document.getElementById('targetGarmentSelect');
-
-      if (mode === 'with_person') {
-        processBtn.innerHTML = '<span>⚡</span> Generate 3D Garment';
+      if (processBtn) processBtn.innerHTML = '<span>⚡</span> Generate 3D Garment';
+      if (targetSelect) {
         targetSelect.disabled = false;
         targetSelect.style.opacity = '1.0';
-      } else {
-        processBtn.innerHTML = '<span>⚡</span> Remove Background (Flow A)';
-        targetSelect.disabled = true;
-        targetSelect.style.opacity = '0.5';
       }
     }
 
@@ -1471,16 +1430,12 @@ select.studio-select:focus {
       if (timerInterval) clearInterval(timerInterval);
     }
 
-    // Process a single item
+    // Process a single item via Unified 3D Garment Studio Pipeline (Node.js & UI Flow)
     async function processItem(item) {
-      const isWithoutPerson = (selectedMode === 'without_person');
       const formData = new FormData();
       formData.append('file', item.file);
-      formData.append('person_mode', isWithoutPerson ? 'without_person' : 'with_person');
-      formData.append('has_human', isWithoutPerson ? 'false' : 'true');
-      formData.append('mode_hint', isWithoutPerson ? 'without_person' : 'with_person');
-      formData.append('target_garment', isWithoutPerson ? 'all' : document.getElementById('targetGarmentSelect').value);
-      formData.append('auto_straighten', 'false');
+      formData.append('person_mode', 'with_person');
+      formData.append('target_garment', document.getElementById('targetGarmentSelect').value);
       formData.append('response_format', 'json');
 
       const res = await fetch('/api/background-removal', {

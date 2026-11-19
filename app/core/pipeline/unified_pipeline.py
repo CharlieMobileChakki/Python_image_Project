@@ -376,21 +376,21 @@ def process_garment_pipeline(
     auto_straighten: bool = True,
     include_base64: bool = False,
 ) -> dict[str, Any]:
-    """Execute the Arangtik Garment AI pipeline with explicit flow routing.
+    """Execute the Unified 3D Garment Studio Pipeline.
 
-    Routes execution based on whether the image contains a person:
-    - Flow A (without_person): Direct background removal via BiRefNet Lite with zero
-      human-parsing overhead, normalized to clean 1024x1024 transparent canvas.
-    - Flow B (with_person): Background removal -> SegFormer B2 clothes parsing ->
-      garment extraction -> LaMa inpainting fabric repair -> 1024x1024 normalization.
+    Single unified production workflow for all images (model photos, worn outfits,
+    or flat-lays on bed/floor/hanger):
+    1. ChatGPT Vision analyzes the image and creates garment-specific textile prompt(s).
+    2. Remote RTX 3090 GPU synthesizes the clean 3D ghost-mannequin product photo.
+    3. BiRefNet Lite strips the solid white studio background into a crisp 1024x1024 transparent PNG.
 
     Args:
         image_bytes: Raw binary image payload.
-        person_mode: Explicit mode: 'with_person' (Flow B) or 'without_person' (Flow A).
+        person_mode: Optional execution mode (defaults to unified studio flow).
         has_human: Optional explicit boolean flag from caller.
         mode_hint: Optional legacy hint ('worn', 'isolated', 'auto').
         target_garment: Garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'.
-        auto_repair: Enable LaMa fabric inpainting for occlusions in Flow B.
+        auto_repair: Enable fabric inpainting for occlusions.
         auto_straighten: Enable deskewing of tilted garments.
         include_base64: Whether to include Base64 data URI in response.
 
@@ -403,14 +403,8 @@ def process_garment_pipeline(
     # Ingest and validate image
     image_rgb = load_image_bytes(image_bytes)
 
-    # Resolve execution flow (Flow A without person vs Flow B with person)
-    selected_flow = resolve_execution_flow(
-        person_mode=person_mode,
-        has_human=has_human,
-        mode_hint=mode_hint,
-    )
-
-    if selected_flow == "without_person":
+    # Legacy raw-cutout-only fallback (if explicitly requested)
+    if person_mode == "flow_a_legacy_raw" or mode_hint == "raw_cutout_only":
         return execute_flow_a_without_person(
             image_rgb=image_rgb,
             image_bytes=image_bytes,
@@ -421,6 +415,7 @@ def process_garment_pipeline(
             t_start=t_start,
         )
 
+    # Master Unified 3D Studio Flow (ChatGPT Vision + Qwen GPU + BiRefNet Lite 1024x1024)
     return execute_flow_b_with_person(
         image_rgb=image_rgb,
         image_bytes=image_bytes,

@@ -60,47 +60,45 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     response_model_exclude_none=True,
     summary="Primary Background Removal & Garment Processing API",
 )
+@router.post(
+    "/process",
+    response_model=ProcessGarmentResponse,
+    response_model_exclude_none=True,
+    summary="Unified AI 3D Garment Studio Processing API (Node.js & UI)",
+)
 async def background_removal_endpoint(
     request: Request,
-    file: UploadFile = File(..., description="Input image of garment or worn model"),
-    person_mode: str = Form("without_person", description="Execution mode: 'without_person' (Flow A: direct background removal, default 80% workload) or 'with_person' (Flow B: parsing + inpainting)"),
-    has_human: str | bool | None = Form(None, description="Explicit flag: True/False or 'with_person'/'without_person'"),
+    file: UploadFile = File(..., description="Input image of garment, model, or flat-lay"),
+    person_mode: str = Form("with_person", description="Execution mode: defaults to unified 3D studio flow"),
+    has_human: str | bool | None = Form(None, description="Optional flag"),
     target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
-    auto_repair: bool = Form(True, description="Enable LaMa/Qwen fabric inpainting for occlusions in Flow B"),
-    auto_straighten: bool = Form(True, description="Enable auto-deskewing for tilted garments"),
+    auto_repair: bool = Form(True, description="Enable fabric inpainting"),
+    auto_straighten: bool = Form(False, description="Enable auto-deskewing"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
-    response_format: str = Form("image_direct", description="'image_direct' (default for single garment) or 'json' for multi-garment metadata"),
-    mode_hint: str | None = Form(None, description="Legacy mode hint for backwards compatibility: 'worn', 'isolated', 'auto'"),
+    response_format: str = Form("json", description="'json' (default for Node.js / UI) or 'image_direct' for binary PNG stream"),
+    mode_hint: str | None = Form(None, description="Legacy mode hint"),
 ) -> Any:
-    """Master Background Removal & Garment Extraction Endpoint.
+    """Unified AI 3D Garment Studio & Background Removal Endpoint.
 
-    Processes image through explicit dual-flow architecture:
-    - Flow A (without_person, default 80% workload): Pure background removal via BiRefNet Lite
-      with zero human-parsing overhead, normalized to clean 1024x1024 transparent canvas.
-    - Flow B (with_person): Background removal -> SegFormer B2 clothes parsing ->
-      garment extraction -> Qwen/LaMa fabric repair -> 1024x1024 normalization.
+    Single unified production workflow (ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024):
+    1. Analyzes the garment via ChatGPT Vision and writes forensic textile prompt.
+    2. Synthesizes pristine 3D ghost mannequin on RTX 3090 GPU worker.
+    3. Strips white background into transparent 1024x1024 PNG via BiRefNet Lite.
 
-    Supports both Ankit's Node.js caller formats:
-    - Option 1 (Recommended): Direct transparent PNG binary stream (image/png).
-    - Option 2: JSON Response with status, message, image (Base64 data URI), and garments array.
+    Supports both Node.js caller formats:
+    - JSON Response (default): { status: "success", garments: [{ output_png_url, category, ... }] }
+    - Direct PNG stream: Set response_format='image_direct' or Accept: image/png
     """
     image_bytes = await validate_and_read_image(file)
 
-    # Normalize boolean and string person flags
     actual_has_human: bool | None = None
     if has_human is not None:
         if isinstance(has_human, bool):
             actual_has_human = has_human
-        elif str(has_human).strip().lower() in ("false", "0", "no", "without_person", "isolated", "flat_lay"):
+        elif str(has_human).strip().lower() in ("false", "0", "no"):
             actual_has_human = False
-        elif str(has_human).strip().lower() in ("true", "1", "yes", "with_person", "worn"):
+        elif str(has_human).strip().lower() in ("true", "1", "yes"):
             actual_has_human = True
-
-    # If person_mode or mode_hint explicitly specifies isolated / without_person, enforce Flow A
-    raw_mode = (person_mode or mode_hint or "").strip().lower()
-    if raw_mode in ("without_person", "without", "no_person", "isolated", "flat_lay", "product", "flow_a"):
-        actual_has_human = False
-        person_mode = "without_person"
 
     try:
         async with get_semaphore():
