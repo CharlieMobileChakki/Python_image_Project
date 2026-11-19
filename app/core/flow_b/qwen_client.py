@@ -56,7 +56,7 @@ def check_gpu_worker_health() -> dict[str, Any]:
         headers["X-API-Key"] = api_key
 
     try:
-        with httpx.Client(timeout=3.0) as client:
+        with httpx.Client(timeout=10.0) as client:
             resp = client.get(f"{info}/health", headers=headers)
             if resp.status_code == 200:
                 payload = resp.json()
@@ -66,6 +66,7 @@ def check_gpu_worker_health() -> dict[str, Any]:
                 "online": False,
                 "url": info,
                 "status_code": resp.status_code,
+                "detail": f"HTTP {resp.status_code}: {resp.text[:120]}",
             }
     except Exception as exc:
         return {"configured": True, "online": False, "url": info, "detail": str(exc)}

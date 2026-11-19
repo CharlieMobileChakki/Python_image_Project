@@ -153,5 +153,6 @@ async def health_check() -> HealthResponse:
             "cuda_available": remote_gpu_online,
             "gpu_name": gpu_name,
             "gpu_worker_url": gpu_health.get("url", "not_set"),
+            "gpu_worker_detail": gpu_health.get("detail", "Connected"),
         },
     )
