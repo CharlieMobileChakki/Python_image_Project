@@ -1175,6 +1175,7 @@
       formData.append('person_mode', isWithoutPerson ? 'without_person' : 'with_person');
       formData.append('has_human', isWithoutPerson ? 'false' : 'true');
       formData.append('mode_hint', isWithoutPerson ? 'without_person' : 'with_person');
+      formData.append('response_format', 'json');
 
       const endpoint = '/api/background-removal';
 
