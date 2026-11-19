@@ -12,6 +12,11 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sys
+
+# Prevent PyTorch CUDA memory fragmentation on back-to-back jobs
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import threading
 import time
 from typing import Any, Optional
@@ -93,6 +98,9 @@ def load_qwen21_pipeline():
         else:
             pipe.to("cuda")
 
+        if hasattr(pipe, "enable_attention_slicing"):
+            pipe.enable_attention_slicing(1)
+            logger.info("Enabled attention_slicing (prevents peak VRAM spikes on back-to-back jobs).")
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
             pipe.vae.enable_slicing()
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
@@ -133,6 +141,11 @@ def _run_inference_sync(
         prompt,
     )
 
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     t0 = time.perf_counter()
     with _pipe_lock, torch.inference_mode():
         # Uses Turbo's built-in official 8-step schedule & default CFG=1 automatically
@@ -144,8 +157,12 @@ def _run_inference_sync(
             use_kv_cache=True,
             generator=generator,
         )
-        out_img: Image.Image = result.images[0]
-        torch.cuda.empty_cache()
+        out_img: Image.Image = result.images[0].copy()
+        del result
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
 
     elapsed = round(time.perf_counter() - t0, 2)
     gpu_info = _get_gpu_info()
