@@ -121,18 +121,37 @@ def generate_garment_via_gpu(
     max_wait_sec = _get_timeout()
     t_start = time.perf_counter()
 
+    CLOUDFLARE_RETRY_CODES = (500, 502, 503, 504, 520, 521, 522, 523, 524, 530)
+
     logger.info("Submitting Flow B async job to GPU worker: %s/jobs", remote_url)
     try:
         with httpx.Client(timeout=30.0) as client:
-            # 1. Submit job (completes in < 0.5s — immune to Cloudflare 524!)
-            submit_resp = client.post(
-                f"{remote_url}/jobs",
-                headers=headers,
-                files={"image": ("reference.png", img_bytes, "image/png")},
-                data=form_data,
-            )
-            if submit_resp.status_code != 200:
-                raise RuntimeError(f"GPU Worker /jobs returned HTTP {submit_resp.status_code}: {submit_resp.text[:300]}")
+            # 1. Submit job (with retry for transient Cloudflare tunnel reconnects)
+            submit_resp = None
+            for submit_attempt in range(1, 4):
+                try:
+                    submit_resp = client.post(
+                        f"{remote_url}/jobs",
+                        headers=headers,
+                        files={"image": ("reference.png", img_bytes, "image/png")},
+                        data=form_data,
+                    )
+                    if submit_resp.status_code == 200:
+                        break
+                    if submit_resp.status_code in CLOUDFLARE_RETRY_CODES and submit_attempt < 3:
+                        logger.warning("Cloudflare HTTP %d submitting job (%d/3), retrying in 2s...", submit_resp.status_code, submit_attempt)
+                        time.sleep(2.0)
+                        continue
+                except (httpx.RequestError, httpx.TimeoutException) as submit_exc:
+                    if submit_attempt < 3:
+                        logger.warning("Network error submitting job (%d/3): %s, retrying in 2s...", submit_attempt, submit_exc)
+                        time.sleep(2.0)
+                        continue
+                    raise RuntimeError(f"Cannot connect to GPU Worker at {remote_url}: {submit_exc}") from submit_exc
+
+            if submit_resp is None or submit_resp.status_code != 200:
+                err_text = submit_resp.text[:300] if submit_resp is not None else "No response"
+                raise RuntimeError(f"GPU Worker /jobs returned HTTP {submit_resp.status_code if submit_resp else 'None'}: {err_text}")
 
             job_id = submit_resp.json()["job_id"]
             logger.info("GPU job %s queued; polling status...", job_id)
@@ -148,16 +167,16 @@ def generate_garment_via_gpu(
                     status_resp = client.get(f"{remote_url}/jobs/{job_id}", headers=headers)
                 except (httpx.RequestError, httpx.TimeoutException) as poll_exc:
                     consecutive_errors += 1
-                    if consecutive_errors > 6:
+                    if consecutive_errors > 8:
                         raise RuntimeError(f"GPU Worker status check connection failed after retries: {poll_exc}") from poll_exc
-                    logger.warning("Transient network glitch polling GPU (%d/6): %s", consecutive_errors, poll_exc)
+                    logger.warning("Transient network glitch polling GPU (%d/8): %s", consecutive_errors, poll_exc)
                     continue
 
-                if status_resp.status_code in (502, 503, 504):
+                if status_resp.status_code in CLOUDFLARE_RETRY_CODES:
                     consecutive_errors += 1
-                    if consecutive_errors > 6:
+                    if consecutive_errors > 8:
                         raise RuntimeError(f"GPU Worker status check failed ({status_resp.status_code}) after retries: {status_resp.text[:200]}")
-                    logger.warning("Transient Cloudflare HTTP %d polling GPU (%d/6), retrying in 2.5s...", status_resp.status_code, consecutive_errors)
+                    logger.warning("Transient Cloudflare HTTP %d polling GPU (%d/8), retrying in 2.5s...", status_resp.status_code, consecutive_errors)
                     continue
 
                 if status_resp.status_code != 200:
