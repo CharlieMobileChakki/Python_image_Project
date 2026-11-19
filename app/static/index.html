@@ -1450,13 +1450,13 @@ select.studio-select:focus {
         const sec = ((Date.now() - startTime) / 1000).toFixed(1);
         document.getElementById('elapsedTimer').textContent = `Time: ${sec}s`;
 
-        if (sec > 3.0 && dot2.textContent === '○') {
+        if (sec > 3.5 && dot2.textContent === '○') {
           dot1.textContent = '✓';
           dot1.parentElement.className = 'tracker-item done';
           dot2.textContent = '⟳';
           dot2.parentElement.className = 'tracker-item active';
         }
-        if (sec > 20.0 && dot3.textContent === '○') {
+        if (sec > 42.0 && dot3.textContent === '○') {
           dot2.textContent = '✓';
           dot2.parentElement.className = 'tracker-item done';
           dot3.textContent = '⟳';
