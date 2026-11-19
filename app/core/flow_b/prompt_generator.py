@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 COMMON_STUDIO_RULES = (
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hems showing the hollow interior with zero human body inside. "
     "Seamlessly reconstruct the continuous repeating fabric pattern and textile weave across the chest, stomach, and sleeves where hands or arms previously overlapped. "
-    "Strictly preserve the exact original colors, high-contrast repeating print motifs, embroidery stitches, textile texture, neckline shape, borders, "
-    "and authentic garment silhouette from the reference photograph — do NOT smooth out, blur, or wash out intricate prints or motifs. "
-    "Centered upright 3D ghost-mannequin studio product photograph, crisp professional e-commerce studio lighting, "
+    "Strictly preserve the exact original dye colors, saturation levels, darkness, fabric weave, embroidery stitches, textile texture, neckline shape, borders, "
+    "and authentic garment silhouette from the reference photograph — do NOT oversaturate, do NOT brighten dark/muted tones, and do NOT alter the authentic color shade. "
+    "Centered upright 3D ghost-mannequin studio product photograph, neutral balanced studio lighting, "
     "pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
 
@@ -44,13 +44,12 @@ CRITICAL RULES:
    - ONLY analyze genuine, stitched, wearable clothing items (e.g., an olive green kurta laid on the bed).
    - If only ONE garment is present in the photo (e.g., only a kurta lying on a bed), return ONLY THAT SINGLE GARMENT in the "garments" list. DO NOT hallucinate or invent a second garment out of the bedsheet!
 
-2. Fabric Surface & Motif Breakdown (ON THE ACTUAL GARMENT ONLY):
-   - Analyze the authentic stitched garment fabric:
-     * Base fabric color and texture (e.g., solid olive-green cotton slub weave, crisp white cotton, royal blue raw silk, denim wash).
-     * Exact motif type on the garment: botanical leaves, miniature Indian floral booti, bandhani dots, geometric jaal, block print, or embroidery stitches.
-     * Specific motif colors on the garment.
-     * Pattern layout & density on the garment.
-     * If the garment is PLAIN SOLID with no pattern (like a plain olive-green kurta or plain jeans), explicitly state: "pure solid smooth fabric with no print, no pattern, and no motif".
+2. Precise Color Tone, Shade & Fabric Fidelity (SAME-TO-SAME REPLICATION):
+   - Never use broad or generic bright color names like just "green", "olive-green", or "blue".
+   - You must forensic-analyze the exact real-world shade, darkness, undertone, and saturation level:
+     * If the fabric has a dark, muted, dusty, desaturated, or earthy tone (e.g., dusty army-olive, muted slate-sage, dark khaki-green, charcoal navy, faded terracotta, dusty peach), explicitly specify the EXACT muted shade: "deep muted dusty army-olive with desaturated matte greyish undertones, exactly preserving the dark muted dye tone and saturation of the reference photo without any artificial brightening, neon tint, or oversaturation".
+     * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
+     * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
 
 3. Silhouette & Construction Anatomy:
    - Neckline / Collar: Exact shape (e.g., Mandarin stand band collar / Nehru collar with small front slit, standard turn-down point collar, round crew neck, polo collar).
@@ -73,8 +72,8 @@ Return strictly valid JSON format:
   "garments": [
     {
       "category": "upper_clothes",
-      "recognized_label": "Olive Green Cotton Slub Kurta",
-      "garment_description": "Men's traditional straight-cut knee-length ethnic kurta crafted from solid olive-green textured cotton slub fabric with no prints or patterns. Features a stiff mandarin stand band collar with a subtle front neckline slit, front chest button placket with matching buttons, full-length straight sleeves, and clean side seam slits."
+      "recognized_label": "Muted Dusty Olive Green Cotton Slub Kurta",
+      "garment_description": "Men's traditional straight-cut knee-length ethnic kurta crafted from deep muted dusty army-olive textured cotton slub fabric with desaturated matte greyish-khaki undertones, strictly preserving the authentic dark muted dye shade of the reference photo with no prints or patterns. Features a stiff mandarin stand band collar with a subtle front neckline slit, front chest button placket with matching dark buttons, full-length straight sleeves, and clean side seam slits."
     }
   ]
 }"""
@@ -123,12 +122,19 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
         "Reconstruct ONLY the authentic stitched garment itself."
     )
 
+    color_lock_rule = (
+        "STRICT COLOR & FABRIC LOCK: Faithfully preserve the EXACT SAME dye shade, hue, darkness, and muted desaturation level from the reference photo. "
+        "DO NOT brighten dark or muted tones, DO NOT oversaturate, and DO NOT turn dusty/earthy/matte fabrics into vibrant or glossy colors. "
+        "The generated 3D garment must perfectly replicate the authentic real-life color and textile weave of the reference garment."
+    )
+
     return (
         "Generate an empty 3D ghost-mannequin e-commerce studio product photograph showing ONLY the standalone "
         "garment floating upright in natural 3D volume on a pure solid white background (#FFFFFF), with completely NO person, NO model, "
         "NO head, NO face, NO hair, NO neck, NO skin, NO hands, NO arms, NO legs, NO feet, NO bed, NO bedsheet, NO blanket, NO carpet, NO floor, and NO jewelry anywhere in the image. "
         f"{isolation_rule} "
         f"{surface_rejection} "
+        f"{color_lock_rule} "
         f"Exact standalone garment and intricate textile pattern to isolate and faithfully reconstruct from the reference photo: {garment_description.strip()} (category: {category}). "
         f"{COMMON_STUDIO_RULES}"
     )
@@ -203,32 +209,32 @@ def analyze_garment_and_build_prompts(
             "Completely IGNORE and exclude any pants, jeans, trousers, or bottom wear. "
             "STRICT BACKGROUND RULE: If the clothing is placed on a bedsheet, mattress, blanket, floor, or table, "
             "the bedsheet / floor is 100% BACKGROUND. Do NOT mistake bedsheet patterns for garment motifs! "
-            "Examine the actual garment fabric at high resolution: identify the exact base color, print/booti motifs, "
-            "collar shape, buttons/placket, and sleeve style so the 3D ghost mannequin replicates the authentic design."
+            "CRITICAL COLOR & FABRIC FIDELITY: Identify the EXACT real-world dye shade, darkness, and saturation. If it is dark, muted, dusty, or desaturated (e.g., dusty army-olive, slate-khaki, deep moss), describe that exact deep muted matte shade without brightening or oversaturating. "
+            "Examine collar shape, placket, matching buttons, fabric weave, and sleeves so the 3D ghost mannequin is 100% authentic."
         )
     elif target_norm in ("pants", "skirt"):
         user_instruction = (
             "Analyze ONLY the LOWER-BODY garment (pants, jeans, trousers, shorts, skirt) in this image. "
             "Completely IGNORE and exclude any upper-body shirt, top, or kurta. "
             "STRICT BACKGROUND RULE: If placed on a bedsheet, blanket, or floor, IGNORE the bedsheet completely. "
-            "Examine the actual pants fabric at high resolution: identify the exact fabric wash, color, fit, pockets, stitching, and hems."
+            "CRITICAL COLOR FIDELITY: Identify the EXACT real-world dye wash, darkness, and saturation level. "
+            "Examine the actual pants fabric at high resolution: fit, pockets, stitching, and hems."
         )
     elif target_norm in ("dress", "saree", "lehenga"):
         user_instruction = (
             f"Analyze the full {target_norm} in this image. "
             "STRICT BACKGROUND RULE: If placed on a bedsheet, blanket, or floor, IGNORE the background bedsheet completely. "
-            "Examine the fabric at high resolution: identify exact colors, borders, prints, embroidery, and drape."
+            "CRITICAL COLOR FIDELITY: Identify exact real-world dye shades, borders, prints, embroidery, and drape without oversaturating."
         )
     else:  # "all"
         user_instruction = (
-            "Analyze the clothing in this image. "
-            "CRITICAL BACKGROUND RULE: If the clothing is laid flat on a bed, mattress, floor, rug, or table, "
-            "the bedsheet, blanket, or floor is 100% BACKGROUND. NEVER treat bedsheet patterns (hexagons, mandalas, geometric prints, borders) as clothing! "
-            "Only identify genuine stitched wearable clothing items. "
-            "If only ONE garment is present (e.g. an olive green kurta on a bed), return ONLY THAT SINGLE GARMENT in 'garments'. "
-            "DO NOT hallucinate or invent a second garment out of the bedsheet. "
-            "If contrasting separates (e.g. shirt + jeans) are actually present, return separate items for 'upper_clothes' and 'pants'. "
-            "Examine the genuine clothing fabric at high resolution: base color, true motifs, collar, and cut."
+            "Analyze the clothing in this image for exact 3D ghost-mannequin catalog reconstruction. "
+            "CRITICAL COLOR & SURFACE RULES: "
+            "1. Color & Fabric Fidelity: Identify the EXACT real-world dye shade, darkness, and saturation level. If the fabric is dark, muted, dusty, or desaturated (e.g., dusty army-olive, slate sage, dull khaki, deep navy), explicitly describe that exact deep muted matte shade and warn against oversaturating or brightening. "
+            "2. Surface Rejection: If the clothing is laid flat on a bed, mattress, floor, rug, or table, the bedsheet or floor is 100% BACKGROUND. NEVER treat bedsheet patterns (hexagons, mandalas, geometric prints, borders) as clothing! "
+            "3. Actual Garments Only: Only identify genuine stitched wearable clothing items (if only one kurta is on the bed, return only one item). "
+            "4. Separates: If contrasting separates (e.g. shirt + jeans) are actually present, return separate items for 'upper_clothes' and 'pants'. "
+            "Examine the genuine clothing fabric at high resolution: base color, true motifs, collar, buttons, and cut."
         )
 
     payload: dict[str, Any] = {
