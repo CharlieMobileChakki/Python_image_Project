@@ -50,6 +50,11 @@ CRITICAL RULES:
      * If the fabric has a dark, muted, dusty, desaturated, or earthy tone (e.g., dusty army-olive, muted slate-sage, dark khaki-green, charcoal navy, faded terracotta, dusty peach), explicitly specify the EXACT muted shade: "deep muted dusty army-olive with desaturated matte greyish undertones, exactly preserving the dark muted dye tone and saturation of the reference photo without any artificial brightening, neon tint, or oversaturation".
      * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
      * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
+   - DENIM JEANS, TROUSERS & BOTTOM WEAR (CRITICAL WASH & COLOR FIDELITY):
+     * If the jeans/pants in the reference photograph are dark (e.g. solid raw dark indigo, deep midnight navy, inky blue, or black denim):
+       You MUST explicitly describe the wash as: "solid uniform dark unwashed raw midnight indigo denim with zero stonewash fading, no bleached thigh highlights, no whiskering, and no distressed abrasion, strictly matching the deep dark saturated tone of the reference photograph".
+     * NEVER label or describe dark indigo/navy jeans simply as "blue denim jeans" or "dark blue jeans", because AI diffusion models automatically add bright faded thighs, acid wash, and light blue highlights when given generic names!
+     * Explicitly specify: "solid uniform dark dye from waistband to ankle cuffs, zero thigh fading, perfectly straight symmetrical legs".
 
 3. STRICT DIRECT FRONTAL 0-DEGREE STRAIGHT ALIGNMENT (PERFECTLY "SIDHA", NO 3/4 ANGLE):
    - In e-commerce catalog standards (Myntra, Amazon, Ajio), product hero photos MUST be strictly front-facing and straight.
@@ -80,8 +85,13 @@ Return strictly valid JSON format:
   "garments": [
     {
       "category": "upper_clothes",
-      "recognized_label": "Muted Dusty Olive Green Cotton Slub Kurta",
-      "garment_description": "Men's traditional straight-cut knee-length ethnic kurta crafted from deep muted dusty army-olive textured cotton slub fabric with desaturated matte greyish-khaki undertones, strictly preserving the authentic dark muted dye shade of the reference photo with no prints or patterns. Features a stiff mandarin stand band collar with a subtle front neckline slit, front chest button placket with matching dark buttons, full-length straight sleeves, and clean side seam slits."
+      "recognized_label": "Light Blue Floral Print Short Sleeve Shirt",
+      "garment_description": "Men's casual relaxed-fit short-sleeve resort shirt crafted from breathable cotton fabric in soft pastel powder-blue featuring subtle tonal white botanical floral leafy branch prints. Straight-on 0-degree front view with symmetrical level shoulders and sleeves, standard point spread collar, front button placket with small buttons, and a straight clean hem."
+    },
+    {
+      "category": "pants",
+      "recognized_label": "Solid Midnight Dark Indigo Raw Denim Jeans",
+      "garment_description": "Men's classic straight-leg denim jeans in uniform solid deep midnight dark raw indigo wash, strictly preserving the authentic dark near-navy saturation of the reference photo with zero stonewash, no bleached thigh fading, and no whiskering. Both legs hang straight down symmetrically side-by-side in a direct 0-degree frontal view, featuring a standard waistband with belt loops, button closure, and matching dark tonal stitching."
     }
   ]
 }"""
@@ -115,7 +125,10 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
             "STRICT CATEGORY ISOLATION: Generate ONLY the lower-body garment (pants / jeans / trousers / shorts / skirt). "
             "COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any upper garments, shirt, t-shirt, top, jacket, collar, sleeves, chest, or torso! "
             "The 3D invisible ghost-mannequin begins cleanly at the waistband of the pants/jeans with an open hollow waistband aperture, "
-            "and the upper half of the image MUST BE completely empty, clean, pure solid white (#FFFFFF)."
+            "and the upper half of the image MUST BE completely empty, clean, pure solid white (#FFFFFF). "
+            "STRICT DENIM & PANTS COLOR/WASH LOCK: If the reference jeans/pants are deep dark indigo, midnight navy, charcoal, or black, they MUST be rendered in that exact uniform dark shade throughout. "
+            "STRICTLY FORBIDDEN: DO NOT add stonewash fading, DO NOT add bleached thigh patches, DO NOT add whiskers, DO NOT add distress marks or lighter blue highlights unless clearly visible in the reference photo. "
+            "Both trouser legs MUST hang straight down symmetrically side-by-side in a 0-degree direct frontal shot, not angled or stepping forward."
         )
     elif cat in ("dress", "saree", "lehenga"):
         isolation_rule = (
@@ -131,9 +144,10 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
     )
 
     color_lock_rule = (
-        "STRICT COLOR & FABRIC LOCK: Faithfully preserve the EXACT SAME dye shade, hue, darkness, and muted desaturation level from the reference photo. "
+        "STRICT COLOR, SHADE & WASH LOCK: Faithfully preserve the EXACT SAME dye shade, hue, darkness, and muted desaturation level from the reference photo. "
         "DO NOT brighten dark or muted tones, DO NOT oversaturate, and DO NOT turn dusty/earthy/matte fabrics into vibrant or glossy colors. "
-        "The generated 3D garment must perfectly replicate the authentic real-life color and textile weave of the reference garment."
+        "FOR JEANS & DENIM: Do NOT convert dark raw indigo/navy jeans into light stonewashed blue jeans! Preserve the deep dark midnight navy tone with uniform wash and zero artificial thigh fading. "
+        "The generated 3D garment must perfectly replicate the authentic real-life color and textile weave/wash of the reference garment."
     )
 
     straight_alignment_rule = (
