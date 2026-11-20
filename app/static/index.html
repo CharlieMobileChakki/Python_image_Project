@@ -1603,7 +1603,7 @@ select.studio-select:focus {
         ${standInfo}
         ${viewsInfo}
         <div class="telemetry-badge">Confidence: <strong>${Math.round((activeGarment.confidence || 0.99) * 100)}%</strong></div>
-        <div class="telemetry-badge">Canvas: <strong>1024×1024 PNG</strong></div>
+        <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || (activeGarment.stand_type ? "2048×2048 Ultra-HD PNG" : "1024×1024 PNG")}</strong></div>
         <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
         <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>
       `;
@@ -1683,7 +1683,7 @@ select.studio-select:focus {
 
       const a = document.createElement('a');
       a.href = g.output_png_url;
-      a.download = `${baseName}_3D_ghost_mannequin_1024.png`;
+      a.download = `${baseName}_${g.category}_${g.resolution || '2048'}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();

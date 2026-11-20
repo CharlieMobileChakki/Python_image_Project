@@ -248,81 +248,104 @@ def execute_flow_a_without_person(
     }
 
 
-def crop_and_zoom_item_reference(
+def get_optimal_item_reference_crop(
     image: Image.Image,
-    box_2d: list[int | float] | tuple[int | float, ...],
-    target_dim: int = 1400,
-    pad_ratio: float = 0.12,
+    category: str,
+    box_2d: list[int | float] | tuple[int | float, ...] | None = None,
+    total_items: int = 1,
 ) -> Image.Image:
-    """Crop and zoom into a specific garment or jewelry item bounding box.
+    """Produce an ultra-high-resolution, square conditioned reference image for Qwen visual conditioning.
 
-    Ensures Qwen receives an ultra-high-resolution macro view of the target piece
-    (e.g. earrings inside a necklace set) rather than an uncropped image where the piece is tiny.
+    Features:
+    1. For earrings in jewelry sets, detects single-earring box and symmetrically expands horizontally to capture BOTH earrings.
+    2. Falls back to robust central crop if coordinates are missing or out of bounds.
+    3. Pastes the cropped piece centered on a square pure white canvas (1400x1400) to eliminate aspect-ratio distortion.
     """
     try:
-        ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
         w, h = image.size
-        is_normalized_1 = all(0.0 <= v <= 1.0 for v in (ymin, xmin, ymax, xmax))
-        scale_x = w if is_normalized_1 else (w / 1000.0)
-        scale_y = h if is_normalized_1 else (h / 1000.0)
+        target_square = 1400
 
-        left = int(xmin * scale_x)
-        top = int(ymin * scale_y)
-        right = int(xmax * scale_x)
-        bottom = int(ymax * scale_y)
+        if category in ("earrings", "jhumkas") and total_items > 1:
+            use_heuristic = True
+            if box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
+                ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
+                is_norm_1 = all(0.0 <= v <= 1.0 for v in (ymin, xmin, ymax, xmax))
+                sx = w if is_norm_1 else (w / 1000.0)
+                sy = h if is_norm_1 else (h / 1000.0)
+                left = int(xmin * sx)
+                top = int(ymin * sy)
+                right = int(xmax * sx)
+                bottom = int(ymax * sy)
 
-        box_w = right - left
-        box_h = bottom - top
-        if box_w < 20 or box_h < 20 or (box_w >= w * 0.96 and box_h >= h * 0.96):
-            return image
+                # Validate coordinates: must be in upper/middle region where earrings hang in sets
+                if (bottom - top) > 40 and top < h * 0.6 and bottom < h * 0.75:
+                    box_w = right - left
+                    box_h = bottom - top
+                    # If box is tall and narrow (single earring), symmetrically expand across centerline
+                    if box_w < box_h * 0.65:
+                        sym_l = max(0, min(left, w - right))
+                        sym_r = min(w, max(right, w - left))
+                        left, right = sym_l, sym_r
+                        box_w = right - left
 
-        pad_x = int(box_w * pad_ratio)
-        pad_y = int(box_h * pad_ratio)
-        crop_left = max(0, left - pad_x)
-        crop_top = max(0, top - pad_y)
-        crop_right = min(w, right + pad_x)
-        crop_bottom = min(h, bottom + pad_y)
+                    pad_x = int(box_w * 0.12)
+                    pad_y = int(box_h * 0.12)
+                    crop_l = max(0, left - pad_x)
+                    crop_t = max(0, top - pad_y)
+                    crop_r = min(w, right + pad_x)
+                    crop_b = min(h, bottom + pad_y)
+                    use_heuristic = False
 
-        cropped = image.crop((crop_left, crop_top, crop_right, crop_bottom))
-        cw, ch = cropped.size
-        if max(cw, ch) < target_dim:
-            scale = target_dim / float(max(cw, ch))
-            new_w = max(1, int(cw * scale))
-            new_h = max(1, int(ch * scale))
-            cropped = cropped.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            if use_heuristic:
+                # Robust default crop spanning upper-central loop where earrings hang inside necklace
+                crop_l = max(0, int(w * 0.28))
+                crop_t = max(0, int(h * 0.04))
+                crop_r = min(w, int(w * 0.72))
+                crop_b = min(h, int(h * 0.56))
 
-        logger.info(
-            "Macro cropped reference item from box_2d %s -> %dx%d (original %dx%d)",
-            box_2d,
-            cropped.width,
-            cropped.height,
-            w,
-            h,
-        )
-        return cropped
-    except Exception as exc:
-        logger.warning("Failed to crop item reference image (%s); using full image.", exc)
-        return image
-
-
-def heuristic_crop_jewelry_item(image: Image.Image, category: str) -> Image.Image:
-    """Fallback heuristic crop for jewelry pieces in multi-piece sets (e.g. earrings inside a necklace loop)."""
-    try:
-        w, h = image.size
-        if category in ("earrings", "jhumkas"):
-            # In standard jewelry sets, matching earrings are positioned in the upper-center area
-            crop_box = (int(w * 0.20), int(h * 0.04), int(w * 0.80), int(h * 0.58))
-            cropped = image.crop(crop_box)
-            target_dim = 1400
+            cropped = image.crop((crop_l, crop_t, crop_r, crop_b))
             cw, ch = cropped.size
-            if max(cw, ch) < target_dim:
-                scale = target_dim / float(max(cw, ch))
-                cropped = cropped.resize((max(1, int(cw * scale)), max(1, int(ch * scale))), Image.Resampling.LANCZOS)
-            logger.info("Heuristic cropped earrings region -> %dx%d", cropped.width, cropped.height)
-            return cropped
+            scale = (target_square * 0.88) / float(max(cw, ch))
+            nw = max(1, int(cw * scale))
+            nh = max(1, int(ch * scale))
+            resized = cropped.resize((nw, nh), Image.Resampling.LANCZOS)
+
+            square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
+            square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
+            logger.info("Conditioned earrings pair reference image: %dx%d on square white canvas", square_canvas.width, square_canvas.height)
+            return square_canvas
+
+        elif box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
+            ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
+            is_norm_1 = all(0.0 <= v <= 1.0 for v in (ymin, xmin, ymax, xmax))
+            sx = w if is_norm_1 else (w / 1000.0)
+            sy = h if is_norm_1 else (h / 1000.0)
+            left = int(xmin * sx)
+            top = int(ymin * sy)
+            right = int(xmax * sx)
+            bottom = int(ymax * sy)
+            box_w = right - left
+            box_h = bottom - top
+            if box_w >= 30 and box_h >= 30 and (box_w < w * 0.95 or box_h < h * 0.95):
+                pad_x = int(box_w * 0.10)
+                pad_y = int(box_h * 0.10)
+                crop_l = max(0, left - pad_x)
+                crop_t = max(0, top - pad_y)
+                crop_r = min(w, right + pad_x)
+                crop_b = min(h, bottom + pad_y)
+                cropped = image.crop((crop_l, crop_t, crop_r, crop_b))
+                cw, ch = cropped.size
+                scale = (target_square * 0.88) / float(max(cw, ch))
+                nw = max(1, int(cw * scale))
+                nh = max(1, int(ch * scale))
+                resized = cropped.resize((nw, nh), Image.Resampling.LANCZOS)
+                square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
+                square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
+                return square_canvas
+
         return image
     except Exception as exc:
-        logger.warning("Heuristic jewelry crop failed (%s); using full image.", exc)
+        logger.warning("Failed to crop item reference (%s); using full image.", exc)
         return image
 
 
@@ -370,14 +393,13 @@ def execute_flow_b_with_person(
         qwen_prompt = plan["prompt"]
         g_id = f"garment_{idx + 1:03d}"
 
-        # Macro zoom & cropped item reference passing (ensures Qwen sees exact micro-facets)
-        box_2d = plan.get("box_2d")
-        if box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
-            item_ref_image = crop_and_zoom_item_reference(image_rgb, box_2d)
-        elif is_jewelry_domain(cat_key) and cat_key in ("earrings", "jhumkas") and len(planned_garments) > 1:
-            item_ref_image = heuristic_crop_jewelry_item(image_rgb, cat_key)
-        else:
-            item_ref_image = image_rgb
+        # Macro zoom & square-conditioned reference image (ensures Qwen sees exact micro-facets with zero distortion)
+        item_ref_image = get_optimal_item_reference_crop(
+            image=image_rgb,
+            category=cat_key,
+            box_2d=plan.get("box_2d"),
+            total_items=len(planned_garments),
+        )
 
         # Step 2: Generate clean studio garment on remote RTX 3090 GPU (Qwen-Image-Edit)
         t_gpu_start = time.perf_counter()
@@ -394,7 +416,7 @@ def execute_flow_b_with_person(
             # prong claws, and filigree micro-granulation beads, upscaled with anti-aliasing Lanczos so zoom never blurs
             from PIL import ImageFilter
             raw_rgb = generated_raw.convert("RGB")
-            sharpened = raw_rgb.filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
+            sharpened = raw_rgb.filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
             final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
             out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
             out_path = OUTPUT_DIR / out_filename

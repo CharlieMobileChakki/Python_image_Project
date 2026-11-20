@@ -127,13 +127,17 @@ CRITICAL RULES:
 8. MANDATORY BOUNDING BOX LOCALIZATION (box_2d) FOR MACRO ZOOM & CROPPING:
    - For every detected piece (especially earrings in a jewelry set, rings, or necklaces), provide:
      "box_2d": [ymin, xmin, ymax, xmax] normalized on a 0-1000 scale.
-   - For earrings in a necklace set, box_2d MUST tightly enclose both earrings so our high-res macro optical pipeline can crop and zoom directly into the earrings without capturing the surrounding necklace!
+   - For earrings in a necklace set, box_2d MUST tightly enclose BOTH EARRINGS TOGETHER side-by-side (the entire matching pair spanning the upper-central region between the necklace strands). Do NOT box only one earring!
 
-9. DYNAMIC PRECIOUS METAL ALLOY & GEMSTONE FIDELITY (ZERO HARDCODING):
+9. DYNAMIC PRECIOUS METAL ALLOY & FORENSIC GEMSTONE COLOR AUDIT:
    - ABSOLUTELY NEVER default all jewelry to yellow gold!
    - You MUST identify the EXACT metal alloy: "Rose Gold Alloy", "22K Warm Yellow Gold", "Rhodium-Plated Silver", "Platinum", etc.
-   - You MUST identify the EXACT gemstone material and cut: "Faceted Blush Pink Austrian Crystals", "Solitaire Diamond", "Natural Pearls", "Clear Crystal Pave", etc.
-   - For earrings: identify the EXACT top ear-stud / post design (e.g. "faceted solitaire round pink crystal prong stud" vs "floral cluster stud") and the EXACT hanging body (e.g. "openwork chandelier drop with pear-cut pink crystal drops").
+   - CRITICAL GEMSTONE COLOR DISTRIBUTION AUDIT:
+     * Look closely at EVERY stone in the earrings / necklace!
+     * If the chandelier or pendant cluster is composed of colored crystals (e.g. blush-pink crystals):
+       YOU MUST EXPLICITLY STATE that the ENTIRE central chandelier body/cluster is composed of MULTIPLE faceted round blush-pink crystals (center stone, side stones, lower stones, and bottom drops) framed by tiny clear micro-pave crystal outlines!
+     * The primary, dominant stones throughout the entire earring from top stud to center cluster to bottom drops are faceted blush-pink crystals!
+     * NEVER describe the chandelier body as merely 'an openwork design with clear crystal accents' when the main stones are pink crystals!
 
 10. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
@@ -585,7 +589,7 @@ JEWELRY_EARRINGS_STUDIO_RULES = (
     "3. PERFECT HORIZONTAL ALIGNMENT: Both earrings hang at the EXACT SAME vertical height, perfectly level and parallel to each other. Both must face directly forward straight to camera (0-degree direct plumb frontal view). "
     "4. AMPLE HORIZONTAL SEPARATION (ZERO OVERLAP): The left and right earrings are widely and evenly separated by the stand's wishbone wings. There MUST be wide, clean, uniform spacing between the two earrings (like Amazon Luxury and Tanishq catalog hero shots). Absolutely ZERO overlap, zero touching, zero crowding! Every single gemstone facet, crystal prong, metal link, and drop is clearly visible with zero occlusion. "
     "5. IDENTICAL UNTWISTED PAIR: Replicate the authentic matching pair in pristine upright hang, faithfully reproducing the exact top stud, articulation links, chandelier/drop bodies, and cascading crystal/pearl/bead drops in crisp, untangled vertical symmetry! "
-    "PRECIOUS CRAFTSMANSHIP & POLISH FIDELITY: Exact replication of authentic precious metal alloy (rose gold, yellow gold, platinum, or rhodium-plated silver), claw prong settings, gemstone cuts, and crystal colors directly from the reference photo. DO NOT alter the metal alloy or stone color! "
+    "PRECIOUS CRAFTSMANSHIP, GEMSTONE DOMINANCE & COLOR FIDELITY: Exact replication of authentic precious metal alloy (rose gold, yellow gold, platinum, or rhodium-plated silver), claw prong settings, and gemstone cuts directly from the reference photo! MANDATORY GEMSTONE COLOR DISTRIBUTION: If the reference earrings feature colored crystals (such as blush-pink crystals) forming the main chandelier body and stud: YOU MUST REPLICATE THE MULTIPLE BLUSH-PINK CRYSTALS THROUGHOUT THE ENTIRE CHANDELIER BODY! DO NOT replace the pink crystals inside the chandelier body with white/clear diamonds! The primary, dominant stones in the top stud, center cluster, and lower drops MUST ALL BE MATCHING BLUSH-PINK CRYSTALS, with clear crystals used ONLY as tiny micro-pave halo outlines around the pink crystals! "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp microscopic macro studio focus on every light-refracting crystal facet edge, prong claw, and metal reflection with zero blur and zero pixelation even when deeply zoomed in. "
     "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the beige velvet and polished brass display stand fully intact. DO NOT make transparent. Completely free of any human ears, hair, face, neck, skin, or hands."
 )
@@ -719,10 +723,14 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         "Preserve authentic polish, crystal cuts, and prong settings with 100% forensic fidelity."
     )
 
+    gem_name = gemstone or "faceted blush-pink crystals"
     earring_anatomy_lock = (
-        "STRICT EARRING ANATOMY & MOTIF CLONING: Replicate the EXACT top ear-stud / post design (solitaire round crystal, floral cluster, prong-set gem, or button) "
-        "and the EXACT main hanging chandelier / drop body directly from the reference photo! DO NOT substitute a solitaire crystal stud with a floral cluster, "
-        "and DO NOT change chandelier drops into jhumka bells unless they are actually bell-shaped in the reference image!"
+        "STRICT EARRING ANATOMY & GEMSTONE DISTRIBUTION LOCK: "
+        "1. Top Ear-Stud: Replicate the EXACT top stud from the reference image (e.g. faceted solitaire round crystal in claw prong setting). "
+        "2. Main Body & Drop: Replicate the EXACT stone layout and colors! "
+        f"If the reference chandelier body is formed by multiple colored gemstones ({gem_name}), YOU MUST REPLICATE ALL THOSE COLORED GEMSTONES in the chandelier body! "
+        "DO NOT replace the colored gemstones inside the chandelier with clear diamonds! The entire chandelier cluster must showcase the authentic colored crystals from the reference photo! "
+        "3. Zero jhumka bell distortion: keep the authentic chandelier / drop silhouette with pristine plumb hang and 0-degree frontal view."
     ) if category in ("earrings", "jhumkas") else ""
 
     ultra_hd_zoom_lock = (
