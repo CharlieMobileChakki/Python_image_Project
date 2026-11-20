@@ -390,7 +390,7 @@ def execute_flow_b_with_person(
     include_base64: bool = False,
     t_start: float | None = None,
     custom_prompt: str | None = None,
-    presentation_mode: str = "mode_c_display_stand",
+    presentation_mode: str = "mode_b_studio_presentation",
     item_count_override: int | None = None,
 ) -> dict[str, Any]:
     """Execute Flow B: Direct ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Extraction.
@@ -578,7 +578,7 @@ def execute_jewelry_studio_pipeline(
     custom_prompt: str | None = None,
     include_base64: bool = False,
     t_start: float | None = None,
-    presentation_mode: str = "mode_c_display_stand",
+    presentation_mode: str = "mode_b_studio_presentation",
     item_count_override: int | None = None,
 ) -> dict[str, Any]:
     """Execute 3D Luxury Jewelry Studio Pipeline supporting 3 configurable presentation modes:
@@ -723,7 +723,7 @@ def process_garment_pipeline(
     auto_straighten: bool = True,
     include_base64: bool = False,
     custom_prompt: str | None = None,
-    presentation_mode: str = "mode_c_display_stand",
+    presentation_mode: str = "mode_b_studio_presentation",
     item_count_override: int | None = None,
 ) -> dict[str, Any]:
     """Execute the Unified 3D Garment & Jewelry Studio Pipeline.

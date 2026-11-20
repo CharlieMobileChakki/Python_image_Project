@@ -858,6 +858,13 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         "or random colored stones if the reference piece is solid gold with engraved metalwork!"
     )
 
+    inner_filigree_lock = (
+        "CRITICAL INNER RING & HOLLOW JAALI FILIGREE FIDELITY: "
+        "The interior hollow wall, inner rim cutouts, and openwork lattice/filigree patterns (jaali cut-work) "
+        "visible through the circular opening MUST be strictly preserved with sharp open perforations and authentic handcrafted depth! "
+        "DO NOT smooth out, blur, or replace the inner pierced filigree with a solid flat gold plate!"
+    )
+
     macro_framing_lock = (
         "CRITICAL MACRO PRODUCT FRAMING (MAXIMUM CANVAS UTILIZATION): "
         "The jewelry piece must fill 75% to 82% of the canvas frame! "
@@ -872,6 +879,7 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         f"{white_background_lock} "
         f"{unit_count_lock} "
         f"{form_factor_lock} "
+        f"{inner_filigree_lock} "
         f"{surface_lock} "
         f"{metal_lock} "
         f"{gem_lock} "

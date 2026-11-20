@@ -1012,10 +1012,10 @@ select.studio-select:focus {
 
         <div class="setting-item">
           <label for="presentationModeSelect">Presentation Mode:</label>
-          <select id="presentationModeSelect" class="studio-select" style="min-width: 175px;">
-            <option value="mode_c_display_stand" selected>🏆 Mode C: Boutique Stand</option>
-            <option value="mode_b_studio_presentation">✨ Mode B: Studio Shadow (100% Original)</option>
-            <option value="mode_a_product_only">💎 Mode A: Pure Product Only</option>
+          <select id="presentationModeSelect" class="studio-select" style="min-width: 210px;">
+            <option value="mode_b_studio_presentation" selected>✨ Mode B: Studio Shadow (100% Original - Preserves Inner Design)</option>
+            <option value="mode_a_product_only">💎 Mode A: Pure Product Only (100% Original)</option>
+            <option value="mode_c_display_stand">🏆 Mode C: Boutique Stand (Generative 3D)</option>
           </select>
         </div>
 
@@ -1499,7 +1499,7 @@ select.studio-select:focus {
       }
 
       const selectedCat = document.getElementById('targetGarmentSelect').value;
-      const presMode = document.getElementById('presentationModeSelect')?.value || 'mode_c_display_stand';
+      const presMode = document.getElementById('presentationModeSelect')?.value || 'mode_b_studio_presentation';
       const countVal = document.getElementById('itemCountOverride')?.value;
       const isJewelry = ['necklace', 'ring', 'earrings', 'bangles'].includes(selectedCat);
       formData.append('person_mode', isJewelry ? 'jewelry' : 'with_person');
