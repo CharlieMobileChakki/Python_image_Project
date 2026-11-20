@@ -10,8 +10,10 @@ from app.core.image_processing.image_normalizer import (
 from app.core.image_processing.image_utils import image_to_base64_data_uri
 from app.core.image_processing.studio_composer import (
     calibrate_product_colors,
+    composite_protected_product_over_stand,
     create_mode_a_product_only,
     create_mode_b_studio_presentation,
+    create_mode_c_display_stand,
     validate_product_output,
 )
 
@@ -23,7 +25,8 @@ __all__ = [
     "image_to_base64_data_uri",
     "create_mode_a_product_only",
     "create_mode_b_studio_presentation",
+    "create_mode_c_display_stand",
+    "composite_protected_product_over_stand",
     "calibrate_product_colors",
     "validate_product_output",
 ]
-

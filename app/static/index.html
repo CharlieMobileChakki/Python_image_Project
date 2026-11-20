@@ -1626,6 +1626,7 @@ select.studio-select:focus {
       const valMetrics = activeGarment.validation_metrics || {};
       const countStatus = valMetrics.count_status || `${activeGarment.detected_item_count || 1} Item(s) Verified`;
       const colorBadge = valMetrics.color_status ? `<div class="telemetry-badge" style="color: #10B981;">Color: <strong>${valMetrics.color_status}</strong></div>` : '';
+      const innerBadge = valMetrics.inner_status ? `<div class="telemetry-badge" style="color: ${valMetrics.inner_verified ? '#10B981' : '#EF4444'};">Inner Detail: <strong>${valMetrics.inner_status}</strong></div>` : '';
       const qualityScore = valMetrics.mask_quality ? `<div class="telemetry-badge">Quality: <strong>${Math.round(valMetrics.mask_quality * 100)}%</strong></div>` : '';
       const modeLabel = activeGarment.presentation_mode ? `<div class="telemetry-badge" style="color: #35C8E8;">Mode: <strong>${activeGarment.presentation_mode.replace('mode_', 'Mode ').replace(/_/g, ' ')}</strong></div>` : '';
 
@@ -1636,6 +1637,7 @@ select.studio-select:focus {
         ${standInfo}
         ${viewsInfo}
         ${colorBadge}
+        ${innerBadge}
         ${qualityScore}
         <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || (activeGarment.stand_type ? "2048×2048 Ultra-HD PNG" : "1024×1024 PNG")}</strong></div>
         <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
