@@ -124,7 +124,7 @@ CRITICAL RULES:
        - NEVER describe broad cuff kadas as generic "bangles", because thin wire bangles look completely different!
        - Specify "form_factor": "broad thick cuff kada with wide cylindrical band (approx 25-30mm wide) and thick rigid circular walls".
      * For Earrings:
-       - Specify top stud (solitaire round crystal, floral cluster, plain ball post) + main body (chandelier drop, jhumka bell, hoop, drop pendant).
+       - Specify top stud (solid gold dome/button, floral bead rosette, solitaire crystal, plain ball post) + main body (chandelier drop, jhumka bell, hoop, drop pendant). Explicitly note if the top stud is solid metal with NO center stone!
      * For Rings:
        - Band profile (wide cigar band, thin shank, split shank, pave band) + crown setting (solitaire, halo, cluster, bezel).
      * For Necklaces:
@@ -150,14 +150,14 @@ CRITICAL RULES:
    - For earrings in a necklace set, box_2d MUST tightly enclose BOTH EARRINGS TOGETHER side-by-side (the entire matching pair spanning the upper-central region between the necklace strands). Do NOT box only one earring!
 
 9. DYNAMIC PRECIOUS METAL ALLOY & FORENSIC GEMSTONE COLOR AUDIT:
-   - ABSOLUTELY NEVER default all jewelry to yellow gold!
-   - You MUST identify the EXACT metal alloy: "Rose Gold Alloy", "22K Warm Yellow Gold", "Rhodium-Plated Silver", "Platinum", etc.
-   - CRITICAL GEMSTONE COLOR DISTRIBUTION AUDIT:
-     * Look closely at EVERY stone in the earrings / necklace!
-     * If the chandelier or pendant cluster is composed of colored crystals (e.g. blush-pink crystals):
-       YOU MUST EXPLICITLY STATE that the ENTIRE central chandelier body/cluster is composed of MULTIPLE faceted round blush-pink crystals (center stone, side stones, lower stones, and bottom drops) framed by tiny clear micro-pave crystal outlines!
-     * The primary, dominant stones throughout the entire earring from top stud to center cluster to bottom drops are faceted blush-pink crystals!
-     * NEVER describe the chandelier body as merely 'an openwork design with clear crystal accents' when the main stones are pink crystals!
+   - Identify the EXACT metal alloy from the reference photo: "22K Warm Yellow Gold", "18K Rose Gold", "Rhodium-Plated Silver", "Platinum", "Antique Matte Temple Gold", etc.
+   - CRITICAL GEMSTONE & STONELESS AUDIT (ANTI-HALLUCINATION):
+     * If the piece has NO stones (pure solid metal with filigree, engraving, or granulation):
+       Set "gemstone_type": "none (pure solid precious metal with zero stones or crystals)".
+       Explicitly state in garment_description that the top stud, body, and drops are 100% solid metal with ZERO added stones!
+     * If the piece HAS stones / pearls / crystals:
+       Identify every stone type, cut, and color (e.g. "Natural lustrous white seed pearl fringe", "Faceted blush-pink crystal drops", "Emerald green & ruby red cabochons", "Brilliant-cut clear diamond solitaire").
+       Detail the exact position of each stone and its color palette with 100% forensic fidelity!
 
 10. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
@@ -617,12 +617,12 @@ JEWELRY_EARRINGS_STUDIO_RULES = (
     "MANDATORY E-COMMERCE DUAL-WING MOUNTING & SYMMETRICAL AIRBORNE SUSPENSION (OVERRIDE REFERENCE POSE): "
     "DO NOT COPY ANY ASYMMETRIC, TILTED, LEANING, OR LYING-FLAT POSE FROM THE REFERENCE PHOTO! "
     "Even if the reference photo shows the earrings lying flat on a surface/cloth, tilted at an angle, or overlapping: "
-    "1. WING-MOUNTED TOP STUDS / POSTS: Both earrings are mounted symmetrically onto the stand's sculpted beige velvet wings. Faithfully replicate the EXACT top ear-stud / post design directly from the reference photo (whether a faceted round gemstone solitaire crystal, stud button, prong setting, or motif)—pinned cleanly on the front vertical faces of the left and right velvet wings. DO NOT invent or substitute floral studs if the reference has solitaire crystal studs! "
+    "1. WING-MOUNTED TOP STUDS / POSTS: Both earrings are mounted symmetrically onto the stand's sculpted beige velvet wings. Faithfully replicate the EXACT top ear-stud / post motif directly from the reference photo (whether a solid gold domed sphere, floral bead rosette, engraved button, or gemstone solitaire)—pinned cleanly on the front vertical faces of the left and right velvet wings. If the reference top stud is solid metal with NO stone in the center, replicate pure solid metal with ZERO added stones! If it has a gemstone or crystal, replicate that exact stone! "
     "2. AIRBORNE FREE-HANGING BODIES: The main earring bodies (chandeliers, crystal clusters, dangle pendants, drops, or bell domes) and all bottom fringe drops hang freely suspended in mid-air below the wings. ABSOLUTELY NEVER let any earring rest, touch, lean, or lie on the bottom base, table, or pole! Both earrings must be 100% airborne and hanging straight down with natural gravitational drape. "
     "3. PERFECT HORIZONTAL ALIGNMENT: Both earrings hang at the EXACT SAME vertical height, perfectly level and parallel to each other. Both must face directly forward straight to camera (0-degree direct plumb frontal view). "
     "4. AMPLE HORIZONTAL SEPARATION (ZERO OVERLAP): The left and right earrings are widely and evenly separated by the stand's wishbone wings. There MUST be wide, clean, uniform spacing between the two earrings (like Amazon Luxury and Tanishq catalog hero shots). Absolutely ZERO overlap, zero touching, zero crowding! Every single gemstone facet, crystal prong, metal link, and drop is clearly visible with zero occlusion. "
     "5. IDENTICAL UNTWISTED PAIR: Replicate the authentic matching pair in pristine upright hang, faithfully reproducing the exact top stud, articulation links, chandelier/drop bodies, and cascading crystal/pearl/bead drops in crisp, untangled vertical symmetry! "
-    "PRECIOUS CRAFTSMANSHIP, GEMSTONE DOMINANCE & COLOR FIDELITY: Exact replication of authentic precious metal alloy (rose gold, yellow gold, platinum, or rhodium-plated silver), claw prong settings, and gemstone cuts directly from the reference photo! MANDATORY GEMSTONE COLOR DISTRIBUTION: If the reference earrings feature colored crystals (such as blush-pink crystals) forming the main chandelier body and stud: YOU MUST REPLICATE THE MULTIPLE BLUSH-PINK CRYSTALS THROUGHOUT THE ENTIRE CHANDELIER BODY! DO NOT replace the pink crystals inside the chandelier body with white/clear diamonds! The primary, dominant stones in the top stud, center cluster, and lower drops MUST ALL BE MATCHING BLUSH-PINK CRYSTALS, with clear crystals used ONLY as tiny micro-pave halo outlines around the pink crystals! "
+    "PRECIOUS CRAFTSMANSHIP, DYNAMIC MATERIAL & COLOR FIDELITY: Exact replication of authentic precious metal alloy (rich warm yellow gold, antique temple gold, rose gold, platinum, or rhodium-plated silver), surface luster, claw prong settings, and gemstone cuts directly from the reference photo! MANDATORY MATERIAL LOCK: Faithfully clone the authentic color palette! If the earrings are pure gold or gold with pearls, replicate the rich 22K yellow gold gleam and pearl luster with ZERO hallucinated diamonds or colored stones! If the earrings feature colored gemstones (such as rubies, emeralds, sapphires, or colored crystals), replicate all those colored gemstones across the stud, body, and drops with 100% color accuracy! "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp microscopic macro studio focus on every light-refracting crystal facet edge, prong claw, and metal reflection with zero blur and zero pixelation even when deeply zoomed in. "
     "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the beige velvet and polished brass display stand fully intact. DO NOT make transparent. Completely free of any human ears, hair, face, neck, skin, or hands."
 )
@@ -656,7 +656,20 @@ JEWELRY_STAND_RULES_MAP = {
 
 SYSTEM_JEWELRY_VISION_PROMPT = """You are a master jewelry gemologist, high-jewelry e-commerce catalog director, and 3D precious ornament analyst (Tanishq, Cartier, Tiffany & Co., CaratLane).
 
-Your mission is to analyze 1 to 4 photographs of the SAME piece of jewelry (taken from different angles: Top view, Side profile, 45-degree angle, Close-up) and synthesize a unified, forensic-grade 3D catalog description.
+Your mission is to analyze 1 to 4 photographs of a jewelry piece and synthesize a unified, forensic-grade 3D catalog description.
+
+CRITICAL PHYSICAL OBJECT COUNT & QUANTITY DISCRIMINATION:
+- Count the EXACT number of physical jewelry pieces visible in the image!
+- If the photo shows ONE SINGLE kada / bangle / bracelet / ring / necklace / earring:
+  Set "item_count": 1, and "piece_descriptor": "exactly 1 standalone single kada/bangle".
+  ABSOLUTELY NEVER default or duplicate a single kada into a pair of 2! ONE kada must remain ONE kada!
+- If the photo shows a pair of 2 matching kadas / bangles:
+  Set "item_count": 2, and "piece_descriptor": "a pair of exactly 2 matching kadas/bangles".
+- If the photo shows 1 pair of matching earrings:
+  Set "item_count": 2, and "piece_descriptor": "exactly 1 matching pair of 2 earrings".
+- If multiple photos (multi-angle) show the SAME single kada from different perspectives:
+  Set "item_count": 1, because all photos show the SAME single item!
+- Distinguish a single thick broad kada from multiple bangles: a wide cylindrical band with continuous rigid circular wall is ONE kada.
 
 CRITICAL JEWELRY DECONSTRUCTION RULES:
 1. FORENSIC COMPONENT-BY-COMPONENT DECONSTRUCTION:
@@ -665,7 +678,7 @@ CRITICAL JEWELRY DECONSTRUCTION RULES:
    - Articulation / Connection: Describe the heavy polished jump ring or link connecting the stud to the body.
    - Main Body / Dome / Medallion / Band: Describe the dome architecture (stepped conical bell, horizontal embossed bands, rows of micro granulation spheres, openwork jaali lattice filigree, engraved motifs).
    - Hanging Fringe / Drops / Gemstones: Detail the exact dangling accents (e.g. dense cascading fringe of lustrous round natural white seed pearls interlinked with tiny hanging polished gold droplet beads).
-   - Precious Metal & Luster: Authentic 22K/24K rich warm yellow gold with brilliant specular highlights and realistic surface texture.
+   - Precious Metal & Luster: Authentic metal alloy (22K yellow gold, antique temple gold, rose gold, silver, platinum) with realistic surface texture.
 
 2. MULTI-ANGLE DETAIL FUSION (DO NOT MISS SIDE DESIGNS):
    - When multiple images are provided, cross-examine all angles:
@@ -674,7 +687,7 @@ CRITICAL JEWELRY DECONSTRUCTION RULES:
    - Synthesize ALL angles into a unified description so that NO side detail or hidden engraving is lost!
 
 3. CATEGORY & LUXURY BOUTIQUE STAND ASSIGNMENT:
-   - "earrings": Luxury warm beige velvet dual-wing wishbone display stand on polished gold brass stem and circular base (earrings mounted symmetrically through wings, airborne bells, wide clean spacing, zero overlap).
+   - "earrings": Luxury warm beige velvet dual-wing wishbone display stand on polished gold brass stem and circular base.
    - "necklace": Sculpted luxury warm beige velvet neck bust mannequin stand on polished gold brass circular pedestal.
    - "ring": Angled 3D warm beige velvet ring display block with polished gold brass trim (30-45 degree isometric hero angle).
    - "bangles": Horizontal cylindrical warm beige velvet bangle display bar with polished gold brass uprights.
@@ -683,11 +696,16 @@ Return strictly valid JSON:
 {
   "jewelry_item": {
     "category": "necklace" | "ring" | "earrings" | "bangles",
-    "recognized_label": "22K Yellow Gold Traditional Jhumka Earrings with Pearl Fringe",
-    "metal_type": "22K Rich Warm Yellow Gold with High-Polish & Micro-Granulation Luster",
+    "subcategory": "kada" | "bangle" | "bracelet" | "ring" | "necklace" | "earrings" | "jhumkas" | "pendant",
+    "item_count": 1,
+    "piece_descriptor": "exactly 1 standalone single broad cuff kada",
+    "form_factor": "broad thick cuff kada with wide cylindrical band (approx 25-30mm wide) and thick rigid circular walls",
+    "recognized_label": "22K Antique Gold Hand-Carved Broad Cuff Kada",
+    "metal_type": "22K Antique Warm Yellow Gold with Matte Relief Luster",
+    "gemstone_type": "none (pure solid gold floral relief carvings, no multicolor enamel)",
     "stand_type": "beige_velvet_brass_t_bar_stand" | "beige_velvet_brass_neck_bust" | "beige_velvet_brass_ring_block" | "beige_velvet_brass_bangle_bar",
     "optimal_angle": "0-degree frontal" | "30-45 degree three-quarter isometric",
-    "jewelry_description": "Forensic, multi-component gemologist description detailing the top stud motif, connecting link, stepped jhumka bell dome with micro-granulation tiers, jaali filigree openwork, and dangling white seed pearl fringe."
+    "jewelry_description": "Forensic, multi-component gemologist description detailing the cylindrical band width, floral relief carvings, micro-granulation tiers, and clasp droplets."
   }
 }"""
 
@@ -742,34 +760,63 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
             "ABSOLUTELY NO EARRING LYING ON THE BASE, TABLE, OR POLE! ZERO OVERLAP! "
         )
     else:  # bangles, kada, bracelet
-        item_cnt = int(jewelry_data.get("item_count", 2) or 2)
-        count_label = f"the pair of exactly {item_cnt} matching" if item_cnt == 2 else f"the exactly {item_cnt} standalone"
-        header = (
-            "Generate an empty luxury jewelry boutique showcase catalog product photograph (Kalyan / Tanishq / Joyalukkas luxury hero shot) showing "
-            f"{count_label} {category} mounted upright side-by-side around a horizontal cylindrical warm beige velvet jewelry display bar on polished golden brass upright pillars and weighted base. "
-            f"There must be EXACTLY {item_cnt} {category} mounted on the bar, neatly spaced with an elegant clean gap between them, showing their wide cylindrical 3D band width and hollow inner circular apertures! "
-            f"ZERO EXTRA BANGLES! DO NOT generate 3, 4, 5, or more bangles! EXACTLY {item_cnt}!"
-        )
+        item_cnt = int(jewelry_data.get("item_count", 1) or 1)
+        subcat = str(jewelry_data.get("subcategory", category)).strip()
+        if item_cnt == 1:
+            header = (
+                "Generate an empty luxury jewelry boutique showcase catalog product photograph (Kalyan / Tanishq / Joyalukkas luxury hero shot) showing "
+                f"the standalone single {subcat} mounted upright around a horizontal cylindrical warm beige velvet jewelry display bar on polished golden brass upright pillars and weighted base. "
+                f"There must be EXACTLY ONE (1) {subcat} mounted on the bar, showing its wide cylindrical 3D band width and hollow inner circular aperture! "
+                "CRITICAL ZERO-DUPLICATION RULE: ABSOLUTELY DO NOT DUPLICATE OR CREATE A PAIR! EXACTLY 1 SINGLE KADA, NOT 2!"
+            )
+        else:
+            header = (
+                "Generate an empty luxury jewelry boutique showcase catalog product photograph (Kalyan / Tanishq / Joyalukkas luxury hero shot) showing "
+                f"the pair of exactly {item_cnt} matching {category} mounted upright side-by-side around a horizontal cylindrical warm beige velvet jewelry display bar on polished golden brass upright pillars and weighted base. "
+                f"There must be EXACTLY {item_cnt} {category} mounted on the bar, neatly spaced with an elegant clean gap between them, showing their wide cylindrical 3D band width and hollow inner circular apertures! "
+                f"ZERO EXTRA BANGLES! DO NOT generate 3, 4, 5, or more bangles! EXACTLY {item_cnt}!"
+            )
 
     gemstone = str(jewelry_data.get("gemstone_type", "")).strip()
-    gem_clause = f" and gemstone materials ({gemstone})" if gemstone else ""
+    gem_lower = gemstone.lower()
+    has_stones = bool(gemstone) and not any(k in gem_lower for k in ("none", "no stone", "pure solid", "zero stone", "metal only", "no gem"))
+
+    # Dynamic precious metal lock with neutral balanced studio lighting (no artificial yellow tinting)
     metal_lock = (
-        f"STRICT PRECIOUS METAL & GEMSTONE FIDELITY: Clone the EXACT real-world metal alloy ({metal}){gem_clause}, surface luster, "
-        "micro-carvings, prongs, and authentic gemstone / crystal colors directly from the reference photo(s). "
-        "ABSOLUTELY DO NOT ALTER OR HALLUCINATE METAL OR GEM COLORS! If the reference has rose gold, replicate rose gold. "
-        "If it has yellow gold, replicate yellow gold. If it has silver/rhodium or platinum, replicate silver/rhodium/platinum. "
-        "Preserve authentic polish, crystal cuts, and prong settings with 100% forensic fidelity."
+        f"STRICT PRECIOUS METAL & NATURAL LIGHTING FIDELITY: Faithfully preserve the authentic real-world {metal} "
+        "color, tone, saturation, and finish directly from the reference photo! "
+        "DO NOT artificially oversaturate, yellow-tint, or alter the metal color. "
+        "If the metal is antique gold, pale gold, rose gold, silver, or platinum, replicate the exact authentic alloy hue, "
+        "matte finish, or polished reflection with balanced, neutral 5000K-5500K daylight-balanced studio lighting."
     )
 
-    gem_name = gemstone or "faceted blush-pink crystals"
-    earring_anatomy_lock = (
-        "STRICT EARRING ANATOMY & GEMSTONE DISTRIBUTION LOCK: "
-        "1. Top Ear-Stud: Replicate the EXACT top stud from the reference image (e.g. faceted solitaire round crystal in claw prong setting). "
-        "2. Main Body & Drop: Replicate the EXACT stone layout and colors! "
-        f"If the reference chandelier body is formed by multiple colored gemstones ({gem_name}), YOU MUST REPLICATE ALL THOSE COLORED GEMSTONES in the chandelier body! "
-        "DO NOT replace the colored gemstones inside the chandelier with clear diamonds! The entire chandelier cluster must showcase the authentic colored crystals from the reference photo! "
-        "3. Zero jhumka bell distortion: keep the authentic chandelier / drop silhouette with pristine plumb hang and 0-degree frontal view."
-    ) if category in ("earrings", "jhumkas") else ""
+    if has_stones:
+        gem_lock = (
+            f"STRICT GEMSTONE & COLOR FIDELITY: Replicate the authentic gemstone materials and colors ({gemstone}) "
+            "directly from the reference photo! Preserve the exact stone colors, faceted cuts, bezel/prong settings, and placements. "
+            "DO NOT substitute or change stone colors!"
+        )
+    else:
+        gem_lock = (
+            "PURE SOLID METAL FIDELITY (ZERO HALLUCINATED GEMS): The jewelry piece is crafted from pure solid precious metal! "
+            "ABSOLUTELY DO NOT add, embed, or hallucinate white diamonds, clear crystals, or random colored stones into the studs, body, or borders! "
+            "If the reference top stud or body is solid engraved/domed gold, it MUST remain 100% solid gold with zero stones!"
+        )
+
+    if category in ("earrings", "jhumkas"):
+        stud_solid_rule = (
+            "If the reference top stud is a solid gold dome, bead rosette, floral motif, or plate with no center stone, IT MUST BE 100% SOLID GOLD WITH ZERO CENTER DIAMOND OR STONE! "
+            if not has_stones or "pearl" in gem_lower else ""
+        )
+        earring_anatomy_lock = (
+            "STRICT EARRING ANATOMY & TOP STUD FIDELITY: "
+            "1. Top Ear-Stud: Replicate the EXACT top stud motif directly from the reference photo! "
+            f"{stud_solid_rule}"
+            "2. Main Body & Drop: Replicate the authentic silhouette, bells, chandeliers, or drops with 100% fidelity. "
+            "3. Zero jhumka bell distortion: keep the authentic hanging silhouette with pristine plumb hang and 0-degree frontal view."
+        )
+    else:
+        earring_anatomy_lock = ""
 
     ultra_hd_zoom_lock = (
         "CRITICAL 8K ULTRA-HD MASTER MACRO RESOLUTION (ZERO BLUR UNDER EXTREME ZOOM): "
@@ -827,6 +874,7 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         f"{form_factor_lock} "
         f"{surface_lock} "
         f"{metal_lock} "
+        f"{gem_lock} "
         f"{earring_anatomy_lock} "
         f"Exact jewelry piece to faithfully reconstruct from all reference angles: {desc or label}. "
         f"{studio_rules}"
@@ -846,9 +894,13 @@ def _fallback_jewelry_plan(jewelry_type: str = "auto") -> dict[str, Any]:
         "bangles": ("22K Gold Handcrafted Kada Bangle", "beige_velvet_brass_bangle_bar", JEWELRY_BANGLES_STUDIO_RULES),
     }
     label, stand, rules = labels.get(jt, labels["necklace"])
+    item_cnt = 2 if jt in ("earrings", "jhumkas") else 1
 
     jewelry_data = {
         "category": jt,
+        "subcategory": "kada" if jt in ("bangles", "kada") else jt,
+        "item_count": item_cnt,
+        "piece_descriptor": f"exactly {item_cnt} standalone piece" if item_cnt == 1 else f"a pair of {item_cnt} pieces",
         "recognized_label": label,
         "metal_type": "22K Warm Yellow Gold",
         "stand_type": stand,
@@ -1029,16 +1081,26 @@ def analyze_jewelry_and_build_prompts(
         category = str(item.get("category", "necklace")).strip().lower()
         if category not in JEWELRY_STAND_RULES_MAP:
             category = "necklace"
+        subcat = str(item.get("subcategory", category)).strip().lower()
+        item_cnt = int(item.get("item_count", 1) or 1)
+        piece_desc = str(item.get("piece_descriptor", f"exactly {item_cnt} standalone piece")).strip()
+        form_fact = str(item.get("form_factor", "")).strip()
         label = str(item.get("recognized_label", "Fine Gold Jewelry")).strip()
         metal = str(item.get("metal_type", "22K Warm Yellow Gold")).strip()
+        gemstone = str(item.get("gemstone_type", "")).strip()
         stand = str(item.get("stand_type", "white_neck_bust")).strip()
         angle = str(item.get("optimal_angle", "0-degree frontal")).strip()
         desc = str(item.get("jewelry_description", label)).strip()
 
         jewelry_data = {
             "category": category,
+            "subcategory": subcat,
+            "item_count": item_cnt,
+            "piece_descriptor": piece_desc,
+            "form_factor": form_fact,
             "recognized_label": label,
             "metal_type": metal,
+            "gemstone_type": gemstone,
             "stand_type": stand,
             "optimal_angle": angle,
             "jewelry_description": desc,

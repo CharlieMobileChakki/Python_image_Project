@@ -1010,6 +1010,26 @@ select.studio-select:focus {
           </select>
         </div>
 
+        <div class="setting-item">
+          <label for="presentationModeSelect">Presentation Mode:</label>
+          <select id="presentationModeSelect" class="studio-select" style="min-width: 175px;">
+            <option value="mode_c_display_stand" selected>🏆 Mode C: Boutique Stand</option>
+            <option value="mode_b_studio_presentation">✨ Mode B: Studio Shadow (100% Original)</option>
+            <option value="mode_a_product_only">💎 Mode A: Pure Product Only</option>
+          </select>
+        </div>
+
+        <div class="setting-item">
+          <label for="itemCountOverride">Quantity:</label>
+          <select id="itemCountOverride" class="studio-select" style="min-width: 95px;">
+            <option value="auto" selected>Auto</option>
+            <option value="1">1 Piece</option>
+            <option value="2">2 Pieces</option>
+            <option value="3">3 Pieces</option>
+            <option value="4">4 Pieces</option>
+          </select>
+        </div>
+
         <label class="toggle-switch" title="Combine up to 4 photos of the same jewelry item (top, sides, angle) into 1 single 3D master photo">
           <input type="checkbox" id="multiAngleToggle" />
           <span style="color: #F59E0B; font-weight: 600;">💍 Multi-Angle Fusion (Up to 4 Photos)</span>
@@ -1479,9 +1499,15 @@ select.studio-select:focus {
       }
 
       const selectedCat = document.getElementById('targetGarmentSelect').value;
+      const presMode = document.getElementById('presentationModeSelect')?.value || 'mode_c_display_stand';
+      const countVal = document.getElementById('itemCountOverride')?.value;
       const isJewelry = ['necklace', 'ring', 'earrings', 'bangles'].includes(selectedCat);
       formData.append('person_mode', isJewelry ? 'jewelry' : 'with_person');
       formData.append('target_garment', selectedCat);
+      formData.append('presentation_mode', presMode);
+      if (countVal && countVal !== 'auto') {
+        formData.append('item_count_override', parseInt(countVal, 10));
+      }
       formData.append('response_format', 'json');
 
       const res = await fetch('/api/background-removal', {
@@ -1592,17 +1618,25 @@ select.studio-select:focus {
         document.getElementById('compareAfterImg').src = activeGarment.output_png_url;
       }
 
-      // Render Telemetry Badges
+      // Render Real Telemetry Badges
       const elapsedSec = (result.execution_time_ms / 1000).toFixed(1);
       const isFlowB = result.mode === 'with_person' || (result.diagnostics && result.diagnostics.scene_type === 'person') || result.mode === 'jewelry_studio';
       const standInfo = activeGarment.stand_type ? `<div class="telemetry-badge">Stand: <strong>${activeGarment.stand_type}</strong></div>` : '';
       const viewsInfo = (activeGarment.views_analyzed && activeGarment.views_analyzed > 1) ? `<div class="telemetry-badge" style="color: #F59E0B;">Angles Fused: <strong>${activeGarment.views_analyzed} views</strong></div>` : '';
+      const valMetrics = activeGarment.validation_metrics || {};
+      const countStatus = valMetrics.count_status || `${activeGarment.detected_item_count || 1} Item(s) Verified`;
+      const colorBadge = valMetrics.color_status ? `<div class="telemetry-badge" style="color: #10B981;">Color: <strong>${valMetrics.color_status}</strong></div>` : '';
+      const qualityScore = valMetrics.mask_quality ? `<div class="telemetry-badge">Quality: <strong>${Math.round(valMetrics.mask_quality * 100)}%</strong></div>` : '';
+      const modeLabel = activeGarment.presentation_mode ? `<div class="telemetry-badge" style="color: #35C8E8;">Mode: <strong>${activeGarment.presentation_mode.replace('mode_', 'Mode ').replace(/_/g, ' ')}</strong></div>` : '';
 
       document.getElementById('telemetryRow').innerHTML = `
         <div class="telemetry-badge">Category: <strong>${activeGarment.recognized_label || activeGarment.category}</strong></div>
+        <div class="telemetry-badge" style="color: #F59E0B;">Quantity: <strong>${countStatus}</strong></div>
+        ${modeLabel}
         ${standInfo}
         ${viewsInfo}
-        <div class="telemetry-badge">Confidence: <strong>${Math.round((activeGarment.confidence || 0.99) * 100)}%</strong></div>
+        ${colorBadge}
+        ${qualityScore}
         <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || (activeGarment.stand_type ? "2048×2048 Ultra-HD PNG" : "1024×1024 PNG")}</strong></div>
         <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
         <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>

@@ -73,6 +73,8 @@ async def background_removal_endpoint(
     response_format: str = Form("json", description="'json' (default for Node.js / UI) or 'image_direct' for binary PNG stream"),
     mode_hint: str | None = Form(None, description="Legacy mode hint"),
     custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
+    presentation_mode: str = Form("mode_c_display_stand", description="Presentation mode: 'mode_a_product_only', 'mode_b_studio_presentation', 'mode_c_display_stand'"),
+    item_count_override: int | None = Form(None, description="Optional manual quantity override (e.g. 1 for 1 kada)"),
 ) -> Any:
     """Unified AI 3D Garment & Jewelry Studio API.
 
@@ -121,6 +123,8 @@ async def background_removal_endpoint(
                 auto_straighten=auto_straighten,
                 include_base64=include_base64,
                 custom_prompt=custom_prompt,
+                presentation_mode=presentation_mode,
+                item_count_override=item_count_override,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

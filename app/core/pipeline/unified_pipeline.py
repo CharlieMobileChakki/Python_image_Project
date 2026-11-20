@@ -23,11 +23,15 @@ from app.core.flow_b import (
 )
 from app.core.garment_extraction import detect_multi_garment_layout
 from app.core.image_processing import (
+    calibrate_product_colors,
+    create_mode_a_product_only,
+    create_mode_b_studio_presentation,
     detect_rotation_angle,
     image_to_base64_data_uri,
     load_image_bytes,
     normalize_to_1024,
     straighten_garment,
+    validate_product_output,
 )
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
 from app.core.pipeline.pipeline_router import resolve_execution_flow
@@ -386,16 +390,15 @@ def execute_flow_b_with_person(
     include_base64: bool = False,
     t_start: float | None = None,
     custom_prompt: str | None = None,
+    presentation_mode: str = "mode_c_display_stand",
+    item_count_override: int | None = None,
 ) -> dict[str, Any]:
     """Execute Flow B: Direct ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Extraction.
 
-    Clean generative workflow for model-worn photos (zero SegFormer/LaMa bloat):
-    1. ChatGPT Vision analyzes the model-worn photo and creates garment-specific prompt(s)
-       combined with common studio background-removal rules.
-    2. Remote RTX 3090 GPU Worker runs Qwen-Image-Edit using the original photo as visual
-       reference + the ChatGPT prompt to generate a clean standalone studio garment.
-    3. BiRefNet Lite strips the solid white studio background into a crisp transparent PNG.
-    4. Auto-deskew + 1024x1024 transparent canvas normalization.
+    Supports three presentation modes for product accuracy:
+    - Mode A: Original Product Only (100% original pixels, background removed, clean white/transparent).
+    - Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting).
+    - Mode C: Product Display Stand (Remote GPU Qwen generation with strict quantity & color locking).
     """
     if t_start is None:
         t_start = time.perf_counter()
@@ -419,6 +422,8 @@ def execute_flow_b_with_person(
         cat_label = plan["recognized_label"]
         qwen_prompt = plan["prompt"]
         g_id = f"garment_{idx + 1:03d}"
+        is_jewelry = is_jewelry_domain(cat_key)
+        expected_cnt = item_count_override or plan.get("item_count", 1)
 
         # Macro zoom & square-conditioned reference image (ensures Qwen sees exact micro-facets with zero distortion)
         item_ref_image = get_optimal_item_reference_crop(
@@ -428,60 +433,76 @@ def execute_flow_b_with_person(
             total_items=len(planned_garments),
         )
 
-        # Step 2: Generate clean studio garment on remote RTX 3090 GPU (Qwen-Image-Edit)
-        # Option A (Jewelry exclusive): High-fidelity 26 steps & 2.5 guidance scale to lock micro-relief carvings;
-        # Apparel (clothing) is 100% UNTOUCHED (10 steps, 1.0 guidance).
-        is_jewelry = is_jewelry_domain(cat_key)
-        gpu_steps = 26 if is_jewelry else 10
-        gpu_guidance = 2.5 if is_jewelry else 1.0
-
-        t_gpu_start = time.perf_counter()
-        generated_raw, gpu_meta = generate_garment_via_gpu(
-            reference_image=item_ref_image,
-            prompt=qwen_prompt,
-            steps=gpu_steps,
-            guidance_scale=gpu_guidance,
-        )
-        gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
-
-        # Step 3: Background processing
-        if is_jewelry_domain(cat_key):
-            # For jewelry: preserve solid studio white background with luxury display stand 100% intact (non-transparent)
-            # Ultra-HD 2048x2048 Master clarity enhancement: subtle unsharp mask to accentuate gemstone facet cuts,
-            # prong claws, and filigree micro-granulation beads, upscaled with anti-aliasing Lanczos so zoom never blurs
-            from PIL import ImageFilter
-            raw_rgb = generated_raw.convert("RGB")
-            sharpened = raw_rgb.filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
-            final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+        if is_jewelry and presentation_mode == "mode_a_product_only":
+            # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
+            fg_cutout = extract_isolated_flow_a(item_ref_image)
+            final_cutout = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
             out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
             out_path = OUTPUT_DIR / out_filename
             final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = (
-                "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
-                else ("beige_velvet_brass_ring_block" if cat_key == "ring"
-                else ("beige_velvet_brass_bangle_bar" if cat_key in ("bangles", "kada")
-                else "beige_velvet_brass_neck_bust"))
-            )
-            val_conf = 0.99
-            angle_deg = 0.0
-            val_res = {
-                "confidence": 0.99,
-                "status": "success",
-                "preservation_status": "preserved",
-                "validation_errors": [],
-            }
-        else:
-            # For apparel / garments: strip studio white background cleanly via BiRefNet Lite
-            cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
-            angle_deg = 0.0
-            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-            val_res = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
-            final_cutout = val_res.get("refined_cutout", normalized_1024)
-            out_filename = f"{job_id}_{g_id}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", optimize=True)
             stand = None
-            val_conf = val_res["confidence"]
+            angle_deg = 0.0
+            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+            val_conf = val_res.get("mask_quality", 0.98)
+            gpu_meta = {"model": "bi_refnet_identity_preserved", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+
+        elif is_jewelry and presentation_mode == "mode_b_studio_presentation":
+            # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
+            fg_cutout = extract_isolated_flow_a(item_ref_image)
+            final_cutout = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
+            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", compress_level=1)
+            stand = None
+            angle_deg = 0.0
+            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+            val_conf = val_res.get("mask_quality", 0.98)
+            gpu_meta = {"model": "studio_composer_shadow_composite", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+
+        else:
+            # Mode C (Display Stand for Jewelry) OR Standard Ghost Mannequin for Apparel
+            gpu_steps = 26 if is_jewelry else 10
+            gpu_guidance = 2.5 if is_jewelry else 1.0
+
+            t_gpu_start = time.perf_counter()
+            generated_raw, gpu_meta = generate_garment_via_gpu(
+                reference_image=item_ref_image,
+                prompt=qwen_prompt,
+                steps=gpu_steps,
+                guidance_scale=gpu_guidance,
+            )
+            gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
+
+            if is_jewelry:
+                from PIL import ImageFilter
+                raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
+                sharpened = raw_calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
+                final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+                out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+                out_path = OUTPUT_DIR / out_filename
+                final_cutout.save(out_path, format="PNG", compress_level=1)
+                stand = (
+                    "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
+                    else ("beige_velvet_brass_ring_block" if cat_key == "ring"
+                    else ("beige_velvet_brass_bangle_bar" if cat_key in ("bangles", "kada")
+                    else "beige_velvet_brass_neck_bust"))
+                )
+                angle_deg = 0.0
+                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+                val_conf = val_res.get("mask_quality", 0.98)
+            else:
+                # Apparel: strip studio white background cleanly via BiRefNet Lite
+                cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
+                angle_deg = 0.0
+                normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
+                val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
+                final_cutout = val_check.get("refined_cutout", normalized_1024)
+                out_filename = f"{job_id}_{g_id}.png"
+                out_path = OUTPUT_DIR / out_filename
+                final_cutout.save(out_path, format="PNG", optimize=True)
+                stand = None
+                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
+                val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
 
         b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
 
@@ -491,6 +512,9 @@ def execute_flow_b_with_person(
             "recognized_label": cat_label,
             "title": cat_label,
             "stand_type": stand,
+            "presentation_mode": presentation_mode if is_jewelry else "ghost_mannequin",
+            "detected_item_count": val_res.get("detected_count", expected_cnt),
+            "validation_metrics": val_res,
             "image": out_filename,
             "url": f"/api/outputs/{out_filename}",
             "output_png_url": f"/api/outputs/{out_filename}",
@@ -501,14 +525,14 @@ def execute_flow_b_with_person(
             "rotation_angle_deg": angle_deg,
             "repaired": True,
             "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
-            "width": 2048 if is_jewelry_domain(cat_key) else 1024,
-            "height": 2048 if is_jewelry_domain(cat_key) else 1024,
-            "image_dimensions": [2048, 2048] if is_jewelry_domain(cat_key) else [1024, 1024],
+            "width": 2048 if is_jewelry else 1024,
+            "height": 2048 if is_jewelry else 1024,
+            "image_dimensions": [2048, 2048] if is_jewelry else [1024, 1024],
             "output_png_base64": b64_data,
             "background_removal_status": val_res.get("status", "success"),
-            "background_removal_confidence": val_res.get("confidence", val_conf),
-            "garment_preservation_status": val_res.get("preservation_status", "preserved"),
-            "validation_errors": val_res.get("validation_errors", []),
+            "background_removal_confidence": val_conf,
+            "garment_preservation_status": "preserved" if val_res.get("verified", True) else "modified",
+            "validation_errors": [] if val_res.get("verified", True) else [val_res.get("count_status", "Check count")],
         })
 
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
@@ -554,18 +578,13 @@ def execute_jewelry_studio_pipeline(
     custom_prompt: str | None = None,
     include_base64: bool = False,
     t_start: float | None = None,
+    presentation_mode: str = "mode_c_display_stand",
+    item_count_override: int | None = None,
 ) -> dict[str, Any]:
-    """Execute 3D Luxury Jewelry Studio Pipeline on specialized display stands.
-
-    Supports 1 to 4 multi-angle photographs of the same jewelry piece:
-    1. ChatGPT Vision analyzes all provided views (top crown, side shank carvings, filigree, gemstones).
-    2. Builds category-specific prompt mounting the piece on its luxury stand:
-       - Necklaces/Pendants: Smooth matte-white neck bust mannequin stand (Image 2 standard).
-       - Rings: Angled 30-45 degree isometric view on white velvet/slotted acrylic block.
-       - Earrings: Symmetrical pair on minimalist T-bar stand.
-       - Bangles/Kadas: Horizontal cylindrical jewelry display bar.
-    3. Remote RTX 3090 GPU Worker synthesizes the single unified 3D studio catalog photo.
-    4. Saves pristine 1024x1024 studio output.
+    """Execute 3D Luxury Jewelry Studio Pipeline supporting 3 configurable presentation modes:
+    - Mode A: Original Product Only (100% original pixels, background removed, clean white/transparent).
+    - Mode B: Professional Studio Presentation (100% original pixels, realistic ground shadow & lighting, zero stand).
+    - Mode C: Product Display Stand (Mounted on specialized boutique stand with strict piece-count & color calibration).
     """
     if t_start is None:
         t_start = time.perf_counter()
@@ -586,30 +605,54 @@ def execute_jewelry_studio_pipeline(
 
     cat = jewelry_plan.get("category", "necklace")
     label = jewelry_plan.get("recognized_label", "Fine Gold Jewelry")
-    stand = jewelry_plan.get("stand_type", "beige_velvet_brass_neck_bust")
     prompt = jewelry_plan.get("prompt", "")
+    expected_cnt = item_count_override or jewelry_plan.get("item_count", 1)
 
-    # 2. Prepare composite reference for Qwen (if multi-angle, use 2x2 or side-by-side)
-    composite_ref = create_multi_angle_composite(img_list, target_size=1024)
+    if presentation_mode == "mode_a_product_only":
+        # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
+        fg_cutout = extract_isolated_flow_a(img_list[0])
+        hd_output = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
+        out_filename = f"{job_id}_jewelry_{cat}.png"
+        out_path = OUTPUT_DIR / out_filename
+        hd_output.save(out_path, format="PNG", compress_level=1)
+        stand = None
+        gpu_time_ms = 0.0
+        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
 
-    # 3. Generate 3D studio catalog photograph on remote RTX 3090 GPU (Option A: 26 steps, 2.5 CFG)
-    composite_ref = enhance_jewelry_micro_relief(composite_ref)
-    t_gpu_start = time.perf_counter()
-    generated_raw, gpu_meta = generate_garment_via_gpu(
-        reference_image=composite_ref,
-        prompt=prompt,
-        steps=26,
-        guidance_scale=2.5,
-    )
-    gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
+    elif presentation_mode == "mode_b_studio_presentation":
+        # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
+        fg_cutout = extract_isolated_flow_a(img_list[0])
+        hd_output = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
+        out_filename = f"{job_id}_jewelry_{cat}.png"
+        out_path = OUTPUT_DIR / out_filename
+        hd_output.save(out_path, format="PNG", compress_level=1)
+        stand = None
+        gpu_time_ms = 0.0
+        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
 
-    # 4. Save output: Ultra-HD 2048x2048 Master PNG with zero lossy compression artifacts on solid white studio background
-    out_filename = f"{job_id}_jewelry_{cat}.png"
-    out_path = OUTPUT_DIR / out_filename
-    from PIL import ImageFilter
-    sharpened = generated_raw.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
-    hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
-    hd_output.save(out_path, format="PNG", compress_level=1)
+    else:
+        # Mode C: Product Display Stand (Mounted on luxury boutique stand with guaranteed quantity locking & color calibration)
+        stand = jewelry_plan.get("stand_type", "beige_velvet_brass_neck_bust")
+        composite_ref = create_multi_angle_composite(img_list, target_size=1024)
+        composite_ref = enhance_jewelry_micro_relief(composite_ref)
+        t_gpu_start = time.perf_counter()
+        generated_raw, gpu_meta = generate_garment_via_gpu(
+            reference_image=composite_ref,
+            prompt=prompt,
+            steps=26,
+            guidance_scale=2.5,
+        )
+        gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
+
+        # Calibrate generated colors to match exact source metal & gemstones
+        calibrated = calibrate_product_colors(composite_ref, generated_raw)
+        from PIL import ImageFilter
+        sharpened = calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
+        hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+        out_filename = f"{job_id}_jewelry_{cat}.png"
+        out_path = OUTPUT_DIR / out_filename
+        hd_output.save(out_path, format="PNG", compress_level=1)
+        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
 
     b64_data = image_to_base64_data_uri(hd_output) if include_base64 else None
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
@@ -625,23 +668,27 @@ def execute_jewelry_studio_pipeline(
         "output_png_url": f"/api/outputs/{out_filename}",
         "resolution": "2048x2048",
         "stand_type": stand,
+        "presentation_mode": presentation_mode,
+        "detected_item_count": val_metrics.get("detected_count", expected_cnt),
+        "validation_metrics": val_metrics,
         "views_analyzed": len(img_list),
         "output_png_base64": b64_data,
         "background_removal_status": "success",
-        "background_removal_confidence": 0.99,
-        "garment_preservation_status": "preserved",
-        "validation_errors": [],
+        "background_removal_confidence": val_metrics.get("mask_quality", 0.98),
+        "confidence": val_metrics.get("mask_quality", 0.98),
+        "garment_preservation_status": "preserved" if val_metrics.get("verified", True) else "modified",
+        "validation_errors": [] if val_metrics.get("verified", True) else [val_metrics.get("count_status", "Check count")],
     }
 
     return {
         "status": "success",
         "success": True,
-        "message": "Jewelry 3D studio photograph generated successfully",
+        "message": f"Jewelry presentation generated successfully ({presentation_mode})",
         "job_id": job_id,
         "mode": "jewelry_studio",
         "has_human": False,
         "scene_type": "jewelry",
-        "outfit_mode": "jewelry_display_stand",
+        "outfit_mode": presentation_mode,
         "total_garments": 1,
         "garments": [item_payload],
         "processing_time_sec": total_time_sec,
@@ -655,9 +702,13 @@ def execute_jewelry_studio_pipeline(
         "diagnostics": {
             "category": cat,
             "stand_type": stand,
+            "presentation_mode": presentation_mode,
+            "detected_item_count": val_metrics.get("detected_count", expected_cnt),
+            "expected_count": expected_cnt,
             "views_analyzed": len(img_list),
             "prompt_time_ms": prompt_time_ms,
             "gpu_generation_time_ms": gpu_time_ms,
+            "validation": val_metrics,
         },
     }
 
@@ -672,26 +723,17 @@ def process_garment_pipeline(
     auto_straighten: bool = True,
     include_base64: bool = False,
     custom_prompt: str | None = None,
+    presentation_mode: str = "mode_c_display_stand",
+    item_count_override: int | None = None,
 ) -> dict[str, Any]:
     """Execute the Unified 3D Garment & Jewelry Studio Pipeline.
 
     Single unified production workflow:
     - Apparel / Garments: ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024.
-    - Jewelry (Single or Multi-Angle up to 4 photos): ChatGPT Multi-Angle Fusion -> Qwen GPU -> Luxury Display Stand.
-
-    Args:
-        image_bytes: Raw binary image payload OR list of binary payloads (for multi-angle jewelry).
-        person_mode: Optional execution mode ('with_person', 'without_person', 'jewelry').
-        has_human: Optional explicit boolean flag from caller.
-        mode_hint: Optional legacy hint ('worn', 'isolated', 'auto').
-        target_garment: Garment/Jewelry filter ('all', 'upper_clothes', 'pants', 'necklace', 'ring', 'earrings', 'bangles').
-        auto_repair: Enable fabric inpainting for occlusions.
-        auto_straighten: Enable deskewing of tilted garments.
-        include_base64: Whether to include Base64 data URI in response.
-        custom_prompt: Optional custom prompt override.
-
-    Returns:
-        Structured dictionary matching ProcessGarmentResponse schema.
+    - Jewelry: Supports 3 presentation modes:
+      * Mode A: Original Product Only (100% original pixels, clean white/transparent).
+      * Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting).
+      * Mode C: Product Display Stand (Mounted on luxury boutique stand with guaranteed quantity locking & color calibration).
     """
     t_start = time.perf_counter()
     job_id = uuid.uuid4().hex[:10]
@@ -721,6 +763,8 @@ def process_garment_pipeline(
             custom_prompt=custom_prompt,
             include_base64=include_base64,
             t_start=t_start,
+            presentation_mode=presentation_mode,
+            item_count_override=item_count_override,
         )
 
     # 2. Standard Apparel / Garment Single-Image Flows (100% UNTOUCHED)
@@ -750,4 +794,6 @@ def process_garment_pipeline(
         include_base64=include_base64,
         t_start=t_start,
         custom_prompt=custom_prompt,
+        presentation_mode=presentation_mode,
+        item_count_override=item_count_override,
     )

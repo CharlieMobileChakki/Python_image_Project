@@ -17,6 +17,9 @@ class GarmentItem(BaseModel):
     garment_id: str | None = Field(default=None, description="Garment identifier")
     output_png_base64: str | None = Field(default=None, description="Optional Base64 data URI")
     stand_type: str | None = Field(default=None, description="Display stand type (e.g. white_neck_bust, slotted_ring_block, t_bar_earring_stand)")
+    presentation_mode: str | None = Field(default="mode_c_display_stand", description="Presentation mode: mode_a_product_only, mode_b_studio_presentation, mode_c_display_stand")
+    detected_item_count: int | None = Field(default=1, description="Number of physical product items detected and preserved")
+    validation_metrics: dict[str, Any] | None = Field(default=None, description="Real output validation metrics (color Delta-E, item count match, mask score)")
     views_analyzed: int | None = Field(default=1, description="Number of multi-angle reference photos analyzed")
 
 
