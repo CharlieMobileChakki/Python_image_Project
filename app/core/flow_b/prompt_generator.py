@@ -158,10 +158,10 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
     # Route jewelry categories directly to luxury jewelry studio rules
     if is_jewelry_domain(cat):
         stand = (
-            "t_bar_earring_stand" if cat in ("earrings", "jhumkas")
-            else ("slotted_ring_block" if cat == "ring"
-            else ("cylindrical_bangle_bar" if cat in ("bangles", "kada", "bracelet")
-            else "white_neck_bust"))
+            "slate_grey_t_bar_earring_stand" if cat in ("earrings", "jhumkas")
+            else ("slate_grey_slotted_ring_block" if cat == "ring"
+            else ("slate_grey_cylindrical_bangle_bar" if cat in ("bangles", "kada", "bracelet")
+            else "slate_grey_neck_bust"))
         )
         return _build_final_jewelry_prompt({
             "category": cat,
@@ -466,39 +466,57 @@ def analyze_garment_and_build_prompts(
 
 JEWELRY_NECKLACE_STUDIO_RULES = (
     "Pristine luxury jewelry e-commerce studio catalog photograph (Tanishq / Kalyan Jewellers / Cartier luxury hero shot). "
-    "The standalone authentic necklace is mounted and draped elegantly around the neck of a smooth, clean, premium matte-white neck bust mannequin display stand. "
-    "PERFECT SYMMETRY & ALIGNMENT: Centered upright, direct 0-degree straight frontal studio camera view. The necklace loops naturally and symmetrically around both sides of the contoured white neck bust, with the central medallion / pendant resting completely flat, centered, and plumb on the front chest of the bust. "
+    "STAND & MATERIAL CONTRAST (NEVER WHITE STAND): The standalone authentic necklace is mounted and draped elegantly around the neck of a sculpted luxury matte slate-grey / soft stone-grey neck bust mannequin display stand. "
+    "The stand has a distinct, refined matte slate-grey finish with clean geometric silhouette edges and soft contact shadows that stand out sharply and crisply against the pure solid white background (#FFFFFF) so that the stand structure never blends or washes into the background! "
+    "MANDATORY E-COMMERCE DRAPE SYMMETRY (OVERRIDE REFERENCE POSE): Regardless of whether the reference photo shows the necklace laid flat, coiled, or tangled on a surface: "
+    "1. Centered upright, direct 0-degree straight frontal studio camera view. "
+    "2. The necklace loops naturally and symmetrically around both sides of the contoured slate-grey neck bust with equal curve and tension. "
+    "3. The central medallion / pendant rests completely flat, centered, and plumb on the vertical center axis of the bust chest. "
+    "4. Completely untangled, zero twists, zero asymmetry. "
     "PRECIOUS METAL & POLISH LUSTER: Faithfully preserve the authentic 22K/24K warm yellow gold metal, polished luster, intricate openwork jaali filigree, delicate leaf motifs, engraved borders, and hanging bead drops with 100% forensic accuracy directly from the reference photo(s). "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Razor-sharp microscopic jewelry studio illumination. Every individual filigree thread, openwork jaali wire, embossed leaf vein, polished gold bead drop, and metal reflection must be rendered in ultra-crisp, tack-sharp microscopic focus with ZERO blur and ZERO pixelation even when deeply zoomed in. "
-    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid pristine studio white background (#FFFFFF). The entire white neck bust display stand MUST remain 100% intact, fully visible, and seamlessly grounded on the pure solid white background with subtle realistic contact shadows. DO NOT make transparent and DO NOT cut or remove the display stand! Completely free of any human model, skin, neck, face, hands, clothes, table clutter, or props."
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid pristine studio white background (#FFFFFF). The entire matte slate-grey neck bust display stand MUST remain 100% intact, fully visible, and seamlessly grounded on the pure solid white background with subtle realistic contact shadows. DO NOT make transparent and DO NOT cut or remove the display stand! Completely free of any human model, skin, neck, face, hands, clothes, table clutter, or props."
 )
 
 JEWELRY_RING_STUDIO_RULES = (
     "Pristine luxury jewelry e-commerce studio catalog photograph (Tiffany & Co. / BlueStone / CaratLane luxury hero shot). "
-    "The standalone ring is mounted upright on a clean, minimalist, angled matte-white velvet or slotted acrylic ring display block. "
-    "OPTIMAL 3D HERO PERSPECTIVE (MULTI-FACET VISIBILITY): Direct 30-degree to 45-degree three-quarter isometric 3D beauty angle. "
-    "CRITICAL SHANK & CROWN VISIBILITY: BOTH the top crown / center gemstone / head motif AND the intricate side shank carvings, side filigree, gallery jali, and band engravings must be SIMULTANEOUSLY prominent and clearly visible in this single photograph! "
+    "STAND & MATERIAL CONTRAST (NEVER WHITE STAND): The standalone ring is mounted firmly upright inside the cushioned slot of a luxury angled matte slate-grey velvet or brushed graphite ring display block. "
+    "The block has a distinct, refined matte slate-grey finish with crisp beveled edges clearly defined against the pure solid white background (#FFFFFF) so the stand never washes into the background! "
+    "MANDATORY E-COMMERCE RING MOUNTING (OVERRIDE REFERENCE POSE): Regardless of whether the reference photo shows the ring lying flat on its side: "
+    "1. OPTIMAL 3D HERO PERSPECTIVE: Direct 30-degree to 45-degree three-quarter isometric 3D beauty angle. "
+    "2. CRITICAL SHANK & CROWN VISIBILITY: BOTH the top crown / center gemstone / head motif AND the intricate side shank carvings, side filigree, gallery jali, and band engravings must be SIMULTANEOUSLY prominent and clearly visible in this single photograph! "
+    "3. Upright and untilted inside the display slot. "
     "PRECIOUS METAL & GEMSTONE FIDELITY: Reconstruct the exact precious metal alloy (22K/18K warm yellow gold, platinum, or rose gold), micro-pave prong settings, diamond facets, and side band engravings with 100% forensic precision from all reference angles. "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Razor-sharp macro jewelry studio illumination with crisp facet reflections and tack-sharp microscopic focus. Every prong, facet, and carved metal grain must be crystal clear with zero blur when zoomed in. "
-    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF). The white ring display block must remain 100% intact and visible on the solid white background. DO NOT make transparent. Zero human fingers, NO hands, NO skin, and NO table props."
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF). The matte slate-grey ring display block must remain 100% intact and visible on the solid white background. DO NOT make transparent. Zero human fingers, NO hands, NO skin, and NO table props."
 )
 
 JEWELRY_EARRINGS_STUDIO_RULES = (
-    "Pristine luxury jewelry e-commerce studio catalog photograph (Tanishq / Malabar Gold luxury hero shot). "
-    "The pair of matching earrings / jhumkas is displayed hanging elegantly on a minimalist white or matte-metallic studio T-bar jewelry earring display stand. "
-    "PERFECT PAIR SYMMETRY: Both left and right earrings hang side-by-side perfectly parallel at the exact same horizontal height, facing directly forward straight to camera. "
-    "PRECIOUS CRAFTSMANSHIP: Exact replication of authentic gold filigree, jhumka bell domes, dangling pearl/gold beads, gemstone inlays, and ear-stud motifs from the reference photo(s). "
-    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp macro studio focus on every hanging bead and filigree curve with zero blur under deep zoom. "
-    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the T-bar stand fully intact. DO NOT make transparent. Completely free of any human ears, hair, face, neck, skin, or hands."
+    "Pristine luxury jewelry e-commerce studio catalog photograph (Amazon Fashion / Tanishq / Kalyan Jewellers luxury hero shot). "
+    "STAND & MATERIAL CONTRAST (NEVER WHITE STAND): The pair of matching earrings / jhumkas is displayed hanging elegantly on a luxurious minimalist matte slate-grey or brushed metallic graphite T-bar jewelry earring display stand with a solid circular base, vertical center pole, and horizontal dual-arm crossbar. "
+    "The stand has a distinct, refined matte slate-grey finish with crisp geometric edges and subtle contact shadows that stand out sharply and clearly against the pure solid white background (#FFFFFF), preventing the stand from washing out or matching the white background! "
+    "MANDATORY E-COMMERCE HANGING SYMMETRY & ANTI-OVERLAP (OVERRIDE REFERENCE POSE): "
+    "DO NOT COPY ANY ASYMMETRIC, TILTED, LEANING, OR LYING-FLAT POSE FROM THE REFERENCE PHOTO! "
+    "Even if the reference photo shows the earrings lying flat on a surface/cloth, tilted at an angle, or overlapping: "
+    "1. AIRBORNE SUSPENSION (NEVER RESTING ON BASE): BOTH the left and right earrings MUST hang fully suspended in mid-air from the left and right horizontal arms of the T-bar crossbar! ABSOLUTELY NEVER let any earring rest, touch, lean, or lie on the bottom base, pole, or floor! Both earrings must be 100% airborne, suspended freely by their top hooks/studs. "
+    "2. PERFECT HORIZONTAL ALIGNMENT: Both earrings must hang at the EXACT SAME vertical height, perfectly level and parallel to each other. Both must face directly forward straight to camera (0-degree direct plumb frontal view, upright vertical hang). "
+    "3. AMPLE HORIZONTAL SPACING (ZERO OVERLAP): The left earring hangs from the left arm; the right earring hangs from the right arm. There MUST be wide, clean, uniform spacing between the two earrings (like Amazon and Tanishq catalog hero shots). Absolutely ZERO overlap, zero touching, zero crowding! "
+    "4. IDENTICAL UNTWISTED PAIR: Replicate the authentic matching pair in pristine upright hang, displaying the floral top stud, connecting link, bell-shaped jhumka dome, and dangling pearl/gold beads in crisp, untangled vertical symmetry! "
+    "PRECIOUS CRAFTSMANSHIP & POLISH: Exact replication of authentic 22K warm yellow gold filigree, jhumka bell domes, dangling pearls, and ear-stud motifs directly from the reference photo(s). "
+    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp macro studio focus on every hanging bead, pearl wire, and filigree curve with zero blur under deep zoom. "
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the matte slate-grey T-bar stand fully intact. DO NOT make transparent. Completely free of any human ears, hair, face, neck, skin, or hands."
 )
 
 JEWELRY_BANGLES_STUDIO_RULES = (
     "Pristine luxury jewelry e-commerce studio catalog photograph (Kalyan / Joyalukkas luxury hero shot). "
-    "The bangles / kada / bracelet are mounted around a horizontal cylindrical white leatherette or velvet jewelry bangle display bar. "
-    "3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
+    "STAND & MATERIAL CONTRAST (NEVER WHITE STAND): The bangles / kada / bracelet are mounted vertically around a horizontal cylindrical matte slate-grey leatherette or velvet jewelry bangle display bar on twin upright pillars. "
+    "The stand has a distinct matte slate-grey tone with clean edges that stand out sharply against the pure solid white background (#FFFFFF)! "
+    "MANDATORY E-COMMERCE BANGLE DISPLAY (OVERRIDE REFERENCE POSE): Regardless of whether the reference photo shows bangles lying flat on a table: "
+    "1. 3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
+    "2. UNIFORM SPACING: Evenly spaced along the horizontal bar with clean gaps between each bangle, zero chaotic pile-ups or tilted overlaps. "
     "PRECIOUS METAL FIDELITY: Exact replication of the authentic 22K yellow gold tone, antique finish, meenakari enamel, or diamond studs from the reference photo(s). "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Hyper-detailed macro studio lighting with crisp specular reflections and tack-sharp detail across the entire circumference. "
-    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the cylindrical display bar fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the matte slate-grey cylindrical display bar fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
 )
 
 JEWELRY_STAND_RULES_MAP = {
@@ -535,11 +553,11 @@ CRITICAL JEWELRY RULES:
    - Identify gemstone types (solitaire diamond, ruby, emerald, sapphire, cubic zirconia, polki, kundan, south sea pearl).
    - Detail the setting style: prong setting, bezel setting, channel setting, pave setting, openwork jali filigree.
 
-4. CATEGORY & STAND ASSIGNMENT:
-   - "necklace": Smooth matte-white neck bust mannequin display stand (like Tanishq catalog).
-   - "ring": Angled 3D white velvet/slotted acrylic ring display block (30-45 degree hero angle showing BOTH top crown AND side shank).
-   - "earrings": Symmetrical T-bar hanging jewelry earring stand.
-   - "bangles": Horizontal cylindrical jewelry bangle display bar.
+4. CATEGORY & STAND ASSIGNMENT (STAND HAS CONTRAST AGAINST WHITE BACKGROUND):
+   - "necklace": Sculpted luxury matte slate-grey neck bust mannequin display stand (contrasts crisply against white background).
+   - "ring": Angled 3D matte slate-grey velvet / brushed graphite ring display block (30-45 degree hero angle showing BOTH top crown AND side shank).
+   - "earrings": Symmetrical matte slate-grey T-bar hanging jewelry earring stand (both earrings airborne with wide clean spacing, zero overlap, zero earrings resting on base).
+   - "bangles": Horizontal cylindrical matte slate-grey jewelry bangle display bar.
 
 Return strictly valid JSON:
 {
@@ -547,7 +565,7 @@ Return strictly valid JSON:
     "category": "necklace" | "ring" | "earrings" | "bangles",
     "recognized_label": "22K Yellow Gold Filigree Medallion Necklace",
     "metal_type": "22K Warm Yellow Gold with High-Polish & Filigree Finish",
-    "stand_type": "white_neck_bust" | "slotted_ring_block" | "t_bar_earring_stand" | "cylindrical_bangle_bar",
+    "stand_type": "slate_grey_neck_bust" | "slate_grey_slotted_ring_block" | "slate_grey_t_bar_stand" | "slate_grey_bangle_bar",
     "optimal_angle": "0-degree frontal" | "30-45 degree three-quarter isometric",
     "jewelry_description": "Forensic, multi-angle description detailing every motif, crown, side profile, and gemstone from all photos."
   }
@@ -577,14 +595,14 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
     label = str(jewelry_data.get("recognized_label", "Fine Gold Jewelry")).strip()
     metal = str(jewelry_data.get("metal_type", "22K Yellow Gold")).strip()
     desc = str(jewelry_data.get("jewelry_description", "")).strip()
-    stand_type = str(jewelry_data.get("stand_type", "white_neck_bust")).strip()
+    stand_type = str(jewelry_data.get("stand_type", "slate_grey_neck_bust")).strip()
 
     studio_rules = JEWELRY_STAND_RULES_MAP.get(category, JEWELRY_NECKLACE_STUDIO_RULES)
 
     if category == "ring":
         header = (
             "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
-            f"precious ring mounted upright on a clean angled matte-white velvet or slotted acrylic ring display block. "
+            f"precious ring mounted upright inside the slot of a luxury angled matte slate-grey velvet or brushed graphite ring display block. "
             "OPTIMAL 3D HERO PERSPECTIVE: 30-degree to 45-degree three-quarter isometric angle. "
             "CRITICAL MULTI-ANGLE DETAIL RECONSTRUCTION: Reconstruct BOTH the top crown / center gemstone AND the intricate "
             "side shank carvings, side filigree, gallery openwork, and band engravings simultaneously in one single photograph! "
@@ -592,19 +610,21 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
     elif category in ("necklace", "pendant", "choker", "haar", "mangalsutra"):
         header = (
             "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
-            f"precious {category} mounted and draped symmetrically on a smooth, clean matte-white neck bust mannequin display stand. "
+            f"precious {category} mounted and draped symmetrically on a sculpted luxury matte slate-grey / soft stone-grey neck bust mannequin display stand. "
             "0-degree direct frontal upright camera shot, with the necklace looping naturally around the contoured neck bust and "
             "the central pendant resting flat, centered, and plumb on the front chest of the bust. "
         )
     elif category in ("earrings", "jhumkas"):
         header = (
-            "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the matching pair of "
-            f"standalone {category} hanging side-by-side symmetrically on a minimalist matte-white T-bar jewelry earring display stand. "
+            "Generate an empty luxury jewelry e-commerce studio catalog product photograph (Amazon Fashion / Tanishq hero shot) showing the matching pair of "
+            f"standalone {category} hanging side-by-side symmetrically on a luxurious minimalist matte slate-grey T-bar jewelry earring display stand. "
+            "BOTH earrings MUST hang fully suspended in mid-air from the left and right crossbar arms of the stand with wide, clean horizontal spacing between them! "
+            "ABSOLUTELY NO EARRING LYING ON THE BASE, TABLE, OR POLE! ZERO OVERLAP! "
         )
     else:  # bangles, kada, bracelet
         header = (
             "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
-            f"precious {category} mounted around a horizontal cylindrical matte-white leatherette jewelry bangle display bar. "
+            f"precious {category} mounted around a horizontal cylindrical matte slate-grey leatherette jewelry bangle display bar. "
         )
 
     metal_lock = (
@@ -623,10 +643,11 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
     )
 
     white_background_lock = (
-        "CRITICAL SOLID STUDIO WHITE BACKGROUND (STAND 100% INTACT, NOT TRANSPARENT): "
+        "CRITICAL SOLID STUDIO WHITE BACKGROUND (SLATE-GREY STAND 100% INTACT, NOT TRANSPARENT): "
         "The entire scene MUST be a finished, complete e-commerce studio catalog photograph on a pure solid white background (#FFFFFF). "
-        "DO NOT remove the background! DO NOT make transparent! The white luxury display stand (neck bust mannequin / ring block / "
-        "T-bar stand / bangle bar) MUST remain 100% fully intact, seamlessly visible, and grounded on the pure solid white studio background."
+        "DO NOT remove the background! DO NOT make transparent! The luxury display stand (sculpted neck bust / ring block / "
+        "T-bar stand / bangle bar) has a distinct matte slate-grey finish with clean geometric silhouette edges that stands out sharply and crisply against the pure solid white background (#FFFFFF) with subtle realistic contact shadows. "
+        "The stand MUST remain 100% fully intact, visible, and grounded on the pure solid white studio background."
     )
 
     return (
@@ -646,10 +667,10 @@ def _fallback_jewelry_plan(jewelry_type: str = "auto") -> dict[str, Any]:
         jt = "necklace"
 
     labels = {
-        "necklace": ("22K Yellow Gold Filigree Medallion Necklace", "white_neck_bust", JEWELRY_NECKLACE_STUDIO_RULES),
-        "ring": ("Gold Diamond Solitaire Ring with Filigree Side Shank", "slotted_ring_block", JEWELRY_RING_STUDIO_RULES),
-        "earrings": ("22K Gold Traditional Jhumka Earrings Pair", "t_bar_earring_stand", JEWELRY_EARRINGS_STUDIO_RULES),
-        "bangles": ("22K Gold Handcrafted Kada Bangle", "cylindrical_bangle_bar", JEWELRY_BANGLES_STUDIO_RULES),
+        "necklace": ("22K Yellow Gold Filigree Medallion Necklace", "slate_grey_neck_bust", JEWELRY_NECKLACE_STUDIO_RULES),
+        "ring": ("Gold Diamond Solitaire Ring with Filigree Side Shank", "slate_grey_slotted_ring_block", JEWELRY_RING_STUDIO_RULES),
+        "earrings": ("22K Gold Traditional Jhumka Earrings Pair", "slate_grey_t_bar_earring_stand", JEWELRY_EARRINGS_STUDIO_RULES),
+        "bangles": ("22K Gold Handcrafted Kada Bangle", "slate_grey_cylindrical_bangle_bar", JEWELRY_BANGLES_STUDIO_RULES),
     }
     label, stand, rules = labels.get(jt, labels["necklace"])
 
@@ -787,10 +808,10 @@ def analyze_jewelry_and_build_prompts(
         "3. Top / Crown details: center motif, gemstone, setting style. "
         "4. Side profile & Shank details: side filigree, openwork jali, engravings, or accent stones visible in the side photos. "
         "5. Select the appropriate luxury e-commerce catalog stand: "
-        "   - Necklaces -> 'white_neck_bust' "
-        "   - Rings -> 'slotted_ring_block' (30-45 degree hero angle showing both top crown and side shank) "
-        "   - Earrings -> 't_bar_earring_stand' "
-        "   - Bangles -> 'cylindrical_bangle_bar' "
+        "   - Necklaces -> 'slate_grey_neck_bust' "
+        "   - Rings -> 'slate_grey_slotted_ring_block' (30-45 degree hero angle showing both top crown and side shank) "
+        "   - Earrings -> 'slate_grey_t_bar_earring_stand' (both earrings airborne suspended from arms, wide clean spacing, zero overlap, zero on base) "
+        "   - Bangles -> 'slate_grey_cylindrical_bangle_bar' "
         "Strictly preserve the authentic precious metal and craftsmanship without hallucinating different colors."
     )
 

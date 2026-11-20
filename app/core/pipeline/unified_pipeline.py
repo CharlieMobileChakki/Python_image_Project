@@ -308,10 +308,10 @@ def execute_flow_b_with_person(
             out_path = OUTPUT_DIR / out_filename
             final_cutout.save(out_path, format="PNG", compress_level=1)
             stand = (
-                "t_bar_earring_stand" if cat_key in ("earrings", "jhumkas")
-                else ("slotted_ring_block" if cat_key == "ring"
-                else ("cylindrical_bangle_bar" if cat_key in ("bangles", "kada")
-                else "white_neck_bust"))
+                "slate_grey_t_bar_earring_stand" if cat_key in ("earrings", "jhumkas")
+                else ("slate_grey_slotted_ring_block" if cat_key == "ring"
+                else ("slate_grey_cylindrical_bangle_bar" if cat_key in ("bangles", "kada")
+                else "slate_grey_neck_bust"))
             )
             val_conf = 0.99
             angle_deg = 0.0
@@ -437,7 +437,7 @@ def execute_jewelry_studio_pipeline(
 
     cat = jewelry_plan.get("category", "necklace")
     label = jewelry_plan.get("recognized_label", "Fine Gold Jewelry")
-    stand = jewelry_plan.get("stand_type", "white_neck_bust")
+    stand = jewelry_plan.get("stand_type", "slate_grey_neck_bust")
     prompt = jewelry_plan.get("prompt", "")
 
     # 2. Prepare composite reference for Qwen (if multi-angle, use 2x2 or side-by-side)
