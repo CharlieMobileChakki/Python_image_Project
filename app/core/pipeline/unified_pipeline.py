@@ -343,6 +343,17 @@ def get_optimal_item_reference_crop(
                 square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
                 return square_canvas
 
+        # For any non-square image or if max dim < 1000, fit centered onto a square 1400x1400 white canvas
+        cw, ch = image.size
+        if abs(cw - ch) > 20 or max(cw, ch) < 1000:
+            scale = (target_square * 0.88) / float(max(cw, ch))
+            nw = max(1, int(cw * scale))
+            nh = max(1, int(ch * scale))
+            resized = image.resize((nw, nh), Image.Resampling.LANCZOS)
+            square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
+            square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
+            return square_canvas
+
         return image
     except Exception as exc:
         logger.warning("Failed to crop item reference (%s); using full image.", exc)

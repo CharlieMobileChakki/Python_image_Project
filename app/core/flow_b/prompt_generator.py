@@ -102,19 +102,39 @@ CRITICAL RULES:
    - IF THE OUTFIT IS A ONE-PIECE ENSEMBLE (dress, gown, jumpsuit, saree, lehenga):
      Output a single entry with category "dress", "saree", or "lehenga".
 
-6. JEWELRY & PRECIOUS ORNAMENTS (FORENSIC GEMOLOGIST DECONSTRUCTION FOR ALL MATERIALS):
+6. JEWELRY & PRECIOUS ORNAMENTS (FORENSIC GEMOLOGIST & OBJECT DECONSTRUCTION):
    - If the reference photograph shows JEWELRY (necklaces, earrings, rings, bangles, crystals, diamonds, gemstones):
      ABSOLUTELY NEVER classify it as clothing!
      Categorize each piece strictly as 'necklace', 'earrings', 'ring', or 'bangles'.
-     CRITICAL: DO NOT output a short 1-line label! Provide a deep, forensic gemologist deconstruction:
-     1. Stone & Gemstone Taxonomy: Exact gem material, transparency, and cut:
-        - If faceted crystals / diamonds / cubic zirconia (e.g. blush pink crystal statement necklace): specify "faceted teardrop pear-cut and oval-cut blush pink Austrian crystals / rose quartz / cubic zirconia with crisp light-refracting facets, claw prong settings, and halo borders of clear micro-crystals".
-        - If pearls: specify "lustrous round white seed pearls interlinked with gold droplet pins".
-        - If polki/kundan/enamel: specify exact setting and foil backing.
-     2. Metal Alloy & Surface Finish: Exact metal tone and polish (e.g. high-polish warm yellow gold, rose gold, rhodium-plated silver, platinum, or antique oxidized finish with mirror specular reflections).
-     3. Setting Architecture: Multi-prong claw settings, pave halos, bezel cups, channel tracks, openwork filigree lattice, articulated V-shaped collar links, jump rings.
-     4. Hanging Fringe / Accents: Cascading drops (e.g. dangling faceted teardrop crystal briolettes, hanging gold droplets).
-     5. Silhouette & Symmetry: Plumb vertical symmetry, level alignment, and untangled drape.
+
+   - EXACT PIECE COUNT & UNIT ENUMERATION (CRITICAL ZERO-HALLUCINATION RULE):
+     * Count the EXACT number of physical jewelry pieces visible in the image!
+     * If the photo shows a pair of 2 kadas: specify "item_count": 2, and "piece_descriptor": "exactly 2 matching broad cuff kada bangles (a pair of 2)".
+     * If 1 ring: specify "item_count": 1, and "piece_descriptor": "1 standalone ring".
+     * If 1 necklace: specify "item_count": 1, and "piece_descriptor": "1 standalone necklace".
+     * If 1 pair of earrings: specify "item_count": 2, and "piece_descriptor": "exactly 1 matching pair of 2 earrings".
+     * If a stack of 4 bangles: specify "item_count": 4, and "piece_descriptor": "a set of exactly 4 matching bangles".
+     * NEVER leave the count ambiguous! An AI image generator WILL hallucinate extra pieces unless you explicitly lock the piece count!
+
+   - PHYSICAL FORM FACTOR & BAND PROFILE (DIMENSIONAL ACCURACY):
+     * For Bangles / Kadas:
+       - Is it a broad thick cuff kada (wide cylindrical band, ~20-35mm wide, thick rigid circular walls)?
+       - Or thin round wire bangles (~2-4mm thin round loops)?
+       - Or a flexible chain / link bracelet?
+       - NEVER describe broad cuff kadas as generic "bangles", because thin wire bangles look completely different!
+       - Specify "form_factor": "broad thick cuff kada with wide cylindrical band (approx 25-30mm wide) and thick rigid circular walls".
+     * For Earrings:
+       - Specify top stud (solitaire round crystal, floral cluster, plain ball post) + main body (chandelier drop, jhumka bell, hoop, drop pendant).
+     * For Rings:
+       - Band profile (wide cigar band, thin shank, split shank, pave band) + crown setting (solitaire, halo, cluster, bezel).
+     * For Necklaces:
+       - Choker (tight neck), collar (broad V/U collar), princess drape, long chain/haar.
+
+   - SURFACE TEXTURE & ACCENT FIDELITY (ANTI-HALLUCINATION):
+     * Only describe surface embellishments that are ACTUALLY CLEARLY VISIBLE in the reference photo!
+     * DO NOT hallucinate bright multicolor enamel (meenakari) unless bright enamel paint is unmistakably present!
+     * If the piece is solid engraved gold with relief floral work or filigree, describe it as:
+       "Intricate solid antique gold relief floral and foliate hand-carvings with beaded borders. No loud multicolor enamel."
 
 7. JEWELRY SETS & MULTI-PIECE PARSING (CRITICAL E-COMMERCE RULE):
    - If the photograph contains a JEWELRY SET (e.g. a Necklace AND a pair of matching Earrings, or Necklace + Earrings + Ring):
@@ -125,7 +145,7 @@ CRITICAL RULES:
      NEVER omit, drop, or merge the matching earrings or ring in a jewelry set! Both pieces belong to the set and must be recognized and generated!
 
 8. MANDATORY BOUNDING BOX LOCALIZATION (box_2d) FOR MACRO ZOOM & CROPPING:
-   - For every detected piece (especially earrings in a jewelry set, rings, or necklaces), provide:
+   - For every detected piece (especially earrings in a jewelry set, rings, bangles, or necklaces), provide:
      "box_2d": [ymin, xmin, ymax, xmax] normalized on a 0-1000 scale.
    - For earrings in a necklace set, box_2d MUST tightly enclose BOTH EARRINGS TOGETHER side-by-side (the entire matching pair spanning the upper-central region between the necklace strands). Do NOT box only one earring!
 
@@ -147,23 +167,18 @@ Return strictly valid JSON format:
 {
   "garments": [
     {
-      "category": "necklace",
-      "recognized_label": "Blush Pink Crystal Statement Collar Necklace",
-      "metal_type": "Rose Gold Alloy with High-Polish Prong Claws",
-      "gemstone_type": "Faceted Blush Pink Austrian Crystals and Clear Crystal Pave Halos",
-      "box_2d": [180, 25, 870, 520],
-      "garment_description": "Bridal statement collar necklace crafted with faceted teardrop pear-cut and oval-cut blush pink Austrian crystals in delicate claw-prong settings, arranged in an articulated scalloped V-shape lace collar bordered by sparkling clear crystal halos, with dangling faceted teardrop crystal briolettes hanging from the bottom fringe."
-    },
-    {
-      "category": "earrings",
-      "recognized_label": "Blush Pink Crystal Matching Chandelier Earrings Pair",
-      "metal_type": "Rose Gold Alloy with High-Polish Prong Claws",
-      "gemstone_type": "Faceted Solitaire Round Pink Crystals and Pear-cut Pink Briolettes",
-      "box_2d": [75, 315, 540, 435],
-      "garment_description": "Matching pair of chandelier dangle earrings featuring top ear-studs with faceted round blush pink crystal solitaires in rose gold claw settings, articulating into an openwork scrolling rose-gold crystal chandelier drop with sparkling clear crystal accents and dangling faceted pear-cut pink crystal drops."
+      "category": "bangles",
+      "recognized_label": "Pair of Antique 22K Gold Broad Cuff Kada Bangles",
+      "item_count": 2,
+      "piece_descriptor": "exactly 2 matching broad cuff kada bangles (a pair of 2)",
+      "form_factor": "broad thick cuff kada with wide cylindrical band (approx 25-30mm wide) and thick rigid circular walls",
+      "metal_type": "22K Antique Warm Yellow Gold with Matte Relief Luster",
+      "gemstone_type": "none (pure solid gold floral relief carvings, no multicolor enamel)",
+      "box_2d": [200, 100, 800, 900],
+      "garment_description": "A pair of exactly TWO matching antique 22K gold broad cuff kada bangles. Each kada features a wide, thick cylindrical band adorned with intricate hand-carved floral and foliate relief scrollwork, bordered by raised beaded edges and micro-granulation rims."
     }
   ]
-}}"""
+}"""
 
 
 def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> str:
@@ -185,6 +200,9 @@ def _build_final_prompt(
     metal_type: str | None = None,
     gemstone_type: str | None = None,
     recognized_label: str | None = None,
+    item_count: int | None = None,
+    piece_descriptor: str | None = None,
+    form_factor: str | None = None,
 ) -> str:
     """Put category-specific 3D ghost-mannequin isolation, e-commerce pose straightening, and fabric lock FIRST."""
     cat = (category or "").strip().lower()
@@ -212,9 +230,15 @@ def _build_final_prompt(
             else:
                 inferred_metal = "Precious Metal Alloy"
 
+        cnt = item_count or (2 if cat in ("earrings", "jhumkas") else 1)
+        p_desc = piece_descriptor or (f"exactly {cnt} matching" if cnt > 1 else f"exactly {cnt} standalone")
+
         return _build_final_jewelry_prompt({
             "category": cat,
             "recognized_label": recognized_label or garment_description[:60],
+            "item_count": cnt,
+            "piece_descriptor": p_desc,
+            "form_factor": form_factor or "",
             "metal_type": inferred_metal,
             "gemstone_type": (gemstone_type or "").strip(),
             "stand_type": stand,
@@ -473,6 +497,9 @@ def analyze_garment_and_build_prompts(
             desc = str(item.get("garment_description", "")).strip()
             metal = str(item.get("metal_type", "")).strip() or None
             gemstone = str(item.get("gemstone_type", "")).strip() or None
+            item_cnt = int(item.get("item_count", 0) or 0) or None
+            piece_desc = str(item.get("piece_descriptor", "")).strip() or None
+            form_fact = str(item.get("form_factor", "")).strip() or None
             box_2d = item.get("box_2d")
             if not desc:
                 continue
@@ -485,6 +512,9 @@ def analyze_garment_and_build_prompts(
                     "garment_description": desc,
                     "metal_type": metal or "",
                     "gemstone_type": gemstone or "",
+                    "item_count": item_cnt,
+                    "piece_descriptor": piece_desc,
+                    "form_factor": form_fact,
                     "box_2d": box_2d,
                     "prompt": _build_final_prompt(
                         garment_description=desc,
@@ -492,6 +522,9 @@ def analyze_garment_and_build_prompts(
                         metal_type=metal,
                         gemstone_type=gemstone,
                         recognized_label=label,
+                        item_count=item_cnt,
+                        piece_descriptor=piece_desc,
+                        form_factor=form_fact,
                     ),
                     "prompt_source": f"openai:{model_name}",
                 }
@@ -595,12 +628,13 @@ JEWELRY_EARRINGS_STUDIO_RULES = (
 )
 
 JEWELRY_BANGLES_STUDIO_RULES = (
-    "Pristine luxury jewelry e-commerce studio catalog photograph (Kalyan / Joyalukkas luxury hero shot). "
-    "LUXURY SHOWCASE STAND & CONTRAST (BEIGE VELVET & POLISHED GOLD BRASS): The bangles / kada / bracelet are mounted vertically around a horizontal cylindrical warm beige / champagne velvet jewelry bangle display bar on polished golden brass upright pillars and weighted base. "
+    "Pristine luxury jewelry boutique showcase catalog photograph (Kalyan / Joyalukkas / Tanishq luxury hero shot). "
+    "LUXURY SHOWCASE STAND & CONTRAST (BEIGE VELVET & POLISHED GOLD BRASS): The bangles / kada / bracelet are mounted vertically upright around a horizontal cylindrical warm beige / champagne velvet jewelry bangle display bar supported on polished golden brass upright pillars and weighted circular base. "
     "The stand has a distinct warm beige velvet tone and polished gold brass accents that stand out sharply against the pure solid white background (#FFFFFF)! "
     "MANDATORY E-COMMERCE BANGLE DISPLAY (OVERRIDE REFERENCE POSE): Regardless of whether the reference photo shows bangles lying flat on a table: "
     "1. 3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
-    "2. UNIFORM SPACING: Evenly spaced along the horizontal bar with clean gaps between each bangle, zero chaotic pile-ups or tilted overlaps. "
+    "2. EXACT PIECE COUNT & UNIFORM SPACING: Mount the EXACT number of pieces from the reference photo! If there are 2 broad kadas in the reference photo, mount EXACTLY 2 kadas side-by-side with an elegant clean gap between them. ABSOLUTELY NEVER add 3, 4, or 5 extra bangles! "
+    "3. BROAD CUFF PROFILE PRESERVATION: If the reference shows broad thick cuff kadas with wide cylindrical walls, replicate the identical wide band width and thick cylindrical walls. DO NOT convert broad kadas into thin skinny round wire bangles! "
     "PRECIOUS METAL FIDELITY: Exact replication of authentic precious metal alloy (yellow gold, rose gold, white gold, or silver), surface finish, and gemstone settings directly from the reference photo(s). "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Hyper-detailed macro studio lighting with crisp specular reflections and tack-sharp detail across the entire circumference. "
     "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the beige velvet and brass cylindrical display bar fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
@@ -708,9 +742,13 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
             "ABSOLUTELY NO EARRING LYING ON THE BASE, TABLE, OR POLE! ZERO OVERLAP! "
         )
     else:  # bangles, kada, bracelet
+        item_cnt = int(jewelry_data.get("item_count", 2) or 2)
+        count_label = f"the pair of exactly {item_cnt} matching" if item_cnt == 2 else f"the exactly {item_cnt} standalone"
         header = (
-            "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
-            f"precious {category} mounted around a horizontal cylindrical warm beige velvet jewelry bangle display bar on polished gold brass uprights. "
+            "Generate an empty luxury jewelry boutique showcase catalog product photograph (Kalyan / Tanishq / Joyalukkas luxury hero shot) showing "
+            f"{count_label} {category} mounted upright side-by-side around a horizontal cylindrical warm beige velvet jewelry display bar on polished golden brass upright pillars and weighted base. "
+            f"There must be EXACTLY {item_cnt} {category} mounted on the bar, neatly spaced with an elegant clean gap between them, showing their wide cylindrical 3D band width and hollow inner circular apertures! "
+            f"ZERO EXTRA BANGLES! DO NOT generate 3, 4, 5, or more bangles! EXACTLY {item_cnt}!"
         )
 
     gemstone = str(jewelry_data.get("gemstone_type", "")).strip()
@@ -750,6 +788,29 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         "The stand MUST remain 100% fully intact, visible, and grounded on the pure solid white studio background."
     )
 
+    item_cnt = int(jewelry_data.get("item_count", 1) or 1)
+    piece_desc = str(jewelry_data.get("piece_descriptor", f"exactly {item_cnt} piece(s)")).strip()
+    form_factor = str(jewelry_data.get("form_factor", "")).strip()
+
+    unit_count_lock = (
+        f"MANDATORY EXACT PIECE COUNT LOCK: The catalog photograph MUST display {piece_desc.upper()}! "
+        f"ABSOLUTELY DO NOT generate extra pieces! If the reference photo shows {item_cnt} piece(s), "
+        f"you MUST generate EXACTLY {item_cnt} piece(s) and NO MORE. "
+        f"Zero hallucinated extra bangles, zero extra rings, zero extra necklaces!"
+    )
+
+    form_factor_lock = (
+        f"MANDATORY FORM FACTOR & BAND PROFILE FIDELITY: Replicate the EXACT physical dimensions and silhouette: {form_factor}. "
+        "If the piece is a broad thick cuff kada, preserve the wide band width and thick cylindrical walls! "
+        "ABSOLUTELY DO NOT reduce broad cuff kadas into thin skinny round wire bangles!"
+    ) if form_factor else ""
+
+    surface_lock = (
+        "STRICT SURFACE TEXTURE & ACCENT FIDELITY: Replicate ONLY the authentic surface carvings, engravings, "
+        "and colors visible in the reference photo! DO NOT invent or hallucinate loud multicolor enamel (meenakari) "
+        "or random colored stones if the reference piece is solid gold with engraved metalwork!"
+    )
+
     macro_framing_lock = (
         "CRITICAL MACRO PRODUCT FRAMING (MAXIMUM CANVAS UTILIZATION): "
         "The jewelry piece must fill 75% to 82% of the canvas frame! "
@@ -762,6 +823,9 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         f"{macro_framing_lock} "
         f"{ultra_hd_zoom_lock} "
         f"{white_background_lock} "
+        f"{unit_count_lock} "
+        f"{form_factor_lock} "
+        f"{surface_lock} "
         f"{metal_lock} "
         f"{earring_anatomy_lock} "
         f"Exact jewelry piece to faithfully reconstruct from all reference angles: {desc or label}. "
