@@ -62,28 +62,42 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
 )
 async def background_removal_endpoint(
     request: Request,
-    file: UploadFile = File(..., description="Input image of garment, model, or flat-lay"),
-    person_mode: str = Form("with_person", description="Execution mode: defaults to unified 3D studio flow"),
+    file: UploadFile = File(None, description="Primary input image (garment, model, flat-lay, or jewelry)"),
+    files: list[UploadFile] = File(None, description="Optional multi-angle input images (up to 4 photos for jewelry/rings)"),
+    person_mode: str = Form("with_person", description="Execution mode: 'with_person', 'without_person', 'jewelry'"),
     has_human: str | bool | None = Form(None, description="Optional flag"),
-    target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt'"),
+    target_garment: str = Form("all", description="Target filter: 'all', 'upper_clothes', 'pants', 'dress', 'necklace', 'ring', 'earrings', 'bangles'"),
     auto_repair: bool = Form(True, description="Enable fabric inpainting"),
     auto_straighten: bool = Form(False, description="Enable auto-deskewing"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
     response_format: str = Form("json", description="'json' (default for Node.js / UI) or 'image_direct' for binary PNG stream"),
     mode_hint: str | None = Form(None, description="Legacy mode hint"),
+    custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
 ) -> Any:
-    """Unified AI 3D Garment Studio & Background Removal Endpoint.
+    """Unified AI 3D Garment & Jewelry Studio API.
 
-    Single unified production workflow (ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024):
-    1. Analyzes the garment via ChatGPT Vision and writes forensic textile prompt.
-    2. Synthesizes pristine 3D ghost mannequin on RTX 3090 GPU worker.
-    3. Strips white background into transparent 1024x1024 PNG via BiRefNet Lite.
+    Single unified production workflow:
+    - Apparel: ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024.
+    - Jewelry: Supports 1 to 4 multi-angle photos (top, sides, perspective) -> Qwen GPU -> Specialized luxury catalog stand.
 
     Supports both Node.js caller formats:
-    - JSON Response (default): { status: "success", garments: [{ output_png_url, category, ... }] }
+    - JSON Response (default): { status: "success", garments: [{ url, category, stand_type, ... }] }
     - Direct PNG stream: Set response_format='image_direct' or Accept: image/png
     """
-    image_bytes = await validate_and_read_image(file)
+    upload_list: list[UploadFile] = []
+    if file:
+        upload_list.append(file)
+    if files:
+        upload_list.extend(files)
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="No image file provided. Please upload at least one image.")
+
+    image_bytes_list: list[bytes] = []
+    for f in upload_list[:4]:
+        b = await validate_and_read_image(f)
+        image_bytes_list.append(b)
+
+    payload_bytes: bytes | list[bytes] = image_bytes_list[0] if len(image_bytes_list) == 1 else image_bytes_list
 
     actual_has_human: bool | None = None
     if has_human is not None:
@@ -98,7 +112,7 @@ async def background_removal_endpoint(
         async with get_semaphore():
             result = await run_in_threadpool(
                 process_garment_pipeline,
-                image_bytes=image_bytes,
+                image_bytes=payload_bytes,
                 person_mode=person_mode,
                 has_human=actual_has_human,
                 mode_hint=mode_hint,
@@ -106,6 +120,7 @@ async def background_removal_endpoint(
                 auto_repair=auto_repair,
                 auto_straighten=auto_straighten,
                 include_base64=include_base64,
+                custom_prompt=custom_prompt,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -114,7 +129,8 @@ async def background_removal_endpoint(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Pipeline processing error: {exc}") from exc
     finally:
-        await file.close()
+        for f in upload_list:
+            await f.close()
 
     # Check if client requested direct PNG image stream (Option 1)
     accept_hdr = request.headers.get("accept", "").lower()
@@ -164,6 +180,8 @@ async def background_removal_endpoint(
             "recognized_label": title,
             "garment_id": g.get("garment_id"),
             "output_png_base64": g.get("output_png_base64") if include_base64 else None,
+            "stand_type": g.get("stand_type"),
+            "views_analyzed": g.get("views_analyzed", 1),
         })
 
     total_time_sec = round(result.get("execution_time_ms", 0) / 1000.0, 1)
@@ -172,6 +190,101 @@ async def background_removal_endpoint(
         "status": "success",
         "total_garments": len(clean_garments),
         "garments": clean_garments,
+        "processing_time_sec": total_time_sec,
+        "job_id": result.get("job_id"),
+        "success": True,
+    }
+
+
+# ==============================================================================
+# JEWELRY & PRECIOUS ORNAMENTS DEDICATED ENDPOINTS
+# ------------------------------------------------------------------------------
+@router.post(
+    "/jewelry-studio",
+    response_model=ProcessGarmentResponse,
+    response_model_exclude_none=True,
+    summary="Dedicated 3D Luxury Jewelry Studio (Single or Multi-Angle)",
+)
+async def jewelry_studio_endpoint(
+    request: Request,
+    file: UploadFile = File(None, description="Primary jewelry image"),
+    files: list[UploadFile] = File(None, description="Up to 4 multi-angle views of the jewelry piece (top, sides, angle)"),
+    jewelry_type: str = Form("auto", description="Category: 'auto', 'necklace', 'ring', 'earrings', 'bangles'"),
+    custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
+    include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
+) -> Any:
+    """Dedicated 3D Luxury Jewelry Studio Endpoint.
+
+    Takes 1 to 4 multi-angle photographs of the same jewelry piece:
+    - Rings: Analyzes top crown AND side shank/filigree; generates 30-45 degree hero angle on slotted ring block.
+    - Necklaces: Drapes symmetrically around luxury white neck bust mannequin stand.
+    - Earrings: Symmetrical pair hanging on minimalist T-bar stand.
+    - Bangles: Mounted on horizontal cylindrical jewelry display bar.
+    """
+    upload_list: list[UploadFile] = []
+    if file:
+        upload_list.append(file)
+    if files:
+        upload_list.extend(files)
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="No jewelry image provided. Please upload at least one image.")
+
+    image_bytes_list: list[bytes] = []
+    for f in upload_list[:4]:
+        b = await validate_and_read_image(f)
+        image_bytes_list.append(b)
+
+    payload_bytes: bytes | list[bytes] = image_bytes_list[0] if len(image_bytes_list) == 1 else image_bytes_list
+
+    try:
+        async with get_semaphore():
+            result = await run_in_threadpool(
+                process_garment_pipeline,
+                image_bytes=payload_bytes,
+                person_mode="jewelry",
+                target_garment=jewelry_type,
+                include_base64=include_base64,
+                custom_prompt=custom_prompt,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Jewelry pipeline error: {exc}") from exc
+    finally:
+        for f in upload_list:
+            await f.close()
+
+    base_url = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+    if forwarded_proto == "https" and base_url.startswith("http://"):
+        base_url = base_url.replace("http://", "https://", 1)
+
+    clean_items = []
+    for g in result.get("garments", []):
+        raw_url = g.get("url") or g.get("output_png_url") or ""
+        full_url = f"{base_url}{raw_url}" if raw_url.startswith("/") else raw_url
+        title = g.get("title") or g.get("recognized_label") or "Luxury Jewelry Studio"
+        clean_items.append({
+            "category": g.get("category", "jewelry"),
+            "title": title,
+            "url": full_url,
+            "resolution": "1024x1024",
+            "output_png_url": full_url,
+            "recognized_label": title,
+            "garment_id": g.get("garment_id"),
+            "output_png_base64": g.get("output_png_base64") if include_base64 else None,
+            "stand_type": g.get("stand_type"),
+            "views_analyzed": g.get("views_analyzed", len(upload_list)),
+        })
+
+    total_time_sec = round(result.get("execution_time_ms", 0) / 1000.0, 1)
+
+    return {
+        "status": "success",
+        "total_garments": len(clean_items),
+        "garments": clean_items,
         "processing_time_sec": total_time_sec,
         "job_id": result.get("job_id"),
         "success": True,

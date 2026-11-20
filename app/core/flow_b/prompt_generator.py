@@ -417,3 +417,396 @@ def analyze_garment_and_build_prompts(
     except Exception as exc:
         logger.warning("ChatGPT Vision prompt generation failed (%s); using fallback prompt.", exc)
         return _fallback_garment_plan(target_garment)
+
+
+# ==============================================================================
+# JEWELRY & PRECIOUS ORNAMENTS 3D STUDIO PIPELINE (MULTI-ANGLE AWARE)
+# ------------------------------------------------------------------------------
+# Specialized 3D display stand generation for Necklaces, Rings, Earrings, Bangles
+# Supports single or multi-angle input fusion (up to 4 reference photos).
+# Mounts authentic gold, diamond, and gemstone ornaments on luxury catalog stands:
+# - Necklaces/Chokers: Smooth Matte-White Neck Bust Mannequin Stand (Image 2)
+# - Rings/Bands: Angled 3D White Velvet / Slotted Acrylic Ring Display Block
+# - Earrings/Jhumkas: Symmetrical T-Bar Hanging Earring Stand
+# - Bangles/Kadas: Horizontal Cylindrical Leatherette Bangle Display Bar
+# ==============================================================================
+
+JEWELRY_NECKLACE_STUDIO_RULES = (
+    "Pristine luxury jewelry e-commerce studio catalog photograph (Tanishq / Kalyan Jewellers / Cartier luxury hero shot). "
+    "The standalone authentic necklace is mounted and draped elegantly around the neck of a smooth, clean, premium matte-white neck bust mannequin display stand. "
+    "PERFECT SYMMETRY & ALIGNMENT: Centered upright, direct 0-degree straight frontal studio camera view. The necklace loops naturally and symmetrically around both sides of the contoured white neck bust, with the central medallion / pendant resting completely flat, centered, and plumb on the front chest of the bust. "
+    "PRECIOUS METAL & POLISH LUSTER: Faithfully preserve the authentic 22K/24K warm yellow gold metal, polished luster, intricate openwork jaali filigree, delicate leaf motifs, engraved borders, and hanging bead drops with 100% forensic accuracy directly from the reference photo(s). "
+    "LIGHTING & ENVIRONMENT: Professional jewelry macro studio illumination with soft specular highlights and subtle reflections, solid clean contrast background, completely free of any human model, skin, neck, face, hands, clothes, table clutter, or props."
+)
+
+JEWELRY_RING_STUDIO_RULES = (
+    "Pristine luxury jewelry e-commerce studio catalog photograph (Tiffany & Co. / BlueStone / CaratLane luxury hero shot). "
+    "The standalone ring is mounted upright on a clean, minimalist, angled matte-white velvet or slotted acrylic ring display block. "
+    "OPTIMAL 3D HERO PERSPECTIVE (MULTI-FACET VISIBILITY): Direct 30-degree to 45-degree three-quarter isometric 3D beauty angle. "
+    "CRITICAL SHANK & CROWN VISIBILITY: BOTH the top crown / center gemstone / head motif AND the intricate side shank carvings, side filigree, gallery jali, and band engravings must be SIMULTANEOUSLY prominent and clearly visible in this single photograph! "
+    "PRECIOUS METAL & GEMSTONE FIDELITY: Reconstruct the exact precious metal alloy (22K/18K warm yellow gold, platinum, or rose gold), micro-pave prong settings, diamond facets, and side band engravings with 100% forensic precision from all reference angles. "
+    "LIGHTING & ENVIRONMENT: Razor-sharp macro jewelry studio illumination with crisp facet reflections, clean pure solid contrast background, zero human fingers, NO hands, NO skin, and NO table props."
+)
+
+JEWELRY_EARRINGS_STUDIO_RULES = (
+    "Pristine luxury jewelry e-commerce studio catalog photograph (Tanishq / Malabar Gold luxury hero shot). "
+    "The pair of matching earrings / jhumkas is displayed hanging elegantly on a minimalist white or matte-metallic studio T-bar jewelry earring display stand. "
+    "PERFECT PAIR SYMMETRY: Both left and right earrings hang side-by-side perfectly parallel at the exact same horizontal height, facing directly forward straight to camera. "
+    "PRECIOUS CRAFTSMANSHIP: Exact replication of authentic gold filigree, jhumka bell domes, dangling pearl/gold beads, gemstone inlays, and ear-stud motifs from the reference photo(s). "
+    "LIGHTING & ENVIRONMENT: Professional jewelry studio macro lighting, soft reflections, clean pure contrast background, completely free of any human ears, hair, face, neck, skin, or hands."
+)
+
+JEWELRY_BANGLES_STUDIO_RULES = (
+    "Pristine luxury jewelry e-commerce studio catalog photograph (Kalyan / Joyalukkas luxury hero shot). "
+    "The bangles / kada / bracelet are mounted around a horizontal cylindrical white leatherette or velvet jewelry bangle display bar. "
+    "3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
+    "PRECIOUS METAL FIDELITY: Exact replication of the authentic 22K yellow gold tone, antique finish, meenakari enamel, or diamond studs from the reference photo(s). "
+    "LIGHTING & ENVIRONMENT: Professional macro studio lighting with soft specular highlights, clean contrast background, completely free of any human wrist, hands, arms, or skin."
+)
+
+JEWELRY_STAND_RULES_MAP = {
+    "necklace": JEWELRY_NECKLACE_STUDIO_RULES,
+    "pendant": JEWELRY_NECKLACE_STUDIO_RULES,
+    "choker": JEWELRY_NECKLACE_STUDIO_RULES,
+    "haar": JEWELRY_NECKLACE_STUDIO_RULES,
+    "mangalsutra": JEWELRY_NECKLACE_STUDIO_RULES,
+    "ring": JEWELRY_RING_STUDIO_RULES,
+    "earrings": JEWELRY_EARRINGS_STUDIO_RULES,
+    "jhumkas": JEWELRY_EARRINGS_STUDIO_RULES,
+    "bangles": JEWELRY_BANGLES_STUDIO_RULES,
+    "kada": JEWELRY_BANGLES_STUDIO_RULES,
+    "bracelet": JEWELRY_BANGLES_STUDIO_RULES,
+}
+
+SYSTEM_JEWELRY_VISION_PROMPT = """You are a master jewelry gemologist, high-jewelry e-commerce catalog director, and 3D precious ornament analyst (Tanishq, Cartier, Tiffany & Co., CaratLane).
+
+Your mission is to analyze 1 to 4 photographs of the SAME piece of jewelry (taken from different angles: Top view, Side profile, 45-degree angle, Close-up) and synthesize a unified, forensic-grade 3D catalog description.
+
+CRITICAL JEWELRY RULES:
+1. MULTI-ANGLE DETAIL FUSION (DO NOT MISS SIDE DESIGNS):
+   - When multiple images are provided, cross-examine all angles:
+     * Image 1 might show the top face/crown (e.g. center gemstone or medallion).
+     * Image 2 & 3 might reveal the side shank, gallery openwork, side jali filigree, or band carvings.
+   - Synthesize ALL angles into a unified description so that NO side detail or hidden engraving is lost!
+
+2. METALS, POLISH & ALLOY FIDELITY:
+   - Identify the exact metal: 22K/24K rich warm yellow gold, 18K rose gold, 950 platinum, sterling silver, or antique oxidized temple gold.
+   - Preserve authentic metal texture: high-polish mirror finish, matte brushed gold, hammered gold, antique matte patina.
+   - Strictly prohibit changing gold color (e.g. do NOT turn yellow gold into silver or copper!).
+
+3. GEMSTONES & PRECIOUS CRAFTSMANSHIP:
+   - Identify gemstone types (solitaire diamond, ruby, emerald, sapphire, cubic zirconia, polki, kundan, south sea pearl).
+   - Detail the setting style: prong setting, bezel setting, channel setting, pave setting, openwork jali filigree.
+
+4. CATEGORY & STAND ASSIGNMENT:
+   - "necklace": Smooth matte-white neck bust mannequin display stand (like Tanishq catalog).
+   - "ring": Angled 3D white velvet/slotted acrylic ring display block (30-45 degree hero angle showing BOTH top crown AND side shank).
+   - "earrings": Symmetrical T-bar hanging jewelry earring stand.
+   - "bangles": Horizontal cylindrical jewelry bangle display bar.
+
+Return strictly valid JSON:
+{
+  "jewelry_item": {
+    "category": "necklace" | "ring" | "earrings" | "bangles",
+    "recognized_label": "22K Yellow Gold Filigree Medallion Necklace",
+    "metal_type": "22K Warm Yellow Gold with High-Polish & Filigree Finish",
+    "stand_type": "white_neck_bust" | "slotted_ring_block" | "t_bar_earring_stand" | "cylindrical_bangle_bar",
+    "optimal_angle": "0-degree frontal" | "30-45 degree three-quarter isometric",
+    "jewelry_description": "Forensic, multi-angle description detailing every motif, crown, side profile, and gemstone from all photos."
+  }
+}"""
+
+
+def is_jewelry_domain(text: str | None) -> bool:
+    """Check whether a given label, category, or query refers to jewelry rather than garments."""
+    if not text:
+        return False
+    t = text.strip().lower()
+    jewelry_keywords = {
+        "jewelry", "jewellery", "gold", "silver", "diamond", "necklace", "ring",
+        "earring", "earrings", "jhumka", "jhumkas", "bangle", "bangles", "kada",
+        "bracelet", "pendant", "choker", "mangalsutra", "haar", "chain", "anklet",
+        "payal", "polki", "kundan", "solitaire", "gemstone", "ornament",
+    }
+    tokens = set(t.replace("_", " ").replace("-", " ").split())
+    if tokens & jewelry_keywords:
+        return True
+    return any(kw in t for kw in jewelry_keywords)
+
+
+def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
+    """Build high-fidelity Qwen prompt for 3D jewelry catalog generation on luxury display stands."""
+    category = str(jewelry_data.get("category", "necklace")).strip().lower()
+    label = str(jewelry_data.get("recognized_label", "Fine Gold Jewelry")).strip()
+    metal = str(jewelry_data.get("metal_type", "22K Yellow Gold")).strip()
+    desc = str(jewelry_data.get("jewelry_description", "")).strip()
+    stand_type = str(jewelry_data.get("stand_type", "white_neck_bust")).strip()
+
+    studio_rules = JEWELRY_STAND_RULES_MAP.get(category, JEWELRY_NECKLACE_STUDIO_RULES)
+
+    if category == "ring":
+        header = (
+            "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
+            f"precious ring mounted upright on a clean angled matte-white velvet or slotted acrylic ring display block. "
+            "OPTIMAL 3D HERO PERSPECTIVE: 30-degree to 45-degree three-quarter isometric angle. "
+            "CRITICAL MULTI-ANGLE DETAIL RECONSTRUCTION: Reconstruct BOTH the top crown / center gemstone AND the intricate "
+            "side shank carvings, side filigree, gallery openwork, and band engravings simultaneously in one single photograph! "
+        )
+    elif category in ("necklace", "pendant", "choker", "haar", "mangalsutra"):
+        header = (
+            "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
+            f"precious {category} mounted and draped symmetrically on a smooth, clean matte-white neck bust mannequin display stand. "
+            "0-degree direct frontal upright camera shot, with the necklace looping naturally around the contoured neck bust and "
+            "the central pendant resting flat, centered, and plumb on the front chest of the bust. "
+        )
+    elif category in ("earrings", "jhumkas"):
+        header = (
+            "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the matching pair of "
+            f"standalone {category} hanging side-by-side symmetrically on a minimalist matte-white T-bar jewelry earring display stand. "
+        )
+    else:  # bangles, kada, bracelet
+        header = (
+            "Generate an empty luxury jewelry e-commerce studio catalog product photograph showing the standalone "
+            f"precious {category} mounted around a horizontal cylindrical matte-white leatherette jewelry bangle display bar. "
+        )
+
+    metal_lock = (
+        f"STRICT PRECIOUS METAL & GEMSTONE FIDELITY: Clone the EXACT real-world metal alloy ({metal}), surface luster, "
+        "micro-carvings, prongs, and gemstone colors directly from the reference photo(s). "
+        "DO NOT change yellow gold into silver or copper! Preserve authentic gold polish and craftsmanship."
+    )
+
+    surface_clean = (
+        "BACKGROUND & CLEANLINESS RULE: Pure clean contrast studio background (#FFFFFF or deep studio contrast), "
+        "completely free of any human model, skin, fingers, hands, face, neck, clothes, table clutter, or extraneous objects."
+    )
+
+    return (
+        f"{header} "
+        f"{metal_lock} "
+        f"{surface_clean} "
+        f"Exact jewelry piece to faithfully reconstruct from all reference angles: {desc or label}. "
+        f"{studio_rules}"
+    )
+
+
+def _fallback_jewelry_plan(jewelry_type: str = "auto") -> dict[str, Any]:
+    """Deterministic fallback for jewelry prompt if OpenAI API key is unavailable."""
+    jt = (jewelry_type or "necklace").strip().lower()
+    if jt not in JEWELRY_STAND_RULES_MAP:
+        jt = "necklace"
+
+    labels = {
+        "necklace": ("22K Yellow Gold Filigree Medallion Necklace", "white_neck_bust", JEWELRY_NECKLACE_STUDIO_RULES),
+        "ring": ("Gold Diamond Solitaire Ring with Filigree Side Shank", "slotted_ring_block", JEWELRY_RING_STUDIO_RULES),
+        "earrings": ("22K Gold Traditional Jhumka Earrings Pair", "t_bar_earring_stand", JEWELRY_EARRINGS_STUDIO_RULES),
+        "bangles": ("22K Gold Handcrafted Kada Bangle", "cylindrical_bangle_bar", JEWELRY_BANGLES_STUDIO_RULES),
+    }
+    label, stand, rules = labels.get(jt, labels["necklace"])
+
+    jewelry_data = {
+        "category": jt,
+        "recognized_label": label,
+        "metal_type": "22K Warm Yellow Gold",
+        "stand_type": stand,
+        "optimal_angle": "0-degree frontal" if jt != "ring" else "30-45 degree isometric",
+        "jewelry_description": f"Authentic {label} with intricate traditional hand-carved openwork filigree and high-polish luster.",
+    }
+    return {
+        **jewelry_data,
+        "prompt": _build_final_jewelry_prompt(jewelry_data),
+        "prompt_source": "default_fallback",
+    }
+
+
+def create_multi_angle_composite(images: list[Image.Image], target_size: int = 1024) -> Image.Image:
+    """Combine 1 to 4 multi-angle jewelry photos into a clean composite image for Qwen visual conditioning.
+
+    - 1 image: Resized to fit within target_size square.
+    - 2 images: Arranged side-by-side horizontally.
+    - 3 or 4 images: Arranged in a clean 2x2 grid.
+    """
+    if not images:
+        return Image.new("RGB", (target_size, target_size), (255, 255, 255))
+    if len(images) == 1:
+        img = images[0].convert("RGB")
+        img.thumbnail((target_size, target_size), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+        paste_x = (target_size - img.width) // 2
+        paste_y = (target_size - img.height) // 2
+        canvas.paste(img, (paste_x, paste_y))
+        return canvas
+
+    if len(images) == 2:
+        cell_w, cell_h = target_size // 2, target_size
+        canvas = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+        for idx, src in enumerate(images[:2]):
+            im = src.convert("RGB")
+            im.thumbnail((cell_w - 10, cell_h - 10), Image.Resampling.LANCZOS)
+            px = idx * cell_w + (cell_w - im.width) // 2
+            py = (cell_h - im.height) // 2
+            canvas.paste(im, (px, py))
+        return canvas
+
+    # 3 or 4 images: 2x2 grid
+    cell_w, cell_h = target_size // 2, target_size // 2
+    canvas = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+    positions = [
+        (0, 0),
+        (cell_w, 0),
+        (0, cell_h),
+        (cell_w, cell_h),
+    ]
+    for idx, src in enumerate(images[:4]):
+        im = src.convert("RGB")
+        im.thumbnail((cell_w - 10, cell_h - 10), Image.Resampling.LANCZOS)
+        base_x, base_y = positions[idx]
+        px = base_x + (cell_w - im.width) // 2
+        py = base_y + (cell_h - im.height) // 2
+        canvas.paste(im, (px, py))
+    return canvas
+
+
+def analyze_jewelry_and_build_prompts(
+    images: list[Image.Image] | Image.Image,
+    jewelry_type: str = "auto",
+    custom_prompt: str | None = None,
+) -> dict[str, Any]:
+    """Analyze 1 to 4 multi-angle photographs of a jewelry piece and build a unified 3D studio prompt.
+
+    Args:
+        images: A single PIL Image or a list of 1 to 4 PIL Images (different angles of the same jewelry item).
+        jewelry_type: Hint category ('auto', 'necklace', 'ring', 'earrings', 'bangles').
+        custom_prompt: Optional user-supplied prompt override.
+
+    Returns:
+        Dictionary containing:
+        {
+            "category": "necklace" | "ring" | "earrings" | "bangles",
+            "recognized_label": str,
+            "metal_type": str,
+            "stand_type": str,
+            "optimal_angle": str,
+            "jewelry_description": str,
+            "prompt": str,
+            "prompt_source": str,
+            "views_analyzed": int,
+        }
+    """
+    if isinstance(images, Image.Image):
+        img_list = [images]
+    else:
+        img_list = list(images) if images else []
+
+    if not img_list:
+        return _fallback_jewelry_plan(jewelry_type)
+
+    if custom_prompt and custom_prompt.strip():
+        cat = jewelry_type if jewelry_type != "auto" else "necklace"
+        rules = JEWELRY_STAND_RULES_MAP.get(cat, JEWELRY_NECKLACE_STUDIO_RULES)
+        return {
+            "category": cat,
+            "recognized_label": "Custom Luxury Jewelry Piece",
+            "metal_type": "Precious Metal",
+            "stand_type": "white_neck_bust" if cat == "necklace" else "slotted_ring_block",
+            "optimal_angle": "0-degree frontal",
+            "jewelry_description": custom_prompt.strip(),
+            "prompt": f"{custom_prompt.strip()} {rules}",
+            "prompt_source": "custom_prompt",
+            "views_analyzed": len(img_list),
+        }
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("OPENAI_API_KEY is not set; using default jewelry fallback plan.")
+        plan = _fallback_jewelry_plan(jewelry_type)
+        plan["views_analyzed"] = len(img_list)
+        return plan
+
+    model_name = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini").strip()
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+
+    # Encode all uploaded angles
+    encoded_images = [_encode_image_for_vision(im) for im in img_list[:4]]
+
+    user_text = (
+        f"Analyze the {len(encoded_images)} photograph(s) provided. All photos show the SAME piece of jewelry from different angles "
+        "(e.g. top view, side profile, perspective angle, or close-up). "
+        "CRITICAL MULTI-ANGLE FUSION: Synthesize all views into ONE unified forensic jewelry description: "
+        "1. Identify the jewelry category ('necklace', 'ring', 'earrings', 'bangles'). "
+        "2. Exact metal alloy, karat purity, and polish (22K yellow gold, platinum, etc.). "
+        "3. Top / Crown details: center motif, gemstone, setting style. "
+        "4. Side profile & Shank details: side filigree, openwork jali, engravings, or accent stones visible in the side photos. "
+        "5. Select the appropriate luxury e-commerce catalog stand: "
+        "   - Necklaces -> 'white_neck_bust' "
+        "   - Rings -> 'slotted_ring_block' (30-45 degree hero angle showing both top crown and side shank) "
+        "   - Earrings -> 't_bar_earring_stand' "
+        "   - Bangles -> 'cylindrical_bangle_bar' "
+        "Strictly preserve the authentic precious metal and craftsmanship without hallucinating different colors."
+    )
+
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
+    for b64_str in encoded_images:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{b64_str}",
+                "detail": "high",
+            },
+        })
+
+    payload: dict[str, Any] = {
+        "model": model_name,
+        "temperature": 0.1,
+        "max_tokens": 1000,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": SYSTEM_JEWELRY_VISION_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+    }
+
+    try:
+        with httpx.Client(timeout=35.0) as client:
+            resp = client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        raw_content = data["choices"][0]["message"]["content"]
+        parsed = json.loads(raw_content)
+        item = parsed.get("jewelry_item") or parsed
+
+        category = str(item.get("category", "necklace")).strip().lower()
+        if category not in JEWELRY_STAND_RULES_MAP:
+            category = "necklace"
+        label = str(item.get("recognized_label", "Fine Gold Jewelry")).strip()
+        metal = str(item.get("metal_type", "22K Warm Yellow Gold")).strip()
+        stand = str(item.get("stand_type", "white_neck_bust")).strip()
+        angle = str(item.get("optimal_angle", "0-degree frontal")).strip()
+        desc = str(item.get("jewelry_description", label)).strip()
+
+        jewelry_data = {
+            "category": category,
+            "recognized_label": label,
+            "metal_type": metal,
+            "stand_type": stand,
+            "optimal_angle": angle,
+            "jewelry_description": desc,
+            "views_analyzed": len(encoded_images),
+        }
+        jewelry_data["prompt"] = _build_final_jewelry_prompt(jewelry_data)
+        jewelry_data["prompt_source"] = f"openai:{model_name}"
+        return jewelry_data
+
+    except Exception as exc:
+        logger.warning("ChatGPT Vision jewelry multi-angle analysis failed (%s); using fallback.", exc)
+        plan = _fallback_jewelry_plan(jewelry_type)
+        plan["views_analyzed"] = len(img_list)
+        return plan

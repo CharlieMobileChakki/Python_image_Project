@@ -16,6 +16,8 @@ class GarmentItem(BaseModel):
     recognized_label: str | None = Field(default=None, description="Alias for title")
     garment_id: str | None = Field(default=None, description="Garment identifier")
     output_png_base64: str | None = Field(default=None, description="Optional Base64 data URI")
+    stand_type: str | None = Field(default=None, description="Display stand type (e.g. white_neck_bust, slotted_ring_block, t_bar_earring_stand)")
+    views_analyzed: int | None = Field(default=1, description="Number of multi-angle reference photos analyzed")
 
 
 class ProcessGarmentResponse(BaseModel):
