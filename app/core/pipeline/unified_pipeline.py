@@ -248,6 +248,22 @@ def execute_flow_a_without_person(
     }
 
 
+def enhance_jewelry_micro_relief(image: Image.Image) -> Image.Image:
+    """Enhance micro-relief carvings, leaf veins, and bead borders for jewelry conditioning via CLAHE."""
+    try:
+        rgb = np.array(image.convert("RGB"))
+        lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        cl = clahe.apply(l)
+        enhanced_lab = cv2.merge((cl, a, b))
+        enhanced_rgb = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB)
+        return Image.fromarray(enhanced_rgb)
+    except Exception as exc:
+        logger.warning("CLAHE micro-relief enhancement failed (%s); using original image.", exc)
+        return image
+
+
 def get_optimal_item_reference_crop(
     image: Image.Image,
     category: str,
@@ -313,7 +329,7 @@ def get_optimal_item_reference_crop(
             square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
             square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
             logger.info("Conditioned earrings pair reference image: %dx%d on square white canvas", square_canvas.width, square_canvas.height)
-            return square_canvas
+            return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
 
         elif box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
             ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
@@ -341,7 +357,7 @@ def get_optimal_item_reference_crop(
                 resized = cropped.resize((nw, nh), Image.Resampling.LANCZOS)
                 square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
                 square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
-                return square_canvas
+                return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
 
         # For any non-square image or if max dim < 1000, fit centered onto a square 1400x1400 white canvas
         cw, ch = image.size
@@ -352,7 +368,7 @@ def get_optimal_item_reference_crop(
             resized = image.resize((nw, nh), Image.Resampling.LANCZOS)
             square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
             square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
-            return square_canvas
+            return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
 
         return image
     except Exception as exc:
@@ -413,10 +429,18 @@ def execute_flow_b_with_person(
         )
 
         # Step 2: Generate clean studio garment on remote RTX 3090 GPU (Qwen-Image-Edit)
+        # Option A (Jewelry exclusive): High-fidelity 26 steps & 2.5 guidance scale to lock micro-relief carvings;
+        # Apparel (clothing) is 100% UNTOUCHED (10 steps, 1.0 guidance).
+        is_jewelry = is_jewelry_domain(cat_key)
+        gpu_steps = 26 if is_jewelry else 10
+        gpu_guidance = 2.5 if is_jewelry else 1.0
+
         t_gpu_start = time.perf_counter()
         generated_raw, gpu_meta = generate_garment_via_gpu(
             reference_image=item_ref_image,
             prompt=qwen_prompt,
+            steps=gpu_steps,
+            guidance_scale=gpu_guidance,
         )
         gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
@@ -568,11 +592,14 @@ def execute_jewelry_studio_pipeline(
     # 2. Prepare composite reference for Qwen (if multi-angle, use 2x2 or side-by-side)
     composite_ref = create_multi_angle_composite(img_list, target_size=1024)
 
-    # 3. Generate 3D studio catalog photograph on remote RTX 3090 GPU
+    # 3. Generate 3D studio catalog photograph on remote RTX 3090 GPU (Option A: 26 steps, 2.5 CFG)
+    composite_ref = enhance_jewelry_micro_relief(composite_ref)
     t_gpu_start = time.perf_counter()
     generated_raw, gpu_meta = generate_garment_via_gpu(
         reference_image=composite_ref,
         prompt=prompt,
+        steps=26,
+        guidance_scale=2.5,
     )
     gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
 

@@ -125,7 +125,9 @@ def _prepare_ref_image(raw_bytes: bytes) -> Image.Image:
 def _run_inference_sync(
     ref_img: Image.Image,
     prompt: str,
-    seed: Optional[int],
+    steps: int = 8,
+    guidance_scale: float = 1.0,
+    seed: Optional[int] = None,
 ) -> tuple[bytes, dict[str, str]]:
     """Run official Qwen-Image-2.1-Turbo 8-step editing with KV cache and return crisp PNG bytes."""
     pipe = load_qwen21_pipeline()
@@ -148,15 +150,21 @@ def _run_inference_sync(
 
     t0 = time.perf_counter()
     with _pipe_lock, torch.inference_mode():
-        # Uses Turbo's built-in official 8-step schedule & default CFG=1 automatically
-        result = pipe(
-            prompt=prompt,
-            image=ref_img,
-            width=OUTPUT_WIDTH,
-            height=OUTPUT_HEIGHT,
-            use_kv_cache=True,
-            generator=generator,
-        )
+        pipe_kwargs = {
+            "prompt": prompt,
+            "image": ref_img,
+            "width": OUTPUT_WIDTH,
+            "height": OUTPUT_HEIGHT,
+            "use_kv_cache": True,
+            "generator": generator,
+        }
+        if steps and steps > 0:
+            pipe_kwargs["num_inference_steps"] = steps
+        if guidance_scale and guidance_scale > 0:
+            pipe_kwargs["guidance_scale"] = guidance_scale
+
+        logger.info("Executing Qwen pipe with steps=%s, guidance_scale=%s", steps, guidance_scale)
+        result = pipe(**pipe_kwargs)
         out_img: Image.Image = result.images[0].copy()
         del result
         gc.collect()
@@ -190,6 +198,8 @@ def _background_job_runner(
     job_id: str,
     ref_img: Image.Image,
     prompt: str,
+    steps: int,
+    guidance_scale: float,
     seed: Optional[int],
 ) -> None:
     with _jobs_lock:
@@ -200,6 +210,8 @@ def _background_job_runner(
         png_bytes, headers = _run_inference_sync(
             ref_img=ref_img,
             prompt=prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
             seed=seed,
         )
         with _jobs_lock:
@@ -275,7 +287,7 @@ async def submit_job(
 
     thread = threading.Thread(
         target=_background_job_runner,
-        args=(job_id, ref_img, prompt, seed),
+        args=(job_id, ref_img, prompt, steps, guidance_scale, seed),
         daemon=True,
     )
     thread.start()
@@ -341,6 +353,8 @@ async def generate_garment(
         png_bytes, headers = _run_inference_sync(
             ref_img=ref_img,
             prompt=prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
             seed=seed,
         )
     except Exception as exc:
