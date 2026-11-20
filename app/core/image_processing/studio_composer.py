@@ -304,3 +304,9 @@ def validate_product_output(
             "color_status": "Authentic Match (ΔE 2.1)",
             "mask_quality": 0.98,
         }
+
+
+# Unified single-workflow aliases
+create_studio_presentation = create_mode_b_studio_presentation
+create_product_only = create_mode_a_product_only
+

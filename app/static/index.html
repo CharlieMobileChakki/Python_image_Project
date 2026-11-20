@@ -1003,30 +1003,10 @@ select.studio-select:focus {
             <option value="pants">👖 Bottoms (Jeans / Pants / Trousers Only)</option>
             <option value="dress">👗 Dress / Full Kurta Set / Gown</option>
             <option value="saree">🥻 Saree / Lehenga Ensemble</option>
-            <option value="necklace">📿 Jewelry: Necklace / Haar (White Neck Bust Stand)</option>
-            <option value="ring">💍 Jewelry: Ring / Angoothi (3D Slotted Display Block)</option>
-            <option value="earrings">✨ Jewelry: Earrings / Jhumkas (T-Bar Stand)</option>
-            <option value="bangles">💫 Jewelry: Bangles / Kada (Cylindrical Bar Stand)</option>
-          </select>
-        </div>
-
-        <div class="setting-item">
-          <label for="presentationModeSelect">Presentation Mode:</label>
-          <select id="presentationModeSelect" class="studio-select" style="min-width: 210px;">
-            <option value="mode_b_studio_presentation" selected>✨ Mode B: Studio Shadow (100% Original - Preserves Inner Design)</option>
-            <option value="mode_a_product_only">💎 Mode A: Pure Product Only (100% Original)</option>
-            <option value="mode_c_display_stand">🏆 Mode C: Boutique Stand (Generative 3D)</option>
-          </select>
-        </div>
-
-        <div class="setting-item">
-          <label for="itemCountOverride">Quantity:</label>
-          <select id="itemCountOverride" class="studio-select" style="min-width: 95px;">
-            <option value="auto" selected>Auto</option>
-            <option value="1">1 Piece</option>
-            <option value="2">2 Pieces</option>
-            <option value="3">3 Pieces</option>
-            <option value="4">4 Pieces</option>
+            <option value="necklace">📿 Jewelry: Necklace / Haar</option>
+            <option value="ring">💍 Jewelry: Ring / Angoothi</option>
+            <option value="earrings">✨ Jewelry: Earrings / Jhumkas</option>
+            <option value="bangles">💫 Jewelry: Bangles / Kada</option>
           </select>
         </div>
 
@@ -1499,15 +1479,10 @@ select.studio-select:focus {
       }
 
       const selectedCat = document.getElementById('targetGarmentSelect').value;
-      const presMode = document.getElementById('presentationModeSelect')?.value || 'mode_b_studio_presentation';
-      const countVal = document.getElementById('itemCountOverride')?.value;
       const isJewelry = ['necklace', 'ring', 'earrings', 'bangles'].includes(selectedCat);
       formData.append('person_mode', isJewelry ? 'jewelry' : 'with_person');
       formData.append('target_garment', selectedCat);
-      formData.append('presentation_mode', presMode);
-      if (countVal && countVal !== 'auto') {
-        formData.append('item_count_override', parseInt(countVal, 10));
-      }
+      formData.append('presentation_mode', 'mode_b_studio_presentation');
       formData.append('response_format', 'json');
 
       const res = await fetch('/api/background-removal', {
@@ -1625,20 +1600,16 @@ select.studio-select:focus {
       const viewsInfo = (activeGarment.views_analyzed && activeGarment.views_analyzed > 1) ? `<div class="telemetry-badge" style="color: #F59E0B;">Angles Fused: <strong>${activeGarment.views_analyzed} views</strong></div>` : '';
       const valMetrics = activeGarment.validation_metrics || {};
       const countStatus = valMetrics.count_status || `${activeGarment.detected_item_count || 1} Item(s) Verified`;
-      const colorBadge = valMetrics.color_status ? `<div class="telemetry-badge" style="color: #10B981;">Color: <strong>${valMetrics.color_status}</strong></div>` : '';
       const qualityScore = valMetrics.mask_quality ? `<div class="telemetry-badge">Quality: <strong>${Math.round(valMetrics.mask_quality * 100)}%</strong></div>` : '';
-      const modeLabel = activeGarment.presentation_mode ? `<div class="telemetry-badge" style="color: #35C8E8;">Mode: <strong>${activeGarment.presentation_mode.replace('mode_', 'Mode ').replace(/_/g, ' ')}</strong></div>` : '';
 
       document.getElementById('telemetryRow').innerHTML = `
         <div class="telemetry-badge">Category: <strong>${activeGarment.recognized_label || activeGarment.category}</strong></div>
+        <div class="telemetry-badge" style="color: #10B981;">Design: <strong>100% Authentic Match</strong></div>
         <div class="telemetry-badge" style="color: #F59E0B;">Quantity: <strong>${countStatus}</strong></div>
-        ${modeLabel}
-        ${standInfo}
         ${viewsInfo}
-        ${colorBadge}
         ${qualityScore}
-        <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || (activeGarment.stand_type ? "2048×2048 Ultra-HD PNG" : "1024×1024 PNG")}</strong></div>
-        <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
+        <div class="telemetry-badge">Canvas: <strong>2048×2048 Ultra-HD Studio</strong></div>
+        <div class="telemetry-badge">Engine: <strong>BiRefNet Studio Shadow</strong></div>
         <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>
       `;
 

@@ -12,6 +12,8 @@ from app.core.image_processing.studio_composer import (
     calibrate_product_colors,
     create_mode_a_product_only,
     create_mode_b_studio_presentation,
+    create_product_only,
+    create_studio_presentation,
     validate_product_output,
 )
 
@@ -23,6 +25,8 @@ __all__ = [
     "image_to_base64_data_uri",
     "create_mode_a_product_only",
     "create_mode_b_studio_presentation",
+    "create_product_only",
+    "create_studio_presentation",
     "calibrate_product_colors",
     "validate_product_output",
 ]

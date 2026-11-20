@@ -433,36 +433,36 @@ def execute_flow_b_with_person(
             total_items=len(planned_garments),
         )
 
-        if is_jewelry and presentation_mode == "mode_a_product_only":
-            # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
-            fg_cutout = extract_isolated_flow_a(item_ref_image)
-            final_cutout = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
-            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = None
-            angle_deg = 0.0
-            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-            val_conf = val_res.get("mask_quality", 0.98)
-            gpu_meta = {"model": "bi_refnet_identity_preserved", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
-
-        elif is_jewelry and presentation_mode == "mode_b_studio_presentation":
-            # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
-            fg_cutout = extract_isolated_flow_a(item_ref_image)
-            final_cutout = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
-            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = None
-            angle_deg = 0.0
-            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-            val_conf = val_res.get("mask_quality", 0.98)
-            gpu_meta = {"model": "studio_composer_shadow_composite", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+        if is_jewelry:
+            if presentation_mode == "mode_a_product_only":
+                # Pure Product Cutout (100% original pixels, clean white background, zero stand, zero redesign)
+                fg_cutout = extract_isolated_flow_a(item_ref_image)
+                final_cutout = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
+                out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+                out_path = OUTPUT_DIR / out_filename
+                final_cutout.save(out_path, format="PNG", compress_level=1)
+                stand = None
+                angle_deg = 0.0
+                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+                val_conf = val_res.get("mask_quality", 0.98)
+                gpu_meta = {"model": "bi_refnet_identity_preserved", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+            else:
+                # Unified Authentic Studio Presentation: 100% original product pixels, exact same design, exact same pattern, realistic contact shadow
+                fg_cutout = extract_isolated_flow_a(item_ref_image)
+                final_cutout = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
+                out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+                out_path = OUTPUT_DIR / out_filename
+                final_cutout.save(out_path, format="PNG", compress_level=1)
+                stand = None
+                angle_deg = 0.0
+                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+                val_conf = val_res.get("mask_quality", 0.98)
+                gpu_meta = {"model": "studio_composer_shadow_composite", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
 
         else:
-            # Mode C (Display Stand for Jewelry) OR Standard Ghost Mannequin for Apparel
-            gpu_steps = 26 if is_jewelry else 10
-            gpu_guidance = 2.5 if is_jewelry else 1.0
+            # Standard Ghost Mannequin for Apparel
+            gpu_steps = 10
+            gpu_guidance = 1.0
 
             t_gpu_start = time.perf_counter()
             generated_raw, gpu_meta = generate_garment_via_gpu(
@@ -473,36 +473,18 @@ def execute_flow_b_with_person(
             )
             gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
-            if is_jewelry:
-                from PIL import ImageFilter
-                raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
-                sharpened = raw_calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
-                final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
-                out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-                out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", compress_level=1)
-                stand = (
-                    "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
-                    else ("beige_velvet_brass_ring_block" if cat_key == "ring"
-                    else ("beige_velvet_brass_bangle_bar" if cat_key in ("bangles", "kada")
-                    else "beige_velvet_brass_neck_bust"))
-                )
-                angle_deg = 0.0
-                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-                val_conf = val_res.get("mask_quality", 0.98)
-            else:
-                # Apparel: strip studio white background cleanly via BiRefNet Lite
-                cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
-                angle_deg = 0.0
-                normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-                val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
-                final_cutout = val_check.get("refined_cutout", normalized_1024)
-                out_filename = f"{job_id}_{g_id}.png"
-                out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", optimize=True)
-                stand = None
-                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
-                val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
+            # Apparel: strip studio white background cleanly via BiRefNet Lite
+            cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
+            angle_deg = 0.0
+            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
+            val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
+            final_cutout = val_check.get("refined_cutout", normalized_1024)
+            out_filename = f"{job_id}_{g_id}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", optimize=True)
+            stand = None
+            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
+            val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
 
         b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
 
@@ -609,50 +591,20 @@ def execute_jewelry_studio_pipeline(
     expected_cnt = item_count_override or jewelry_plan.get("item_count", 1)
 
     if presentation_mode == "mode_a_product_only":
-        # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
+        # Pure Product Cutout (100% original pixels, clean white background, zero stand, zero redesign)
         fg_cutout = extract_isolated_flow_a(img_list[0])
         hd_output = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
-        out_filename = f"{job_id}_jewelry_{cat}.png"
-        out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
-        stand = None
-        gpu_time_ms = 0.0
-        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
-
-    elif presentation_mode == "mode_b_studio_presentation":
-        # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
+    else:
+        # Unified Authentic Studio Presentation: 100% original product pixels, exact same design, exact same pattern, realistic contact shadow
         fg_cutout = extract_isolated_flow_a(img_list[0])
         hd_output = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
-        out_filename = f"{job_id}_jewelry_{cat}.png"
-        out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
-        stand = None
-        gpu_time_ms = 0.0
-        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
 
-    else:
-        # Mode C: Product Display Stand (Mounted on luxury boutique stand with guaranteed quantity locking & color calibration)
-        stand = jewelry_plan.get("stand_type", "beige_velvet_brass_neck_bust")
-        composite_ref = create_multi_angle_composite(img_list, target_size=1024)
-        composite_ref = enhance_jewelry_micro_relief(composite_ref)
-        t_gpu_start = time.perf_counter()
-        generated_raw, gpu_meta = generate_garment_via_gpu(
-            reference_image=composite_ref,
-            prompt=prompt,
-            steps=26,
-            guidance_scale=2.5,
-        )
-        gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
-
-        # Calibrate generated colors to match exact source metal & gemstones
-        calibrated = calibrate_product_colors(composite_ref, generated_raw)
-        from PIL import ImageFilter
-        sharpened = calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
-        hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
-        out_filename = f"{job_id}_jewelry_{cat}.png"
-        out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
-        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
+    out_filename = f"{job_id}_jewelry_{cat}.png"
+    out_path = OUTPUT_DIR / out_filename
+    hd_output.save(out_path, format="PNG", compress_level=1)
+    stand = None
+    gpu_time_ms = 0.0
+    val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
 
     b64_data = image_to_base64_data_uri(hd_output) if include_base64 else None
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
