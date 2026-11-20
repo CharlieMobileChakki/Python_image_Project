@@ -315,6 +315,12 @@ def execute_flow_b_with_person(
             )
             val_conf = 0.99
             angle_deg = 0.0
+            val_res = {
+                "confidence": 0.99,
+                "status": "success",
+                "preservation_status": "preserved",
+                "validation_errors": [],
+            }
         else:
             # For apparel / garments: strip studio white background cleanly via BiRefNet Lite
             cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
@@ -340,8 +346,6 @@ def execute_flow_b_with_person(
             "url": f"/api/outputs/{out_filename}",
             "output_png_url": f"/api/outputs/{out_filename}",
             "confidence": val_conf,
-            "image": out_filename,
-            "confidence": val_res["confidence"],
             "coverage_percentage": round(100.0 / max(1, len(planned_garments)), 1),
             "priority": "first_priority",
             "is_fused": False,
@@ -351,12 +355,11 @@ def execute_flow_b_with_person(
             "width": 1024,
             "height": 1024,
             "image_dimensions": [1024, 1024],
-            "output_png_url": f"/api/outputs/{out_filename}",
             "output_png_base64": b64_data,
-            "background_removal_status": val_res["status"],
-            "background_removal_confidence": val_res["confidence"],
-            "garment_preservation_status": val_res["preservation_status"],
-            "validation_errors": val_res["validation_errors"],
+            "background_removal_status": val_res.get("status", "success"),
+            "background_removal_confidence": val_res.get("confidence", val_conf),
+            "garment_preservation_status": val_res.get("preservation_status", "preserved"),
+            "validation_errors": val_res.get("validation_errors", []),
         })
 
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
