@@ -102,22 +102,29 @@ CRITICAL RULES:
    - IF THE OUTFIT IS A ONE-PIECE ENSEMBLE (dress, gown, jumpsuit, saree, lehenga):
      Output a single entry with category "dress", "saree", or "lehenga".
 
-6. JEWELRY & PRECIOUS ORNAMENTS (FORENSIC MULTI-COMPONENT DECONSTRUCTION):
-   - If the reference photograph shows JEWELRY (such as earrings, jhumkas, necklace, pendant, ring, bangles, or kada):
-     ABSOLUTELY NEVER hallucinate or classify it as clothing, dress, shirt, or kurta!
-     Identify it strictly with its true jewelry category:
-     * "earrings" (Earrings, Jhumkas, Danglers, Studs)
-     * "necklace" (Necklace, Haar, Choker, Chain, Pendant)
-     * "ring" (Finger Ring, Band)
-     * "bangles" (Bangles, Kada, Bracelet)
-     CRITICAL: DO NOT output a short 1-line label! Provide a deep, forensic, multi-component gemologist breakdown describing:
-     1. Top Stud / Ear-Post / Clasp Motif: Exact shape (e.g. domed central sphere with mirror polish, surrounded by a floral rosette halo of micro gold granules/beads).
-     2. Articulated Jump Ring / Connection: Heavy-gauge polished gold link connecting stud to body.
-     3. Main Body / Bell Dome / Medallion: Exact dome architecture (stepped conical bell, horizontal bands of micro granulation beads, openwork jaali lattice filigree, embossed floral motifs).
-     4. Dangling Fringe & Pearls: Cascading fringe of lustrous round natural white seed pearls interlinked with tiny hanging polished gold droplet beads.
-     5. Precious Metal Alloy: Authentic 22K rich warm yellow gold with brilliant specular reflections and dual high-polish/micro-granulation texture.
+6. JEWELRY & PRECIOUS ORNAMENTS (FORENSIC GEMOLOGIST DECONSTRUCTION FOR ALL MATERIALS):
+   - If the reference photograph shows JEWELRY (necklaces, earrings, rings, bangles, crystals, diamonds, gemstones):
+     ABSOLUTELY NEVER classify it as clothing!
+     Categorize each piece strictly as 'necklace', 'earrings', 'ring', or 'bangles'.
+     CRITICAL: DO NOT output a short 1-line label! Provide a deep, forensic gemologist deconstruction:
+     1. Stone & Gemstone Taxonomy: Exact gem material, transparency, and cut:
+        - If faceted crystals / diamonds / cubic zirconia (e.g. blush pink crystal statement necklace): specify "faceted teardrop pear-cut and oval-cut blush pink Austrian crystals / rose quartz / cubic zirconia with crisp light-refracting facets, claw prong settings, and halo borders of clear micro-crystals".
+        - If pearls: specify "lustrous round white seed pearls interlinked with gold droplet pins".
+        - If polki/kundan/enamel: specify exact setting and foil backing.
+     2. Metal Alloy & Surface Finish: Exact metal tone and polish (e.g. high-polish warm yellow gold, rose gold, rhodium-plated silver, platinum, or antique oxidized finish with mirror specular reflections).
+     3. Setting Architecture: Multi-prong claw settings, pave halos, bezel cups, channel tracks, openwork filigree lattice, articulated V-shaped collar links, jump rings.
+     4. Hanging Fringe / Accents: Cascading drops (e.g. dangling faceted teardrop crystal briolettes, hanging gold droplets).
+     5. Silhouette & Symmetry: Plumb vertical symmetry, level alignment, and untangled drape.
 
-7. Allowed category values:
+7. JEWELRY SETS & MULTI-PIECE PARSING (CRITICAL E-COMMERCE RULE):
+   - If the photograph contains a JEWELRY SET (e.g. a Necklace AND a pair of matching Earrings, or Necklace + Earrings + Ring):
+     YOU MUST RETURN A SEPARATE ENTRY FOR EACH DISTINCT JEWELRY PIECE in the "garments" list!
+     * Entry 1: category "necklace" for the standalone necklace.
+     * Entry 2: category "earrings" for the matching pair of earrings.
+     * Entry 3: category "ring" (if a ring is also part of the set).
+     NEVER omit, drop, or merge the matching earrings or ring in a jewelry set! Both pieces belong to the set and must be generated in the studio catalog!
+
+8. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
    - For Jewelry: "necklace", "ring", "earrings", "bangles"
 
@@ -125,19 +132,14 @@ Return strictly valid JSON format:
 {
   "garments": [
     {
-      "category": "upper_clothes",
-      "recognized_label": "Light Blue Floral Print Short Sleeve Shirt",
-      "garment_description": "Men's casual relaxed-fit short-sleeve resort shirt crafted from breathable cotton fabric in soft pastel powder-blue featuring subtle tonal white botanical floral leafy branch prints. Pristine e-commerce 3D ghost-mannequin catalog presentation: eliminate any tilted posture or bent arm; straight-on 0-degree front view with perfectly level horizontal shoulders, symmetrical hanging sleeves along both sides, standard point spread collar, front button placket with small buttons running straight down the center, and a level horizontal hem."
-    },
-    {
-      "category": "pants",
-      "recognized_label": "Light Beige Flat-Front Chino Trousers",
-      "garment_description": "Men's flat-front straight-leg chino trousers crafted from smooth cotton twill fabric in authentic uniform light beige / warm khaki dye. Pristine e-commerce 3D ghost-mannequin catalog presentation: eliminate the model's bent knee and walking tilt; both trouser legs hang completely straight down, vertically parallel to each other side-by-side with zero bend and zero tilt, with horizontally level waistband at top, slant front pockets, matching button and fly zipper, and both bottom leg cuffs ending at the exact same horizontal bottom height."
+      "category": "necklace",
+      "recognized_label": "Blush Pink Crystal Statement Collar Necklace",
+      "garment_description": "Bridal statement collar necklace crafted with faceted teardrop pear-cut and oval-cut blush pink Austrian crystals in delicate claw-prong settings, arranged in an articulated scalloped V-shape lace collar bordered by sparkling clear crystal halos, with dangling faceted teardrop crystal briolettes hanging from the bottom fringe."
     },
     {
       "category": "earrings",
-      "recognized_label": "22K Yellow Gold Traditional Jhumka Earrings with Pearl Fringe",
-      "garment_description": "Pair of authentic handcrafted Indian temple jhumka earrings in 22K rich warm yellow gold. Top ear-stud features a high-polish hemispherical central gold dome surrounded by a concentric floral halo rosette of fourteen polished gold spherical granulation beads. A heavy polished gold jump ring articulates into a stepped conical bell-shaped jhumka dome ornamented with tiered horizontal bands of micro gold granulation beads and delicate openwork jaali lattice filigree. Suspended from the bottom scallop rim is a dense cascading fringe of lustrous round natural white seed pearls interlinked with tiny polished gold hanging droplet beads."
+      "recognized_label": "Blush Pink Crystal Matching Chandelier Earrings Pair",
+      "garment_description": "Matching pair of chandelier dangle earrings featuring blush pink faceted oval crystal studs articulating into an openwork scrolling crystal cluster with dangling pear-cut pink crystal drops."
     }
   ]
 }"""
@@ -360,20 +362,22 @@ def analyze_garment_and_build_prompts(
         )
     else:  # "all"
         user_instruction = (
-            "Analyze the item (apparel clothing OR precious jewelry ornament) in this image for exact 3D studio catalog reconstruction. "
+            "Analyze the item(s) (apparel clothing OR precious jewelry ornament) in this image for exact 3D studio catalog reconstruction. "
             "CRITICAL DOMAIN DISCRIMINATION (APPAREL vs JEWELRY): "
-            "1. If the photo contains JEWELRY (such as earrings, jhumkas, necklace, pendant, ring, bangles, or kada): "
-            "   You MUST categorize it strictly as 'earrings', 'necklace', 'ring', or 'bangles'! "
-            "   ABSOLUTELY NEVER categorize jewelry as a dress, shirt, top, or clothing! "
+            "1. If the photo contains a JEWELRY SET (e.g. Necklace AND matching Earrings, or Necklace + Earrings + Ring): "
+            "   YOU MUST RETURN MULTIPLE ENTRIES IN THE 'garments' LIST: "
+            "   - One entry for the necklace ('necklace'). "
+            "   - One entry for the matching pair of earrings ('earrings')! "
+            "   - One entry for the ring ('ring') if present. "
+            "   ABSOLUTELY NEVER DROP OR MERGE THE MATCHING EARRINGS! Both pieces belong to the set and must be recognized and generated! "
+            "2. If single JEWELRY item: Categorize strictly as 'earrings', 'necklace', 'ring', or 'bangles'. "
             "   PROVIDE A HIGH-PRECISION MASTER GEMOLOGIST FORENSIC DECONSTRUCTION: "
-            "   - Deconstruct every single anatomical component: top stud / post / crown (exact shape, central dome, bead halo, prong prongs), "
-            "     connecting jump ring link, main body / bell dome / medallion (stepped tiers, micro gold granulation beads, openwork jaali lattice filigree, engravings), "
-            "     and dangling fringe / accents (cascading white seed pearls, gold hanging droplets). "
-            "   - Explicitly detail the authentic precious metal alloy: 22K rich warm yellow gold with brilliant specular reflections and dual high-polish/micro-granulation luster. "
-            "2. If the photo contains APPAREL (shirt, top, pants, dress, kurta, saree): "
-            "   Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
-            "3. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
-            "4. Actual Items Only: Only identify the genuine item(s). If only earrings are present, return ONLY one entry for category 'earrings'."
+            "   - Stone & Gemstone Taxonomy (faceted teardrop/oval crystals, diamonds, pearls, rubies, prongs, facets). "
+            "   - Exact metal alloy (warm yellow gold, rose gold, silver rhodium, platinum) and specular polish luster. "
+            "   - Setting architecture (claw prongs, pave halo borders, openwork jaali filigree, articulated V-shaped collar links, jump rings, hanging briolettes). "
+            "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
+            "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
+            "5. Actual Items Only: Only identify the genuine item(s). If a necklace and earrings are both present, return TWO separate entries."
         )
     payload: dict[str, Any] = {
         "model": model_name,
@@ -665,8 +669,16 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         "The stand MUST remain 100% fully intact, visible, and grounded on the pure solid white studio background."
     )
 
+    macro_framing_lock = (
+        "CRITICAL MACRO PRODUCT FRAMING (MAXIMUM CANVAS UTILIZATION): "
+        "The jewelry piece must fill 75% to 82% of the canvas frame! "
+        "Professional close-up macro studio crop focusing tightly and intimately on the precious jewelry piece and its luxury showcase mount. "
+        "Eliminate excessive empty dead space so that every micro-facet, gemstone prong, and filigree wire occupies maximum pixel density with razor-sharp zoom clarity!"
+    )
+
     return (
         f"{header} "
+        f"{macro_framing_lock} "
         f"{ultra_hd_zoom_lock} "
         f"{white_background_lock} "
         f"{metal_lock} "

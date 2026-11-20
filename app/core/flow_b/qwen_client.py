@@ -101,15 +101,15 @@ def generate_garment_via_gpu(
         raise RuntimeError(remote_url)
 
     ref_rgb = reference_image.convert("RGB")
-    # Optimize reference image for fast, reliable tunnel transmission (max 1280px JPEG instead of 25MB PNG)
+    # Optimize reference image for fast transmission while preserving microscopic gemstone/filigree facets
     w, h = ref_rgb.size
-    max_dim = 1280
+    max_dim = 1600
     if max(w, h) > max_dim:
         scale = max_dim / float(max(w, h))
         ref_rgb = ref_rgb.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.LANCZOS)
 
     buf = io.BytesIO()
-    ref_rgb.save(buf, format="JPEG", quality=92)
+    ref_rgb.save(buf, format="JPEG", quality=98)
     img_bytes = buf.getvalue()
 
     headers: dict[str, str] = {}

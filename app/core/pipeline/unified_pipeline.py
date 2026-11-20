@@ -303,7 +303,12 @@ def execute_flow_b_with_person(
         # Step 3: Background processing
         if is_jewelry_domain(cat_key):
             # For jewelry: preserve solid studio white background with luxury display stand 100% intact (non-transparent)
-            final_cutout = generated_raw.convert("RGB")
+            # Ultra-HD 2048x2048 Master clarity enhancement: subtle unsharp mask to accentuate gemstone facet cuts,
+            # prong claws, and filigree micro-granulation beads, upscaled with anti-aliasing Lanczos so zoom never blurs
+            from PIL import ImageFilter
+            raw_rgb = generated_raw.convert("RGB")
+            sharpened = raw_rgb.filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
+            final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
             out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
             out_path = OUTPUT_DIR / out_filename
             final_cutout.save(out_path, format="PNG", compress_level=1)
@@ -352,9 +357,9 @@ def execute_flow_b_with_person(
             "rotation_angle_deg": angle_deg,
             "repaired": True,
             "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
-            "width": 1024,
-            "height": 1024,
-            "image_dimensions": [1024, 1024],
+            "width": 2048 if is_jewelry_domain(cat_key) else 1024,
+            "height": 2048 if is_jewelry_domain(cat_key) else 1024,
+            "image_dimensions": [2048, 2048] if is_jewelry_domain(cat_key) else [1024, 1024],
             "output_png_base64": b64_data,
             "background_removal_status": val_res.get("status", "success"),
             "background_removal_confidence": val_res.get("confidence", val_conf),
@@ -451,13 +456,15 @@ def execute_jewelry_studio_pipeline(
     )
     gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
-    # 4. Save output: Full HD 1024x1024 with zero lossy compression artifacts on solid white studio background
+    # 4. Save output: Ultra-HD 2048x2048 Master PNG with zero lossy compression artifacts on solid white studio background
     out_filename = f"{job_id}_jewelry_{cat}.png"
     out_path = OUTPUT_DIR / out_filename
-    # Lossless PNG with compress_level=1 preserves maximum micro-detail and zoom sharpness
-    generated_raw.convert("RGB").save(out_path, format="PNG", compress_level=1)
+    from PIL import ImageFilter
+    sharpened = generated_raw.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
+    hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+    hd_output.save(out_path, format="PNG", compress_level=1)
 
-    b64_data = image_to_base64_data_uri(generated_raw) if include_base64 else None
+    b64_data = image_to_base64_data_uri(hd_output) if include_base64 else None
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
     total_time_sec = round(total_time_ms / 1000.0, 2)
 
@@ -469,7 +476,7 @@ def execute_jewelry_studio_pipeline(
         "image": out_filename,
         "url": f"/api/outputs/{out_filename}",
         "output_png_url": f"/api/outputs/{out_filename}",
-        "resolution": "1024x1024",
+        "resolution": "2048x2048",
         "stand_type": stand,
         "views_analyzed": len(img_list),
         "output_png_base64": b64_data,
