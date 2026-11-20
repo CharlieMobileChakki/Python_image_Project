@@ -436,7 +436,8 @@ JEWELRY_NECKLACE_STUDIO_RULES = (
     "The standalone authentic necklace is mounted and draped elegantly around the neck of a smooth, clean, premium matte-white neck bust mannequin display stand. "
     "PERFECT SYMMETRY & ALIGNMENT: Centered upright, direct 0-degree straight frontal studio camera view. The necklace loops naturally and symmetrically around both sides of the contoured white neck bust, with the central medallion / pendant resting completely flat, centered, and plumb on the front chest of the bust. "
     "PRECIOUS METAL & POLISH LUSTER: Faithfully preserve the authentic 22K/24K warm yellow gold metal, polished luster, intricate openwork jaali filigree, delicate leaf motifs, engraved borders, and hanging bead drops with 100% forensic accuracy directly from the reference photo(s). "
-    "LIGHTING & ENVIRONMENT: Professional jewelry macro studio illumination with soft specular highlights and subtle reflections, solid clean contrast background, completely free of any human model, skin, neck, face, hands, clothes, table clutter, or props."
+    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Razor-sharp microscopic jewelry studio illumination. Every individual filigree thread, openwork jaali wire, embossed leaf vein, polished gold bead drop, and metal reflection must be rendered in ultra-crisp, tack-sharp microscopic focus with ZERO blur and ZERO pixelation even when deeply zoomed in. "
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid pristine studio white background (#FFFFFF). The entire white neck bust display stand MUST remain 100% intact, fully visible, and seamlessly grounded on the pure solid white background with subtle realistic contact shadows. DO NOT make transparent and DO NOT cut or remove the display stand! Completely free of any human model, skin, neck, face, hands, clothes, table clutter, or props."
 )
 
 JEWELRY_RING_STUDIO_RULES = (
@@ -445,7 +446,8 @@ JEWELRY_RING_STUDIO_RULES = (
     "OPTIMAL 3D HERO PERSPECTIVE (MULTI-FACET VISIBILITY): Direct 30-degree to 45-degree three-quarter isometric 3D beauty angle. "
     "CRITICAL SHANK & CROWN VISIBILITY: BOTH the top crown / center gemstone / head motif AND the intricate side shank carvings, side filigree, gallery jali, and band engravings must be SIMULTANEOUSLY prominent and clearly visible in this single photograph! "
     "PRECIOUS METAL & GEMSTONE FIDELITY: Reconstruct the exact precious metal alloy (22K/18K warm yellow gold, platinum, or rose gold), micro-pave prong settings, diamond facets, and side band engravings with 100% forensic precision from all reference angles. "
-    "LIGHTING & ENVIRONMENT: Razor-sharp macro jewelry studio illumination with crisp facet reflections, clean pure solid contrast background, zero human fingers, NO hands, NO skin, and NO table props."
+    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Razor-sharp macro jewelry studio illumination with crisp facet reflections and tack-sharp microscopic focus. Every prong, facet, and carved metal grain must be crystal clear with zero blur when zoomed in. "
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF). The white ring display block must remain 100% intact and visible on the solid white background. DO NOT make transparent. Zero human fingers, NO hands, NO skin, and NO table props."
 )
 
 JEWELRY_EARRINGS_STUDIO_RULES = (
@@ -453,7 +455,8 @@ JEWELRY_EARRINGS_STUDIO_RULES = (
     "The pair of matching earrings / jhumkas is displayed hanging elegantly on a minimalist white or matte-metallic studio T-bar jewelry earring display stand. "
     "PERFECT PAIR SYMMETRY: Both left and right earrings hang side-by-side perfectly parallel at the exact same horizontal height, facing directly forward straight to camera. "
     "PRECIOUS CRAFTSMANSHIP: Exact replication of authentic gold filigree, jhumka bell domes, dangling pearl/gold beads, gemstone inlays, and ear-stud motifs from the reference photo(s). "
-    "LIGHTING & ENVIRONMENT: Professional jewelry studio macro lighting, soft reflections, clean pure contrast background, completely free of any human ears, hair, face, neck, skin, or hands."
+    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp macro studio focus on every hanging bead and filigree curve with zero blur under deep zoom. "
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the T-bar stand fully intact. DO NOT make transparent. Completely free of any human ears, hair, face, neck, skin, or hands."
 )
 
 JEWELRY_BANGLES_STUDIO_RULES = (
@@ -461,7 +464,8 @@ JEWELRY_BANGLES_STUDIO_RULES = (
     "The bangles / kada / bracelet are mounted around a horizontal cylindrical white leatherette or velvet jewelry bangle display bar. "
     "3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
     "PRECIOUS METAL FIDELITY: Exact replication of the authentic 22K yellow gold tone, antique finish, meenakari enamel, or diamond studs from the reference photo(s). "
-    "LIGHTING & ENVIRONMENT: Professional macro studio lighting with soft specular highlights, clean contrast background, completely free of any human wrist, hands, arms, or skin."
+    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Hyper-detailed macro studio lighting with crisp specular reflections and tack-sharp detail across the entire circumference. "
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the cylindrical display bar fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
 )
 
 JEWELRY_STAND_RULES_MAP = {
@@ -576,15 +580,27 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         "DO NOT change yellow gold into silver or copper! Preserve authentic gold polish and craftsmanship."
     )
 
-    surface_clean = (
-        "BACKGROUND & CLEANLINESS RULE: Pure clean contrast studio background (#FFFFFF or deep studio contrast), "
-        "completely free of any human model, skin, fingers, hands, face, neck, clothes, table clutter, or extraneous objects."
+    ultra_hd_zoom_lock = (
+        "CRITICAL 8K ULTRA-HD MASTER MACRO RESOLUTION (ZERO BLUR UNDER EXTREME ZOOM): "
+        "The final image MUST be rendered in tack-sharp microscopic macro catalog focus! "
+        "Every single millimeter of the jewelry piece—every individual filigree wire, embossed jaali texture, prong claw, "
+        "faceted diamond edge, gold reflection, and surface engraving—must be razor sharp, crisp, and hyper-detailed. "
+        "Zero blur, zero pixelation, zero digital noise, and zero compression fuzziness. Under extreme deep zoom, "
+        "every single pixel must remain tack-sharp, clean, and perfectly defined!"
+    )
+
+    white_background_lock = (
+        "CRITICAL SOLID STUDIO WHITE BACKGROUND (STAND 100% INTACT, NOT TRANSPARENT): "
+        "The entire scene MUST be a finished, complete e-commerce studio catalog photograph on a pure solid white background (#FFFFFF). "
+        "DO NOT remove the background! DO NOT make transparent! The white luxury display stand (neck bust mannequin / ring block / "
+        "T-bar stand / bangle bar) MUST remain 100% fully intact, seamlessly visible, and grounded on the pure solid white studio background."
     )
 
     return (
         f"{header} "
+        f"{ultra_hd_zoom_lock} "
+        f"{white_background_lock} "
         f"{metal_lock} "
-        f"{surface_clean} "
         f"Exact jewelry piece to faithfully reconstruct from all reference angles: {desc or label}. "
         f"{studio_rules}"
     )

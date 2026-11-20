@@ -429,10 +429,11 @@ def execute_jewelry_studio_pipeline(
     )
     gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
-    # 4. Save output
+    # 4. Save output: Full HD 1024x1024 with zero lossy compression artifacts on solid white studio background
     out_filename = f"{job_id}_jewelry_{cat}.png"
     out_path = OUTPUT_DIR / out_filename
-    generated_raw.save(out_path, format="PNG", optimize=True)
+    # Lossless PNG with compress_level=1 preserves maximum micro-detail and zoom sharpness
+    generated_raw.convert("RGB").save(out_path, format="PNG", compress_level=1)
 
     b64_data = image_to_base64_data_uri(generated_raw) if include_base64 else None
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
