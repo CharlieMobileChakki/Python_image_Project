@@ -158,10 +158,14 @@ def _run_inference_sync(
             "use_kv_cache": True,
             "generator": generator,
         }
-        if steps and steps > 0:
-            pipe_kwargs["num_inference_steps"] = steps
-        if guidance_scale and guidance_scale > 0:
-            pipe_kwargs["guidance_scale"] = guidance_scale
+        import inspect
+        call_params = inspect.signature(pipe.__call__).parameters
+        if "num_inference_steps" in call_params and steps and steps > 0:
+            pipe_kwargs["num_inference_steps"] = int(steps)
+        if "true_cfg_scale" in call_params and guidance_scale and guidance_scale > 0:
+            pipe_kwargs["true_cfg_scale"] = float(guidance_scale)
+        elif "guidance_scale" in call_params and guidance_scale and guidance_scale > 0:
+            pipe_kwargs["guidance_scale"] = float(guidance_scale)
 
         logger.info("Executing Qwen pipe with steps=%s, guidance_scale=%s", steps, guidance_scale)
         result = pipe(**pipe_kwargs)
