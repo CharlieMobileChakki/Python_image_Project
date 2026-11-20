@@ -102,7 +102,19 @@ CRITICAL RULES:
    - IF THE OUTFIT IS A ONE-PIECE ENSEMBLE (dress, gown, jumpsuit, saree, lehenga):
      Output a single entry with category "dress", "saree", or "lehenga".
 
-6. Allowed category values ONLY: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga".
+6. JEWELRY & PRECIOUS ORNAMENTS DISCRIMINATION (GOLD, SILVER, DIAMONDS):
+   - If the reference photograph shows JEWELRY (such as earrings, jhumkas, necklace, pendant, ring, bangles, or kada):
+     ABSOLUTELY NEVER hallucinate or classify it as clothing, dress, shirt, or kurta!
+     Identify it strictly with its true jewelry category:
+     * "earrings" (Earrings, Jhumkas, Danglers, Studs)
+     * "necklace" (Necklace, Haar, Choker, Chain, Pendant)
+     * "ring" (Finger Ring, Band)
+     * "bangles" (Bangles, Kada, Bracelet)
+     Describe the authentic precious metal (22K/24K warm yellow gold), openwork jaali filigree, hanging bead clusters, and gemstones with forensic accuracy.
+
+7. Allowed category values:
+   - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
+   - For Jewelry: "necklace", "ring", "earrings", "bangles"
 
 Return strictly valid JSON format:
 {
@@ -116,6 +128,11 @@ Return strictly valid JSON format:
       "category": "pants",
       "recognized_label": "Light Beige Flat-Front Chino Trousers",
       "garment_description": "Men's flat-front straight-leg chino trousers crafted from smooth cotton twill fabric in authentic uniform light beige / warm khaki dye. Pristine e-commerce 3D ghost-mannequin catalog presentation: eliminate the model's bent knee and walking tilt; both trouser legs hang completely straight down, vertically parallel to each other side-by-side with zero bend and zero tilt, with horizontally level waistband at top, slant front pockets, matching button and fly zipper, and both bottom leg cuffs ending at the exact same horizontal bottom height."
+    },
+    {
+      "category": "earrings",
+      "recognized_label": "22K Yellow Gold Traditional Jhumka Earrings",
+      "garment_description": "Pair of traditional Indian temple jhumka earrings crafted from 22K warm yellow gold, featuring floral ear studs with spherical bead borders, bell-shaped jhumka domes with intricate openwork filigree and jaali carvings, and delicate hanging pearl clusters along the bottom rim."
     }
   ]
 }"""
@@ -137,6 +154,22 @@ def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> st
 def _build_final_prompt(garment_description: str, category: str) -> str:
     """Put category-specific 3D ghost-mannequin isolation, e-commerce pose straightening, and fabric lock FIRST."""
     cat = (category or "").strip().lower()
+
+    # Route jewelry categories directly to luxury jewelry studio rules
+    if is_jewelry_domain(cat):
+        stand = (
+            "t_bar_earring_stand" if cat in ("earrings", "jhumkas")
+            else ("slotted_ring_block" if cat == "ring"
+            else ("cylindrical_bangle_bar" if cat in ("bangles", "kada", "bracelet")
+            else "white_neck_bust"))
+        )
+        return _build_final_jewelry_prompt({
+            "category": cat,
+            "recognized_label": garment_description[:60],
+            "metal_type": "22K Warm Yellow Gold",
+            "stand_type": stand,
+            "jewelry_description": garment_description,
+        })
 
     surface_rejection = (
         "STRICT SURFACE REJECTION: If the reference photo shows clothing placed on a bedsheet, mattress, blanket, floor, rug, carpet, or table, "
@@ -322,17 +355,17 @@ def analyze_garment_and_build_prompts(
         )
     else:  # "all"
         user_instruction = (
-            "Analyze the clothing in this image for exact 3D ghost-mannequin catalog reconstruction. "
-            "CRITICAL RULES: "
-            "1. Color & Fabric Fidelity: Identify the EXACT real-world dye shade, darkness, and saturation level. Preserve the exact authentic colors without altering them. "
-            "2. Pose Straightening & Rectification (E-Commerce Standard): In e-commerce 3D ghost mannequin catalogs (Zara, Myntra, Amazon), garments are displayed perfectly straight and symmetrical. Command both trouser legs to hang straight down vertically parallel with level waistband and level cuffs (eliminate bent knees or walking poses). For tops, ensure level shoulders, symmetrical sleeves, and vertical plackets. "
-            "3. Garment Authenticity ('Dress Wahi Rehna Chahiye'): The dress/garment itself must remain 100% faithful to the reference photo: exact fabric, color, weave, pockets, buttons, and stitching. "
-            "4. Surface Rejection: If the clothing is laid flat on a bed, mattress, floor, rug, or table, the bedsheet or floor is 100% BACKGROUND. NEVER treat bedsheet patterns (hexagons, mandalas, geometric prints, borders) as clothing! "
-            "5. Actual Garments Only: Only identify genuine stitched wearable clothing items (if only one kurta is on the bed, return only one item). "
-            "6. Separates: If contrasting separates (e.g. shirt + jeans) are actually present, return separate items for 'upper_clothes' and 'pants'. "
-            "Examine the genuine clothing fabric at high resolution: base color, true motifs, collar, buttons, pockets, and cut."
+            "Analyze the item (apparel clothing OR precious jewelry ornament) in this image for exact 3D studio catalog reconstruction. "
+            "CRITICAL DOMAIN DISCRIMINATION (APPAREL vs JEWELRY): "
+            "1. If the photo contains JEWELRY (such as earrings, jhumkas, necklace, pendant, ring, bangles, or kada): "
+            "   You MUST categorize it strictly as 'earrings', 'necklace', 'ring', or 'bangles'! "
+            "   ABSOLUTELY NEVER categorize jewelry as a dress, shirt, top, or clothing! "
+            "   Describe the authentic gold/silver metal tone (e.g. 22K warm yellow gold), filigree openwork jaali, hanging beads, and gemstones. "
+            "2. If the photo contains APPAREL (shirt, top, pants, dress, kurta, saree): "
+            "   Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga'. "
+            "3. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
+            "4. Actual Items Only: Only identify the genuine item(s). If only earrings are present, return ONLY one entry for category 'earrings'."
         )
-
     payload: dict[str, Any] = {
         "model": model_name,
         "temperature": 0.1,

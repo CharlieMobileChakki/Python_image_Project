@@ -300,20 +300,33 @@ def execute_flow_b_with_person(
         )
         gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
-        # Step 3: Strip studio white background cleanly via BiRefNet Lite
-        cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
-
-        # Step 4: 1024x1024 transparent canvas normalization
-        # Note: Qwen-Image-2.1-Turbo already generates upright studio garments; skip PCA deskewing
-        # so asymmetric dupattas/drapes/flared hems are never erroneously tilted.
-        angle_deg = 0.0
-        normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-        val_res = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
-        final_cutout = val_res.get("refined_cutout", normalized_1024)
-
-        out_filename = f"{job_id}_{g_id}.png"
-        out_path = OUTPUT_DIR / out_filename
-        final_cutout.save(out_path, format="PNG", optimize=True)
+        # Step 3: Background processing
+        if is_jewelry_domain(cat_key):
+            # For jewelry: preserve solid studio white background with luxury display stand 100% intact (non-transparent)
+            final_cutout = generated_raw.convert("RGB")
+            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", compress_level=1)
+            stand = (
+                "t_bar_earring_stand" if cat_key in ("earrings", "jhumkas")
+                else ("slotted_ring_block" if cat_key == "ring"
+                else ("cylindrical_bangle_bar" if cat_key in ("bangles", "kada")
+                else "white_neck_bust"))
+            )
+            val_conf = 0.99
+            angle_deg = 0.0
+        else:
+            # For apparel / garments: strip studio white background cleanly via BiRefNet Lite
+            cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
+            angle_deg = 0.0
+            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
+            val_res = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
+            final_cutout = val_res.get("refined_cutout", normalized_1024)
+            out_filename = f"{job_id}_{g_id}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", optimize=True)
+            stand = None
+            val_conf = val_res["confidence"]
 
         b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
 
@@ -321,6 +334,12 @@ def execute_flow_b_with_person(
             "garment_id": g_id,
             "category": cat_key,
             "recognized_label": cat_label,
+            "title": cat_label,
+            "stand_type": stand,
+            "image": out_filename,
+            "url": f"/api/outputs/{out_filename}",
+            "output_png_url": f"/api/outputs/{out_filename}",
+            "confidence": val_conf,
             "image": out_filename,
             "confidence": val_res["confidence"],
             "coverage_percentage": round(100.0 / max(1, len(planned_garments)), 1),
