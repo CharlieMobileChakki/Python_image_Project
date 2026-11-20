@@ -248,6 +248,84 @@ def execute_flow_a_without_person(
     }
 
 
+def crop_and_zoom_item_reference(
+    image: Image.Image,
+    box_2d: list[int | float] | tuple[int | float, ...],
+    target_dim: int = 1400,
+    pad_ratio: float = 0.12,
+) -> Image.Image:
+    """Crop and zoom into a specific garment or jewelry item bounding box.
+
+    Ensures Qwen receives an ultra-high-resolution macro view of the target piece
+    (e.g. earrings inside a necklace set) rather than an uncropped image where the piece is tiny.
+    """
+    try:
+        ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
+        w, h = image.size
+        is_normalized_1 = all(0.0 <= v <= 1.0 for v in (ymin, xmin, ymax, xmax))
+        scale_x = w if is_normalized_1 else (w / 1000.0)
+        scale_y = h if is_normalized_1 else (h / 1000.0)
+
+        left = int(xmin * scale_x)
+        top = int(ymin * scale_y)
+        right = int(xmax * scale_x)
+        bottom = int(ymax * scale_y)
+
+        box_w = right - left
+        box_h = bottom - top
+        if box_w < 20 or box_h < 20 or (box_w >= w * 0.96 and box_h >= h * 0.96):
+            return image
+
+        pad_x = int(box_w * pad_ratio)
+        pad_y = int(box_h * pad_ratio)
+        crop_left = max(0, left - pad_x)
+        crop_top = max(0, top - pad_y)
+        crop_right = min(w, right + pad_x)
+        crop_bottom = min(h, bottom + pad_y)
+
+        cropped = image.crop((crop_left, crop_top, crop_right, crop_bottom))
+        cw, ch = cropped.size
+        if max(cw, ch) < target_dim:
+            scale = target_dim / float(max(cw, ch))
+            new_w = max(1, int(cw * scale))
+            new_h = max(1, int(ch * scale))
+            cropped = cropped.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        logger.info(
+            "Macro cropped reference item from box_2d %s -> %dx%d (original %dx%d)",
+            box_2d,
+            cropped.width,
+            cropped.height,
+            w,
+            h,
+        )
+        return cropped
+    except Exception as exc:
+        logger.warning("Failed to crop item reference image (%s); using full image.", exc)
+        return image
+
+
+def heuristic_crop_jewelry_item(image: Image.Image, category: str) -> Image.Image:
+    """Fallback heuristic crop for jewelry pieces in multi-piece sets (e.g. earrings inside a necklace loop)."""
+    try:
+        w, h = image.size
+        if category in ("earrings", "jhumkas"):
+            # In standard jewelry sets, matching earrings are positioned in the upper-center area
+            crop_box = (int(w * 0.20), int(h * 0.04), int(w * 0.80), int(h * 0.58))
+            cropped = image.crop(crop_box)
+            target_dim = 1400
+            cw, ch = cropped.size
+            if max(cw, ch) < target_dim:
+                scale = target_dim / float(max(cw, ch))
+                cropped = cropped.resize((max(1, int(cw * scale)), max(1, int(ch * scale))), Image.Resampling.LANCZOS)
+            logger.info("Heuristic cropped earrings region -> %dx%d", cropped.width, cropped.height)
+            return cropped
+        return image
+    except Exception as exc:
+        logger.warning("Heuristic jewelry crop failed (%s); using full image.", exc)
+        return image
+
+
 def execute_flow_b_with_person(
     image_rgb: Image.Image,
     image_bytes: bytes,
@@ -292,10 +370,19 @@ def execute_flow_b_with_person(
         qwen_prompt = plan["prompt"]
         g_id = f"garment_{idx + 1:03d}"
 
+        # Macro zoom & cropped item reference passing (ensures Qwen sees exact micro-facets)
+        box_2d = plan.get("box_2d")
+        if box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
+            item_ref_image = crop_and_zoom_item_reference(image_rgb, box_2d)
+        elif is_jewelry_domain(cat_key) and cat_key in ("earrings", "jhumkas") and len(planned_garments) > 1:
+            item_ref_image = heuristic_crop_jewelry_item(image_rgb, cat_key)
+        else:
+            item_ref_image = image_rgb
+
         # Step 2: Generate clean studio garment on remote RTX 3090 GPU (Qwen-Image-Edit)
         t_gpu_start = time.perf_counter()
         generated_raw, gpu_meta = generate_garment_via_gpu(
-            reference_image=image_rgb,
+            reference_image=item_ref_image,
             prompt=qwen_prompt,
         )
         gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)

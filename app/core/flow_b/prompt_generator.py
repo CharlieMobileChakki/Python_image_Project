@@ -122,9 +122,20 @@ CRITICAL RULES:
      * Entry 1: category "necklace" for the standalone necklace.
      * Entry 2: category "earrings" for the matching pair of earrings.
      * Entry 3: category "ring" (if a ring is also part of the set).
-     NEVER omit, drop, or merge the matching earrings or ring in a jewelry set! Both pieces belong to the set and must be generated in the studio catalog!
+     NEVER omit, drop, or merge the matching earrings or ring in a jewelry set! Both pieces belong to the set and must be recognized and generated!
 
-8. Allowed category values:
+8. MANDATORY BOUNDING BOX LOCALIZATION (box_2d) FOR MACRO ZOOM & CROPPING:
+   - For every detected piece (especially earrings in a jewelry set, rings, or necklaces), provide:
+     "box_2d": [ymin, xmin, ymax, xmax] normalized on a 0-1000 scale.
+   - For earrings in a necklace set, box_2d MUST tightly enclose both earrings so our high-res macro optical pipeline can crop and zoom directly into the earrings without capturing the surrounding necklace!
+
+9. DYNAMIC PRECIOUS METAL ALLOY & GEMSTONE FIDELITY (ZERO HARDCODING):
+   - ABSOLUTELY NEVER default all jewelry to yellow gold!
+   - You MUST identify the EXACT metal alloy: "Rose Gold Alloy", "22K Warm Yellow Gold", "Rhodium-Plated Silver", "Platinum", etc.
+   - You MUST identify the EXACT gemstone material and cut: "Faceted Blush Pink Austrian Crystals", "Solitaire Diamond", "Natural Pearls", "Clear Crystal Pave", etc.
+   - For earrings: identify the EXACT top ear-stud / post design (e.g. "faceted solitaire round pink crystal prong stud" vs "floral cluster stud") and the EXACT hanging body (e.g. "openwork chandelier drop with pear-cut pink crystal drops").
+
+10. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
    - For Jewelry: "necklace", "ring", "earrings", "bangles"
 
@@ -134,15 +145,21 @@ Return strictly valid JSON format:
     {
       "category": "necklace",
       "recognized_label": "Blush Pink Crystal Statement Collar Necklace",
+      "metal_type": "Rose Gold Alloy with High-Polish Prong Claws",
+      "gemstone_type": "Faceted Blush Pink Austrian Crystals and Clear Crystal Pave Halos",
+      "box_2d": [180, 25, 870, 520],
       "garment_description": "Bridal statement collar necklace crafted with faceted teardrop pear-cut and oval-cut blush pink Austrian crystals in delicate claw-prong settings, arranged in an articulated scalloped V-shape lace collar bordered by sparkling clear crystal halos, with dangling faceted teardrop crystal briolettes hanging from the bottom fringe."
     },
     {
       "category": "earrings",
       "recognized_label": "Blush Pink Crystal Matching Chandelier Earrings Pair",
-      "garment_description": "Matching pair of chandelier dangle earrings featuring blush pink faceted oval crystal studs articulating into an openwork scrolling crystal cluster with dangling pear-cut pink crystal drops."
+      "metal_type": "Rose Gold Alloy with High-Polish Prong Claws",
+      "gemstone_type": "Faceted Solitaire Round Pink Crystals and Pear-cut Pink Briolettes",
+      "box_2d": [75, 315, 540, 435],
+      "garment_description": "Matching pair of chandelier dangle earrings featuring top ear-studs with faceted round blush pink crystal solitaires in rose gold claw settings, articulating into an openwork scrolling rose-gold crystal chandelier drop with sparkling clear crystal accents and dangling faceted pear-cut pink crystal drops."
     }
   ]
-}"""
+}}"""
 
 
 def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> str:
@@ -158,7 +175,13 @@ def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> st
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-def _build_final_prompt(garment_description: str, category: str) -> str:
+def _build_final_prompt(
+    garment_description: str,
+    category: str,
+    metal_type: str | None = None,
+    gemstone_type: str | None = None,
+    recognized_label: str | None = None,
+) -> str:
     """Put category-specific 3D ghost-mannequin isolation, e-commerce pose straightening, and fabric lock FIRST."""
     cat = (category or "").strip().lower()
 
@@ -170,10 +193,26 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
             else ("beige_velvet_brass_bangle_bar" if cat in ("bangles", "kada", "bracelet")
             else "beige_velvet_brass_neck_bust"))
         )
+        # Dynamic metal inference if not explicitly provided
+        inferred_metal = (metal_type or "").strip()
+        if not inferred_metal:
+            desc_lower = garment_description.lower()
+            if "rose gold" in desc_lower:
+                inferred_metal = "Polished Rose Gold Alloy"
+            elif "yellow gold" in desc_lower or "22k" in desc_lower or "24k" in desc_lower:
+                inferred_metal = "22K Warm Yellow Gold"
+            elif any(k in desc_lower for k in ("silver", "rhodium", "white gold", "platinum")):
+                inferred_metal = "Rhodium-Plated Silver / Platinum"
+            elif "gold" in desc_lower:
+                inferred_metal = "Polished Gold"
+            else:
+                inferred_metal = "Precious Metal Alloy"
+
         return _build_final_jewelry_prompt({
             "category": cat,
-            "recognized_label": garment_description[:60],
-            "metal_type": "22K Warm Yellow Gold",
+            "recognized_label": recognized_label or garment_description[:60],
+            "metal_type": inferred_metal,
+            "gemstone_type": (gemstone_type or "").strip(),
             "stand_type": stand,
             "jewelry_description": garment_description,
         })
@@ -423,11 +462,14 @@ def analyze_garment_and_build_prompts(
             return _fallback_garment_plan(target_garment)
 
         target_norm = (target_garment or "all").strip().lower()
-        results: list[dict[str, str]] = []
+        results: list[dict[str, Any]] = []
         for item in items[:3]:
             cat = str(item.get("category", "dress")).strip().lower()
             label = str(item.get("recognized_label", "Garment Cutout")).strip()
             desc = str(item.get("garment_description", "")).strip()
+            metal = str(item.get("metal_type", "")).strip() or None
+            gemstone = str(item.get("gemstone_type", "")).strip() or None
+            box_2d = item.get("box_2d")
             if not desc:
                 continue
             if target_norm != "all" and cat != target_norm:
@@ -437,7 +479,16 @@ def analyze_garment_and_build_prompts(
                     "category": cat,
                     "recognized_label": label,
                     "garment_description": desc,
-                    "prompt": _build_final_prompt(desc, cat),
+                    "metal_type": metal or "",
+                    "gemstone_type": gemstone or "",
+                    "box_2d": box_2d,
+                    "prompt": _build_final_prompt(
+                        garment_description=desc,
+                        category=cat,
+                        metal_type=metal,
+                        gemstone_type=gemstone,
+                        recognized_label=label,
+                    ),
                     "prompt_source": f"openai:{model_name}",
                 }
             )
@@ -448,12 +499,24 @@ def analyze_garment_and_build_prompts(
             cat = str(first.get("category", "dress")).strip().lower()
             label = str(first.get("recognized_label", "Garment Cutout")).strip()
             desc = str(first.get("garment_description", "the primary garment")).strip()
+            metal = str(first.get("metal_type", "")).strip() or None
+            gemstone = str(first.get("gemstone_type", "")).strip() or None
+            box_2d = first.get("box_2d")
             results.append(
                 {
                     "category": cat,
                     "recognized_label": label,
                     "garment_description": desc,
-                    "prompt": _build_final_prompt(desc, cat),
+                    "metal_type": metal or "",
+                    "gemstone_type": gemstone or "",
+                    "box_2d": box_2d,
+                    "prompt": _build_final_prompt(
+                        garment_description=desc,
+                        category=cat,
+                        metal_type=metal,
+                        gemstone_type=gemstone,
+                        recognized_label=label,
+                    ),
                     "prompt_source": f"openai:{model_name}",
                 }
             )
@@ -490,7 +553,7 @@ JEWELRY_NECKLACE_STUDIO_RULES = (
     "2. The necklace loops naturally and symmetrically around both sides of the contoured warm beige velvet neck bust with equal curve, drape, and tension. "
     "3. The central medallion / pendant rests completely flat, centered, and plumb along the vertical center axis of the bust chest. "
     "4. Completely untangled, zero twists, zero asymmetry. "
-    "PRECIOUS METAL & POLISH LUSTER: Faithfully preserve the authentic 22K/24K warm yellow gold metal, polished luster, intricate openwork jaali filigree, delicate leaf motifs, engraved borders, and hanging bead drops with 100% forensic accuracy directly from the reference photo(s). "
+    "PRECIOUS METAL & POLISH LUSTER: Faithfully preserve the authentic precious metal alloy (rose gold, yellow gold, platinum, or rhodium-plated silver), gemstone facet cuts, crystal colors, and prong settings with 100% forensic accuracy directly from the reference photo(s). DO NOT change the metal alloy or gemstone colors! "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Razor-sharp microscopic jewelry studio illumination. Every individual filigree thread, openwork jaali wire, embossed leaf vein, polished gold bead drop, and metal reflection must be rendered in ultra-crisp, tack-sharp microscopic focus with ZERO blur and ZERO pixelation even when deeply zoomed in. "
     "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid pristine studio white background (#FFFFFF). The entire luxury beige velvet and brass neck bust display stand MUST remain 100% intact, fully visible, and seamlessly grounded on the pure solid white background with subtle realistic contact shadows. DO NOT make transparent and DO NOT cut or remove the display stand! Completely free of any human model, skin, neck, face, hands, clothes, table clutter, or props."
 )
@@ -511,19 +574,19 @@ JEWELRY_RING_STUDIO_RULES = (
 JEWELRY_EARRINGS_STUDIO_RULES = (
     "Pristine luxury jewelry boutique showcase catalog photograph (Amazon Luxury / Tanishq / Kalyan Jewellers luxury hero shot). "
     "LUXURY SHOWCASE STAND (BEIGE VELVET WISHBONE WINGS + POLISHED GOLD BRASS STEM & BASE): "
-    "The pair of matching earrings / jhumkas is displayed mounted on a luxury custom jewelry boutique showcase display stand: "
+    "The pair of matching earrings is displayed mounted on a luxury custom jewelry boutique showcase display stand: "
     "A sculpted, contoured wishbone / dual-wing earring display cross-mount upholstered in premium soft warm beige / champagne micro-suede velvet, supported by a polished gleaming gold brass metallic vertical post/stem, anchored into a weighted circular base with matching warm beige velvet top inlay rimmed in polished gleaming gold brass. "
     "The warm beige velvet wings and gleaming gold brass hardware provide rich three-dimensional tactile depth and soft contact shadows that stand out with breathtaking elegance against the pure solid white studio background (#FFFFFF), ensuring the stand structure never blends or washes into the white background! "
     "MANDATORY E-COMMERCE DUAL-WING MOUNTING & SYMMETRICAL AIRBORNE SUSPENSION (OVERRIDE REFERENCE POSE): "
     "DO NOT COPY ANY ASYMMETRIC, TILTED, LEANING, OR LYING-FLAT POSE FROM THE REFERENCE PHOTO! "
     "Even if the reference photo shows the earrings lying flat on a surface/cloth, tilted at an angle, or overlapping: "
-    "1. WING-MOUNTED STUDS: Both earrings are mounted symmetrically onto the stand's sculpted beige velvet wings. The top circular floral ear-studs are pinned securely onto the front vertical faces of the left and right velvet wings. "
-    "2. AIRBORNE FREE-HANGING BELLS: The conical/bell bodies (jhumkas) and all hanging pearl/bead fringes hang freely suspended in mid-air below the wings. ABSOLUTELY NEVER let any earring rest, touch, lean, or lie on the bottom base, table, or pole! Both earrings must be 100% airborne and hanging straight down with natural gravitational drape. "
+    "1. WING-MOUNTED TOP STUDS / POSTS: Both earrings are mounted symmetrically onto the stand's sculpted beige velvet wings. Faithfully replicate the EXACT top ear-stud / post design directly from the reference photo (whether a faceted round gemstone solitaire crystal, stud button, prong setting, or motif)—pinned cleanly on the front vertical faces of the left and right velvet wings. DO NOT invent or substitute floral studs if the reference has solitaire crystal studs! "
+    "2. AIRBORNE FREE-HANGING BODIES: The main earring bodies (chandeliers, crystal clusters, dangle pendants, drops, or bell domes) and all bottom fringe drops hang freely suspended in mid-air below the wings. ABSOLUTELY NEVER let any earring rest, touch, lean, or lie on the bottom base, table, or pole! Both earrings must be 100% airborne and hanging straight down with natural gravitational drape. "
     "3. PERFECT HORIZONTAL ALIGNMENT: Both earrings hang at the EXACT SAME vertical height, perfectly level and parallel to each other. Both must face directly forward straight to camera (0-degree direct plumb frontal view). "
-    "4. AMPLE HORIZONTAL SEPARATION (ZERO OVERLAP): The left and right earrings are widely and evenly separated by the stand's wishbone wings. There MUST be wide, clean, uniform spacing between the two earrings (like Amazon Luxury and Tanishq catalog hero shots). Absolutely ZERO overlap, zero touching, zero crowding! Every single pearl, gold granule, and jaali filigree wire is clearly visible with zero occlusion. "
-    "5. IDENTICAL UNTWISTED PAIR: Replicate the authentic matching pair in pristine upright hang, displaying the floral top stud, connecting link, bell-shaped jhumka dome, and cascading pearl/gold fringe in crisp, untangled vertical symmetry! "
-    "PRECIOUS CRAFTSMANSHIP & POLISH: Exact replication of authentic 22K warm yellow gold filigree, jhumka bell domes, dangling pearls, and ear-stud motifs directly from the reference photo(s). "
-    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp macro studio focus on every hanging pearl, gold granulation sphere, and filigree curve with zero blur under deep zoom. "
+    "4. AMPLE HORIZONTAL SEPARATION (ZERO OVERLAP): The left and right earrings are widely and evenly separated by the stand's wishbone wings. There MUST be wide, clean, uniform spacing between the two earrings (like Amazon Luxury and Tanishq catalog hero shots). Absolutely ZERO overlap, zero touching, zero crowding! Every single gemstone facet, crystal prong, metal link, and drop is clearly visible with zero occlusion. "
+    "5. IDENTICAL UNTWISTED PAIR: Replicate the authentic matching pair in pristine upright hang, faithfully reproducing the exact top stud, articulation links, chandelier/drop bodies, and cascading crystal/pearl/bead drops in crisp, untangled vertical symmetry! "
+    "PRECIOUS CRAFTSMANSHIP & POLISH FIDELITY: Exact replication of authentic precious metal alloy (rose gold, yellow gold, platinum, or rhodium-plated silver), claw prong settings, gemstone cuts, and crystal colors directly from the reference photo. DO NOT alter the metal alloy or stone color! "
+    "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Ultra-sharp microscopic macro studio focus on every light-refracting crystal facet edge, prong claw, and metal reflection with zero blur and zero pixelation even when deeply zoomed in. "
     "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the beige velvet and polished brass display stand fully intact. DO NOT make transparent. Completely free of any human ears, hair, face, neck, skin, or hands."
 )
 
@@ -534,7 +597,7 @@ JEWELRY_BANGLES_STUDIO_RULES = (
     "MANDATORY E-COMMERCE BANGLE DISPLAY (OVERRIDE REFERENCE POSE): Regardless of whether the reference photo shows bangles lying flat on a table: "
     "1. 3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
     "2. UNIFORM SPACING: Evenly spaced along the horizontal bar with clean gaps between each bangle, zero chaotic pile-ups or tilted overlaps. "
-    "PRECIOUS METAL FIDELITY: Exact replication of the authentic 22K yellow gold tone, antique finish, meenakari enamel, or diamond studs from the reference photo(s). "
+    "PRECIOUS METAL FIDELITY: Exact replication of authentic precious metal alloy (yellow gold, rose gold, white gold, or silver), surface finish, and gemstone settings directly from the reference photo(s). "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Hyper-detailed macro studio lighting with crisp specular reflections and tack-sharp detail across the entire circumference. "
     "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the beige velvet and brass cylindrical display bar fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
 )
@@ -637,7 +700,7 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         header = (
             "Generate an empty luxury jewelry boutique showcase catalog product photograph (Amazon Luxury / Tanishq hero shot) showing the matching pair of "
             f"standalone {category} mounted symmetrically on a luxury sculpted warm beige velvet wishbone dual-wing earring display stand on polished gold brass stem and circular base. "
-            "The top circular studs are pinned on the front faces of the beige velvet wings, and BOTH bell bodies hang fully suspended in mid-air below the wings with wide, clean horizontal spacing between them! "
+            "The top ear-studs / posts are pinned cleanly on the front faces of the beige velvet wings, and BOTH earring bodies (chandeliers, dangles, drops, or domes) hang fully suspended in mid-air below the wings with wide, clean horizontal spacing between them! "
             "ABSOLUTELY NO EARRING LYING ON THE BASE, TABLE, OR POLE! ZERO OVERLAP! "
         )
     else:  # bangles, kada, bracelet
@@ -646,11 +709,21 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
             f"precious {category} mounted around a horizontal cylindrical warm beige velvet jewelry bangle display bar on polished gold brass uprights. "
         )
 
+    gemstone = str(jewelry_data.get("gemstone_type", "")).strip()
+    gem_clause = f" and gemstone materials ({gemstone})" if gemstone else ""
     metal_lock = (
-        f"STRICT PRECIOUS METAL & GEMSTONE FIDELITY: Clone the EXACT real-world metal alloy ({metal}), surface luster, "
-        "micro-carvings, prongs, and gemstone colors directly from the reference photo(s). "
-        "DO NOT change yellow gold into silver or copper! Preserve authentic gold polish and craftsmanship."
+        f"STRICT PRECIOUS METAL & GEMSTONE FIDELITY: Clone the EXACT real-world metal alloy ({metal}){gem_clause}, surface luster, "
+        "micro-carvings, prongs, and authentic gemstone / crystal colors directly from the reference photo(s). "
+        "ABSOLUTELY DO NOT ALTER OR HALLUCINATE METAL OR GEM COLORS! If the reference has rose gold, replicate rose gold. "
+        "If it has yellow gold, replicate yellow gold. If it has silver/rhodium or platinum, replicate silver/rhodium/platinum. "
+        "Preserve authentic polish, crystal cuts, and prong settings with 100% forensic fidelity."
     )
+
+    earring_anatomy_lock = (
+        "STRICT EARRING ANATOMY & MOTIF CLONING: Replicate the EXACT top ear-stud / post design (solitaire round crystal, floral cluster, prong-set gem, or button) "
+        "and the EXACT main hanging chandelier / drop body directly from the reference photo! DO NOT substitute a solitaire crystal stud with a floral cluster, "
+        "and DO NOT change chandelier drops into jhumka bells unless they are actually bell-shaped in the reference image!"
+    ) if category in ("earrings", "jhumkas") else ""
 
     ultra_hd_zoom_lock = (
         "CRITICAL 8K ULTRA-HD MASTER MACRO RESOLUTION (ZERO BLUR UNDER EXTREME ZOOM): "
@@ -682,6 +755,7 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         f"{ultra_hd_zoom_lock} "
         f"{white_background_lock} "
         f"{metal_lock} "
+        f"{earring_anatomy_lock} "
         f"Exact jewelry piece to faithfully reconstruct from all reference angles: {desc or label}. "
         f"{studio_rules}"
     )
