@@ -629,18 +629,15 @@ JEWELRY_EARRINGS_STUDIO_RULES = (
 
 JEWELRY_BANGLES_STUDIO_RULES = (
     "Pristine luxury jewelry boutique showcase catalog photograph (Kalyan / Joyalukkas / Tanishq luxury hero shot). "
-    "LUXURY SHOWCASE STAND & CONTRAST (POLISHED GOLD BRASS PEDESTAL): The kada / bangle / bracelet is mounted vertically upright on a luxury boutique polished golden brass pedestal display stand with an upright vertical stem, weighted circular base, and curved support cradle. "
-    "The stand has a distinct polished golden brass tone that stands out sharply against the pure solid white background (#FFFFFF)! "
-    "CRITICAL INNER SURFACE & GEOMETRY PRESERVATION (ZERO VELVET BAR THROUGH THE INSIDE): "
-    "1. COMPLETE INNER SURFACE PRESERVATION: The entire hollow interior, inside gold wall, inner gold carvings, engravings, lattice jaali patterns, and inner rim MUST remain 100% visible, unobstructed, and authentic gold! "
-    "2. ABSOLUTELY DO NOT pass any beige or brown velvet bar or rod through the inside of the kada! "
-    "3. ZERO beige, tan, or brown material inside the kada! The interior must be 100% authentic carved gold from the reference photo, NOT a smooth surface, NOT velvet! "
-    "4. 3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
-    "5. EXACT PIECE COUNT: Mount the EXACT number of pieces from the reference photo! If there is 1 kada, mount EXACTLY 1 kada! ABSOLUTELY NEVER duplicate into 2! "
-    "6. BROAD CUFF PROFILE PRESERVATION: If the reference shows broad thick cuff kadas with wide cylindrical walls, replicate the identical wide band width and thick cylindrical walls. DO NOT convert broad kadas into thin skinny round wire bangles! "
+    "LUXURY SHOWCASE STAND & CONTRAST (BEIGE VELVET & POLISHED GOLD BRASS): The bangles / kada / bracelet are mounted vertically upright around a horizontal cylindrical warm beige / champagne velvet jewelry bangle display bar supported on polished golden brass upright pillars and weighted circular base. "
+    "The stand has a distinct warm beige velvet tone and polished gold brass accents that stand out sharply against the pure solid white background (#FFFFFF)! "
+    "MANDATORY E-COMMERCE BANGLE DISPLAY (OVERRIDE REFERENCE POSE): Regardless of whether the reference photo shows bangles lying flat on a table: "
+    "1. 3D CIRCULAR PERSPECTIVE: Elegant three-quarter perspective highlighting the circular 3D wrist profile, outer circumference carvings, side filigree work, screw/clasp fastenings, and hollow inner curvature. "
+    "2. EXACT PIECE COUNT & UNIFORM SPACING: Mount the EXACT number of pieces from the reference photo! If there are 2 broad kadas in the reference photo, mount EXACTLY 2 kadas side-by-side with an elegant clean gap between them. ABSOLUTELY NEVER add 3, 4, or 5 extra bangles! "
+    "3. BROAD CUFF PROFILE PRESERVATION: If the reference shows broad thick cuff kadas with wide cylindrical walls, replicate the identical wide band width and thick cylindrical walls. DO NOT convert broad kadas into thin skinny round wire bangles! "
     "PRECIOUS METAL FIDELITY: Exact replication of authentic precious metal alloy (yellow gold, rose gold, white gold, or silver), surface finish, and gemstone settings directly from the reference photo(s). "
     "8K ULTRA-HD MACRO RESOLUTION (EXTREME ZOOM CLARITY): Hyper-detailed macro studio lighting with crisp specular reflections and tack-sharp detail across the entire circumference. "
-    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the polished brass display stand fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
+    "SOLID STUDIO WHITE BACKGROUND (STAND INTACT): Pure solid clean studio white background (#FFFFFF) with the beige velvet and brass cylindrical display bar fully intact. DO NOT make transparent. Completely free of any human wrist, hands, arms, or skin."
 )
 
 JEWELRY_STAND_RULES_MAP = {
@@ -673,11 +670,6 @@ CRITICAL PHYSICAL OBJECT COUNT & QUANTITY DISCRIMINATION:
 - If multiple photos (multi-angle) show the SAME single kada from different perspectives:
   Set "item_count": 1, because all photos show the SAME single item!
 - Distinguish a single thick broad kada from multiple bangles: a wide cylindrical band with continuous rigid circular wall is ONE kada.
-
-CRITICAL INNER SURFACE & GEOMETRIC DETAIL PRESERVATION:
-- Carefully inspect and document BOTH the exterior surface AND the complete visible interior surface of the jewelry piece!
-- Describe all visible inner gold carvings, engravings, lattice (jaali) openwork, inner rim borders, and metal textures.
-- The inner surface of a hollow kada/bangle/ring is an essential component of the authentic jewelry design. It must NEVER be simplified, covered, or replaced by display stand material.
 
 CRITICAL JEWELRY DECONSTRUCTION RULES:
 1. FORENSIC COMPONENT-BY-COMPONENT DECONSTRUCTION:
@@ -773,20 +765,16 @@ def _build_final_jewelry_prompt(jewelry_data: dict[str, Any]) -> str:
         if item_cnt == 1:
             header = (
                 "Generate an empty luxury jewelry boutique showcase catalog product photograph (Kalyan / Tanishq / Joyalukkas luxury hero shot) showing "
-                f"the standalone single {subcat} mounted upright on a luxury boutique polished golden brass pedestal display stand with an upright vertical stem, weighted circular brass base, and curved support cradle. "
-                f"There must be EXACTLY ONE (1) {subcat} mounted upright, showing its wide cylindrical 3D band width and hollow inner circular aperture! "
-                "CRITICAL ZERO-DUPLICATION & INNER-DETAIL PRESERVATION RULE: "
-                "1. EXACTLY 1 SINGLE KADA, NOT 2! "
-                "2. COMPLETE INNER SURFACE PRESERVATION: The entire hollow interior, inside gold wall, inner gold carvings, engravings, lattice jaali patterns, and inner rim MUST remain 100% visible, unobstructed, and authentic gold! "
-                "3. ABSOLUTELY DO NOT pass any beige or brown velvet bar or rod through the inside of the kada! "
-                "4. ZERO beige, tan, or brown material inside the kada! The interior must be 100% authentic carved gold from the reference photo, NOT a smooth surface, NOT velvet!"
+                f"the standalone single {subcat} mounted upright around a horizontal cylindrical warm beige velvet jewelry display bar on polished golden brass upright pillars and weighted base. "
+                f"There must be EXACTLY ONE (1) {subcat} mounted on the bar, showing its wide cylindrical 3D band width and hollow inner circular aperture! "
+                "CRITICAL ZERO-DUPLICATION RULE: ABSOLUTELY DO NOT DUPLICATE OR CREATE A PAIR! EXACTLY 1 SINGLE KADA, NOT 2!"
             )
         else:
             header = (
                 "Generate an empty luxury jewelry boutique showcase catalog product photograph (Kalyan / Tanishq / Joyalukkas luxury hero shot) showing "
-                f"the pair of exactly {item_cnt} matching {category} mounted upright side-by-side on a luxury boutique polished golden brass pedestal display stand with upright vertical stems and weighted circular base. "
-                f"There must be EXACTLY {item_cnt} {category} mounted with an elegant clean gap between them, showing their wide cylindrical 3D band width and hollow inner circular apertures! "
-                f"CRITICAL ZERO-DUPLICATION & INNER-DETAIL PRESERVATION: EXACTLY {item_cnt}! ALL inner gold carvings, engravings, lattice jaali patterns, and inner rims MUST remain 100% visible, unobstructed, and authentic gold! ZERO beige velvet bars through the inside!"
+                f"the pair of exactly {item_cnt} matching {category} mounted upright side-by-side around a horizontal cylindrical warm beige velvet jewelry display bar on polished golden brass upright pillars and weighted base. "
+                f"There must be EXACTLY {item_cnt} {category} mounted on the bar, neatly spaced with an elegant clean gap between them, showing their wide cylindrical 3D band width and hollow inner circular apertures! "
+                f"ZERO EXTRA BANGLES! DO NOT generate 3, 4, 5, or more bangles! EXACTLY {item_cnt}!"
             )
 
     gemstone = str(jewelry_data.get("gemstone_type", "")).strip()
