@@ -29,10 +29,10 @@ UPPER_STUDIO_RULES = (
 
 LOWER_STUDIO_RULES = (
     "Empty hollow 3D open waistband aperture at top, and empty open bottom ankle leg cuffs showing the hollow interior with zero human body inside. "
-    "Seamlessly reconstruct the continuous denim wash, waistband, front fly button, pockets, and full trouser leg length. "
+    "Seamlessly reconstruct the authentic fabric weave, textile texture, waistband, front fly button/zipper, pockets, and full trouser leg length. "
     "Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, horizontally level waistband, both legs hanging straight down side-by-side symmetrically with zero 3/4 turn. "
     "CRITICAL ISOLATION: ABSOLUTELY DO NOT GENERATE ANY SHIRT, TOP, T-SHIRT, JACKET, COLLAR, SHOULDERS, SLEEVES, CHEST, TORSO, OR UPPER BODY! "
-    "The top half of the canvas MUST BE 100% empty, clean, pure solid white (#FFFFFF). Generate EXCLUSIVELY the standalone pants/jeans floating by themselves with NO upper garment attached! "
+    "The top half of the canvas MUST BE 100% empty, clean, pure solid white (#FFFFFF). Generate EXCLUSIVELY the standalone pants/trousers/skirt floating by themselves with NO upper garment attached! "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
 
@@ -66,11 +66,13 @@ CRITICAL RULES:
      * If the fabric has a dark, muted, dusty, desaturated, or earthy tone (e.g., dusty army-olive, muted slate-sage, dark khaki-green, charcoal navy, faded terracotta, dusty peach), explicitly specify the EXACT muted shade: "deep muted dusty army-olive with desaturated matte greyish undertones, exactly preserving the dark muted dye tone and saturation of the reference photo without any artificial brightening, neon tint, or oversaturation".
      * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
      * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
-   - DENIM JEANS, TROUSERS & BOTTOM WEAR (CRITICAL WASH & COLOR FIDELITY):
-     * If the jeans/pants in the reference photograph are dark (e.g. solid raw dark indigo, deep midnight navy, inky blue, or black denim):
-       You MUST explicitly describe the wash as: "solid uniform dark unwashed raw midnight indigo denim with zero stonewash fading, no bleached thigh highlights, no whiskering, and no distressed abrasion, strictly matching the deep dark saturated tone of the reference photograph".
-     * NEVER label or describe dark indigo/navy jeans simply as "blue denim jeans" or "dark blue jeans", because AI diffusion models automatically add bright faded thighs, acid wash, and light blue highlights when given generic names!
-     * Explicitly specify: "solid uniform dark dye from waistband to ankle cuffs, zero thigh fading, perfectly straight symmetrical legs".
+   - TROUSERS, CHINOS, JEANS & BOTTOM WEAR (CRITICAL REAL-WORLD COLOR & TEXTILE ACCURACY):
+     * Forensic-analyze the exact real-world color, wash, and fabric:
+       - If the pants are light beige, khaki, cream, or sand (like chino trousers): explicitly specify "men's flat-front straight-leg chino trousers in smooth light beige / warm khaki cotton twill fabric, with uniform solid matte light beige dye, slant front pockets, and clean straight hems".
+       - If dark / raw indigo / black jeans: explicitly specify "men's classic straight-leg denim jeans in uniform solid deep dark raw indigo denim wash with zero artificial thigh fading, no bleached thigh highlights, and no whiskering".
+       - If olive, grey, white, brown, or navy: describe the exact authentic dye shade and weave without altering it.
+     * Always match the real-world fabric weave (cotton twill, chino, denim, linen, khadi, wool blend).
+     * Explicitly specify: "solid uniform dye from waistband to ankle cuffs, perfectly straight symmetrical legs".
 
 3. STRICT DIRECT FRONTAL 0-DEGREE STRAIGHT ALIGNMENT (PERFECTLY "SIDHA", NO 3/4 ANGLE):
    - In e-commerce catalog standards (Myntra, Amazon, Ajio), product hero photos MUST be strictly front-facing and straight.
@@ -137,9 +139,9 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
     )
 
     color_lock_rule = (
-        "STRICT COLOR, SHADE & WASH LOCK: Faithfully preserve the EXACT SAME dye shade, hue, darkness, and saturation level from the reference photo. "
-        "DO NOT brighten dark or muted tones, DO NOT oversaturate, and DO NOT turn dark tones into light or glossy colors. "
-        "The generated 3D garment must perfectly replicate the authentic real-life color and textile weave/wash of the reference garment."
+        "STRICT COLOR, DYE & TEXTILE FIDELITY: Faithfully clone the EXACT real-world color, hue, lightness/darkness, and textile weave directly from the reference photo. "
+        "DO NOT change the color! If the garment in the reference photo is light beige, khaki, cream, white, olive, grey, brown, red, blue, or black, it MUST be rendered in that exact real-life color. "
+        "Strictly preserve authentic fabric texture, weave, and construction details without hallucinating different colors or materials."
     )
 
     if cat == "upper_clothes":
@@ -159,25 +161,16 @@ def _build_final_prompt(garment_description: str, category: str) -> str:
         )
 
     elif cat in ("pants", "skirt"):
-        pants_color_lock = (
-            "CRITICAL DENIM / PANTS COLOR ACCURACY (EXACT DARKNESS MATCH): "
-            "The pants in the reference photograph are solid pitch-dark inky midnight black-navy raw unwashed denim (very dark, RGB under 35, near black). "
-            "You MUST render the jeans in this EXACT solid pitch-dark inky midnight black-navy unwashed dye throughout the entire length from waistband to ankle cuffs. "
-            "ABSOLUTELY FORBIDDEN: DO NOT render medium blue! DO NOT render light blue! DO NOT add stonewash fading! "
-            "DO NOT add bleached white thigh highlights! DO NOT add whiskers! DO NOT add distress marks! "
-            "Keep the denim solid, uniform, deep dark unwashed midnight navy-black matching the reference photo."
-        )
         isolation_header = (
             "Generate an empty 3D ghost-mannequin e-commerce catalog product photograph showing EXCLUSIVELY the standalone "
-            "lower-body pants / jeans / trousers floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+            "lower-body pants / trousers / shorts / skirt floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
             "The top half of the image MUST BE 100% EMPTY, clean pure solid white. "
             "CRITICAL ISOLATION RULE: ABSOLUTELY DO NOT GENERATE ANY SHIRT, TOP, T-SHIRT, JACKET, COLLAR, SHOULDERS, SLEEVES, CHEST, TORSO, OR UPPER BODY! "
-            "Generate EXCLUSIVELY the standalone pants by themselves with NO upper garment attached! "
+            "Generate EXCLUSIVELY the standalone lower garment by itself with NO upper body garment attached! "
             "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet. "
         )
         return (
             f"{isolation_header} "
-            f"{pants_color_lock} "
             f"{surface_rejection} "
             f"{color_lock_rule} "
             f"Exact standalone lower garment to isolate and faithfully reconstruct from reference photo: {garment_description.strip()}. "
