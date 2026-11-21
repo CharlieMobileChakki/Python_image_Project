@@ -75,6 +75,7 @@ async def background_removal_endpoint(
     custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
     presentation_mode: str = Form("mode_c_display_stand", description="Presentation mode: 'mode_a_product_only', 'mode_b_studio_presentation', 'mode_c_display_stand'"),
     item_count_override: int | None = Form(None, description="Optional manual quantity override (e.g. 1 for 1 kada)"),
+    output_resolution: str = Form("8k", description="Output canvas resolution: '8k' (8192x8192), '4k' (4096x4096), '2k' (2048x2048), or '1k' (1024x1024)"),
 ) -> Any:
     """Unified AI 3D Garment & Jewelry Studio API.
 
@@ -125,6 +126,7 @@ async def background_removal_endpoint(
                 custom_prompt=custom_prompt,
                 presentation_mode=presentation_mode,
                 item_count_override=item_count_override,
+                output_resolution=output_resolution,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -156,7 +158,7 @@ async def background_removal_endpoint(
                     "X-Garment-Category": top_garment["category"],
                     "X-Garment-Label": top_garment["recognized_label"],
                     "X-Execution-Time-Ms": str(result["execution_time_ms"]),
-                    "X-Canvas-Size": "1024x1024",
+                    "X-Canvas-Size": top_garment.get("resolution", "8192x8192"),
                 },
             )
 
@@ -179,7 +181,7 @@ async def background_removal_endpoint(
             "category": g.get("category", "product"),
             "title": title,
             "url": full_url,
-            "resolution": "1024x1024",
+            "resolution": g.get("resolution", "8192x8192"),
             "output_png_url": full_url,
             "recognized_label": title,
             "garment_id": g.get("garment_id"),
@@ -222,6 +224,7 @@ async def jewelry_studio_endpoint(
     jewelry_type: str = Form("auto", description="Category: 'auto', 'necklace', 'ring', 'earrings', 'bangles'"),
     custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
+    output_resolution: str = Form("8k", description="Output canvas resolution: '8k' (8192x8192), '4k' (4096x4096), '2k' (2048x2048), or '1k' (1024x1024)"),
 ) -> Any:
     """Dedicated 3D Luxury Jewelry Studio Endpoint.
 
@@ -255,6 +258,7 @@ async def jewelry_studio_endpoint(
                 target_garment=jewelry_type,
                 include_base64=include_base64,
                 custom_prompt=custom_prompt,
+                output_resolution=output_resolution,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -280,7 +284,7 @@ async def jewelry_studio_endpoint(
             "category": g.get("category", "jewelry"),
             "title": title,
             "url": full_url,
-            "resolution": "1024x1024",
+            "resolution": g.get("resolution", "8192x8192"),
             "output_png_url": full_url,
             "recognized_label": title,
             "garment_id": g.get("garment_id"),

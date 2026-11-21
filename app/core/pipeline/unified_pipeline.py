@@ -47,6 +47,7 @@ def execute_flow_a_without_person(
     auto_straighten: bool = True,
     include_base64: bool = False,
     t_start: float | None = None,
+    target_canvas_size: int = 8192,
 ) -> dict[str, Any]:
     """Execute Flow A: Pure background removal for isolated garments (without person).
 
@@ -102,13 +103,13 @@ def execute_flow_a_without_person(
                 if abs(angle_deg) > 0.5:
                     sub_rgba = straighten_garment(sub_rgba, angle_deg)
 
-            normalized_1024 = normalize_to_1024(sub_rgba, target_size=1024, fill_ratio=0.82)
-            val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
-            final_cutout = val_res.get("refined_cutout", normalized_1024)
+            normalized_canvas = normalize_to_1024(sub_rgba, target_size=target_canvas_size, fill_ratio=0.82)
+            val_res = validate_garment_background(normalized_canvas, original_rgb=image_rgb)
+            final_cutout = val_res.get("refined_cutout", normalized_canvas)
 
             out_filename = f"{job_id}_{g_id}.png"
             out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", optimize=True)
+            final_cutout.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
 
             b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
             coverage_pct = round((comp["area"] / total_multi_area) * 100.0, 1)
@@ -125,9 +126,10 @@ def execute_flow_a_without_person(
                 "rotation_angle_deg": angle_deg,
                 "repaired": False,
                 "repair_method": None,
-                "width": 1024,
-                "height": 1024,
-                "image_dimensions": [1024, 1024],
+                "width": target_canvas_size,
+                "height": target_canvas_size,
+                "image_dimensions": [target_canvas_size, target_canvas_size],
+                "resolution": f"{target_canvas_size}x{target_canvas_size}",
                 "output_png_url": f"/api/outputs/{out_filename}",
                 "output_png_base64": b64_data,
                 "background_removal_status": val_res["status"],
@@ -165,9 +167,9 @@ def execute_flow_a_without_person(
             if abs(angle_deg) > 0.5:
                 cutout_rgba = straighten_garment(cutout_rgba, angle_deg)
 
-        normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-        val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
-        final_cutout = val_res.get("refined_cutout", normalized_1024)
+        normalized_canvas = normalize_to_1024(cutout_rgba, target_size=target_canvas_size, fill_ratio=0.82)
+        val_res = validate_garment_background(normalized_canvas, original_rgb=image_rgb)
+        final_cutout = val_res.get("refined_cutout", normalized_canvas)
 
         w, h = cutout_rgba.size
         aspect = h / max(1, w)
@@ -189,7 +191,7 @@ def execute_flow_a_without_person(
 
         out_filename = f"{job_id}_{cat_key}.png"
         out_path = OUTPUT_DIR / out_filename
-        final_cutout.save(out_path, format="PNG", optimize=True)
+        final_cutout.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
 
         b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
 
@@ -205,9 +207,10 @@ def execute_flow_a_without_person(
             "rotation_angle_deg": angle_deg,
             "repaired": False,
             "repair_method": None,
-            "width": 1024,
-            "height": 1024,
-            "image_dimensions": [1024, 1024],
+            "width": target_canvas_size,
+            "height": target_canvas_size,
+            "image_dimensions": [target_canvas_size, target_canvas_size],
+            "resolution": f"{target_canvas_size}x{target_canvas_size}",
             "output_png_url": f"/api/outputs/{out_filename}",
             "output_png_base64": b64_data,
             "background_removal_status": val_res["status"],
@@ -392,6 +395,7 @@ def execute_flow_b_with_person(
     custom_prompt: str | None = None,
     presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
+    target_canvas_size: int = 8192,
 ) -> dict[str, Any]:
     """Execute Flow B: Direct ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Extraction.
 
@@ -490,10 +494,10 @@ def execute_flow_b_with_person(
                 from PIL import ImageFilter
                 raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
                 sharpened = raw_calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
-                final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+                final_cutout = sharpened.resize((target_canvas_size, target_canvas_size), Image.Resampling.LANCZOS)
                 out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
                 out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", compress_level=1)
+                final_cutout.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
                 stand = (
                     "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
                     else ("beige_velvet_brass_ring_block" if cat_key == "ring"
@@ -507,12 +511,12 @@ def execute_flow_b_with_person(
                 # Apparel: strip studio white background cleanly via BiRefNet Lite
                 cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
                 angle_deg = 0.0
-                normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-                val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
-                final_cutout = val_check.get("refined_cutout", normalized_1024)
+                normalized_canvas = normalize_to_1024(cutout_rgba, target_size=target_canvas_size, fill_ratio=0.82)
+                val_check = validate_garment_background(normalized_canvas, original_rgb=generated_raw.convert("RGB"))
+                final_cutout = val_check.get("refined_cutout", normalized_canvas)
                 out_filename = f"{job_id}_{g_id}.png"
                 out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", optimize=True)
+                final_cutout.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
                 stand = None
                 val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
                 val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
@@ -538,9 +542,10 @@ def execute_flow_b_with_person(
             "rotation_angle_deg": angle_deg,
             "repaired": True,
             "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
-            "width": 2048 if is_jewelry else 1024,
-            "height": 2048 if is_jewelry else 1024,
-            "image_dimensions": [2048, 2048] if is_jewelry else [1024, 1024],
+            "width": target_canvas_size,
+            "height": target_canvas_size,
+            "image_dimensions": [target_canvas_size, target_canvas_size],
+            "resolution": f"{target_canvas_size}x{target_canvas_size}",
             "output_png_base64": b64_data,
             "background_removal_status": val_res.get("status", "success"),
             "background_removal_confidence": val_conf,
@@ -593,6 +598,7 @@ def execute_jewelry_studio_pipeline(
     t_start: float | None = None,
     presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
+    target_canvas_size: int = 8192,
 ) -> dict[str, Any]:
     """Execute 3D Luxury Jewelry Studio Pipeline supporting 3 configurable presentation modes:
     - Mode A: Original Product Only (100% original pixels, background removed, clean white/transparent).
@@ -624,10 +630,10 @@ def execute_jewelry_studio_pipeline(
     if presentation_mode == "mode_a_product_only":
         # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
         fg_cutout = extract_isolated_flow_a(img_list[0])
-        hd_output = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
+        hd_output = create_mode_a_product_only(fg_cutout, canvas_size=target_canvas_size, background_color=(255, 255, 255))
         out_filename = f"{job_id}_jewelry_{cat}.png"
         out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
+        hd_output.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
         stand = None
         gpu_time_ms = 0.0
         val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
@@ -635,10 +641,10 @@ def execute_jewelry_studio_pipeline(
     elif presentation_mode == "mode_b_studio_presentation":
         # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
         fg_cutout = extract_isolated_flow_a(img_list[0])
-        hd_output = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
+        hd_output = create_mode_b_studio_presentation(fg_cutout, canvas_size=target_canvas_size)
         out_filename = f"{job_id}_jewelry_{cat}.png"
         out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
+        hd_output.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
         stand = None
         gpu_time_ms = 0.0
         val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
@@ -661,10 +667,10 @@ def execute_jewelry_studio_pipeline(
         calibrated = calibrate_product_colors(composite_ref, generated_raw)
         from PIL import ImageFilter
         sharpened = calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
-        hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+        hd_output = sharpened.resize((target_canvas_size, target_canvas_size), Image.Resampling.LANCZOS)
         out_filename = f"{job_id}_jewelry_{cat}.png"
         out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
+        hd_output.save(out_path, format="PNG", compress_level=3 if target_canvas_size >= 2048 else 6)
         val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
 
     b64_data = image_to_base64_data_uri(hd_output) if include_base64 else None
@@ -679,7 +685,7 @@ def execute_jewelry_studio_pipeline(
         "image": out_filename,
         "url": f"/api/outputs/{out_filename}",
         "output_png_url": f"/api/outputs/{out_filename}",
-        "resolution": "2048x2048",
+        "resolution": f"{target_canvas_size}x{target_canvas_size}",
         "stand_type": stand,
         "presentation_mode": presentation_mode,
         "detected_item_count": val_metrics.get("detected_count", expected_cnt),
@@ -738,11 +744,13 @@ def process_garment_pipeline(
     custom_prompt: str | None = None,
     presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
+    target_canvas_size: int = 8192,
+    output_resolution: str | None = None,
 ) -> dict[str, Any]:
     """Execute the Unified 3D Garment & Jewelry Studio Pipeline.
 
     Single unified production workflow:
-    - Apparel / Garments: ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024.
+    - Apparel / Garments: ChatGPT Vision -> Qwen GPU -> BiRefNet Lite Super-Resolution (8K/4K/2K/1K).
     - Jewelry: Supports 3 presentation modes:
       * Mode A: Original Product Only (100% original pixels, clean white/transparent).
       * Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting).
@@ -750,6 +758,20 @@ def process_garment_pipeline(
     """
     t_start = time.perf_counter()
     job_id = uuid.uuid4().hex[:10]
+
+    RESOLUTION_MAP = {
+        "8k": 8192,
+        "4k": 4096,
+        "2k": 2048,
+        "1k": 1024,
+        "8192": 8192,
+        "4096": 4096,
+        "2048": 2048,
+        "1024": 1024,
+    }
+    canvas_size = target_canvas_size
+    if output_resolution:
+        canvas_size = RESOLUTION_MAP.get(str(output_resolution).lower().strip(), target_canvas_size)
 
     # Handle multi-image input or single image
     if isinstance(image_bytes, list):
@@ -778,6 +800,7 @@ def process_garment_pipeline(
             t_start=t_start,
             presentation_mode=presentation_mode,
             item_count_override=item_count_override,
+            target_canvas_size=canvas_size,
         )
 
     # 2. Standard Apparel / Garment Single-Image Flows (100% UNTOUCHED)
@@ -794,9 +817,10 @@ def process_garment_pipeline(
             auto_straighten=auto_straighten,
             include_base64=include_base64,
             t_start=t_start,
+            target_canvas_size=canvas_size,
         )
 
-    # Master Unified 3D Garment Flow (ChatGPT Vision + Qwen GPU + BiRefNet Lite 1024x1024)
+    # Master Unified 3D Garment Flow (ChatGPT Vision + Qwen GPU + BiRefNet Lite)
     return execute_flow_b_with_person(
         image_rgb=primary_image_rgb,
         image_bytes=single_image_bytes,
@@ -809,4 +833,5 @@ def process_garment_pipeline(
         custom_prompt=custom_prompt,
         presentation_mode=presentation_mode,
         item_count_override=item_count_override,
+        target_canvas_size=canvas_size,
     )

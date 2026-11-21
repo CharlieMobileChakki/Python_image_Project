@@ -9,8 +9,8 @@ class GarmentItem(BaseModel):
     """Clean production metadata for a single extracted and normalized 2D garment."""
     category: str = Field(default="product", description="Garment category (e.g. upper_clothes, pants, dress)")
     title: str = Field(default="Garment Cutout", description="Human-friendly garment title/label")
-    url: str = Field(..., description="Direct URL to the 1024x1024 transparent PNG")
-    resolution: str = Field(default="1024x1024", description="Output canvas resolution")
+    url: str = Field(..., description="Direct URL to the transparent PNG")
+    resolution: str = Field(default="8192x8192", description="Output canvas resolution (e.g. 8192x8192, 4096x4096)")
     # Optional aliases for backwards compatibility
     output_png_url: str | None = Field(default=None, description="Alias for url")
     recognized_label: str | None = Field(default=None, description="Alias for title")

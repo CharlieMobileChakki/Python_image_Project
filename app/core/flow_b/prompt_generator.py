@@ -27,6 +27,7 @@ UPPER_STUDIO_RULES = (
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, both sleeves hanging straight down along both sides at symmetrical matching angles, and strictly level horizontal hemline. "
     "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the chest, torso, and ESPECIALLY BOTH SLEEVES must be solid, pristine, completely clean, and uniform in its authentic base color with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, ZERO shadow bleeding from the bedsheet or folds, and ZERO armpit burn patches. Both sleeves must have perfectly clean, unblemished, matching fabric surfaces with balanced, identical studio illumination. Any contrast trim (like collar or cuff bands) must remain strictly confined to the thin outer edge/cuff hem and NEVER bleed or smudge onto the sleeves or torso. "
     "CHEST EMBLEMS & BRAND LOGOS: Faithfully preserve and replicate ONLY the authentic logos, badges, embroidery, and crests that are genuinely visible on the garment in the reference photo. If logos are present on either or both sides of the chest, reconstruct each logo in its exact position with sharp crisp detail. If the garment is plain without logos, keep it completely plain with zero added logos. "
+    "8K ULTRA-HD MASTER RESOLUTION & FABRIC WEAVE TEXTURE: Render with tack-sharp optical clarity, micro-contrast stitching lines, crisp needlework embroidery, authentic woven fabric grain, and pin-sharp edge definition. Zero digital blur, zero pixelation, zero compression noise under extreme deep zoom. "
     "CRITICAL ISOLATION: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, legs, or bottom garments! The bottom half of the image MUST BE 100% empty, clean pure solid white (#FFFFFF). "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
@@ -36,6 +37,7 @@ LOWER_STUDIO_RULES = (
     "Empty hollow 3D open waistband aperture at top, and empty open bottom ankle leg cuffs showing the hollow interior with zero human body inside. "
     "Seamlessly reconstruct the authentic fabric weave, textile texture, waistband, front fly button/zipper, pockets, and full trouser leg length. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, horizontally level waistband across the top, both trouser legs hanging completely straight down vertically parallel to each other side-by-side with zero knee bend and zero walking tilt, both ankle leg cuffs aligned at the exact same horizontal height. "
+    "8K ULTRA-HD MASTER RESOLUTION & FABRIC WEAVE TEXTURE: Render with tack-sharp optical clarity, micro-contrast stitching lines, crisp denim/fabric grain, and pin-sharp edge definition. Zero digital blur, zero pixelation, zero compression noise under extreme deep zoom. "
     "CRITICAL ISOLATION: ABSOLUTELY DO NOT GENERATE ANY SHIRT, TOP, T-SHIRT, JACKET, COLLAR, SHOULDERS, SLEEVES, CHEST, TORSO, OR UPPER BODY! "
     "The top half of the canvas MUST BE 100% empty, clean, pure solid white (#FFFFFF). Generate EXCLUSIVELY the standalone pants/trousers/skirt floating by themselves with NO upper garment attached! "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
@@ -45,6 +47,7 @@ FULL_OUTFIT_STUDIO_RULES = (
     "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Amazon Fashion hero shot): "
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing hollow interior with zero human body inside. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, symmetrical silhouette, and plumb vertical alignment. "
+    "8K ULTRA-HD MASTER RESOLUTION & FABRIC WEAVE TEXTURE: Render with tack-sharp optical clarity, micro-contrast stitching lines, crisp embroidery, and authentic woven textile grain. Zero digital blur, zero pixelation, zero compression noise under extreme deep zoom. "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
 

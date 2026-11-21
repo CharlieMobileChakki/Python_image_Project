@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 def detect_rotation_angle(cutout_rgba: Image.Image) -> float:
@@ -164,6 +164,20 @@ def normalize_to_1024(cutout_rgba: Image.Image, target_size: int = 1024, fill_ra
     new_w = max(1, round(crop_w * scale))
     new_h = max(1, round(crop_h * scale))
     resized = cropped.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    # 5B. High-frequency micro-texture and embroidery sharpening for 8K / 4K zoom clarity
+    if target_size >= 2048:
+        r, g, b, a = resized.split()
+        rgb = Image.merge("RGB", (r, g, b))
+        if target_size >= 8192:
+            radius, percent, threshold = 2.0, 140, 1
+        elif target_size >= 4096:
+            radius, percent, threshold = 1.6, 135, 1
+        else:
+            radius, percent, threshold = 1.2, 120, 1
+        sharpened_rgb = rgb.filter(ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold))
+        sr, sg, sb = sharpened_rgb.split()
+        resized = Image.merge("RGBA", (sr, sg, sb, a))
 
     # 6. Post-resize anti-ringing & alpha clamping
     res_arr = np.array(resized)
