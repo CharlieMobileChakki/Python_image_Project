@@ -1,11 +1,6 @@
 """Image processing package: Loading, normalizing, rotating, and converting."""
 from __future__ import annotations
 
-from app.core.image_processing.artwork_preserver import (
-    detect_garment_landmarks,
-    ensure_garment_fabric_opacity,
-    map_and_preserve_artwork,
-)
 from app.core.image_processing.image_loader import load_image_bytes
 from app.core.image_processing.image_normalizer import (
     detect_rotation_angle,
@@ -30,8 +25,5 @@ __all__ = [
     "create_mode_b_studio_presentation",
     "calibrate_product_colors",
     "validate_product_output",
-    "map_and_preserve_artwork",
-    "ensure_garment_fabric_opacity",
-    "detect_garment_landmarks",
 ]
 
