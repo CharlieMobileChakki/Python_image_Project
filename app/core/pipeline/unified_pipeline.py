@@ -29,6 +29,7 @@ from app.core.image_processing import (
     detect_rotation_angle,
     image_to_base64_data_uri,
     load_image_bytes,
+    map_and_preserve_artwork,
     normalize_to_1024,
     straighten_garment,
     validate_product_output,
@@ -497,6 +498,18 @@ def execute_flow_b_with_person(
                 normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
                 val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
                 final_cutout = val_check.get("refined_cutout", normalized_1024)
+
+                # Preserve authentic visible chest marks & heal sleeve opacity
+                chest_marks = plan.get("chest_marks", [])
+                artwork_meta = {}
+                if chest_marks:
+                    final_cutout, artwork_meta = map_and_preserve_artwork(
+                        source_rgb=image_rgb,
+                        reconstructed_rgba=final_cutout,
+                        chest_marks=chest_marks,
+                        source_rotation_deg=float(plan.get("garment_rotation_degrees", 0.0) or 0.0),
+                    )
+
                 out_filename = f"{job_id}_{g_id}.png"
                 out_path = OUTPUT_DIR / out_filename
                 final_cutout.save(out_path, format="PNG", optimize=True)
@@ -515,6 +528,7 @@ def execute_flow_b_with_person(
             "presentation_mode": presentation_mode if is_jewelry else "ghost_mannequin",
             "detected_item_count": val_res.get("detected_count", expected_cnt),
             "validation_metrics": val_res,
+            "artwork_preservation": artwork_meta,
             "image": out_filename,
             "url": f"/api/outputs/{out_filename}",
             "output_png_url": f"/api/outputs/{out_filename}",

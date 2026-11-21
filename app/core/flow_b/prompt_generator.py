@@ -71,15 +71,15 @@ CRITICAL RULES:
      * If the fabric has a dark, muted, dusty, desaturated, or earthy tone (e.g., dusty army-olive, muted slate-sage, dark khaki-green, charcoal navy, faded terracotta, dusty peach), explicitly specify the EXACT muted shade: "deep muted dusty army-olive with desaturated matte greyish undertones, exactly preserving the dark muted dye tone and saturation of the reference photo without any artificial brightening, neon tint, or oversaturation".
      * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
      * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
-   - SPORTS KITS, FOOTBALL JERSEYS & BRANDED APPAREL (CRITICAL ACCENT COLOR ACCURACY):
+   - SPORTS KITS, ATHLETIC JERSEYS & BRANDED APPAREL (CRITICAL ACCENT COLOR ACCURACY):
      * NEVER guess or hallucinate accent colors from alternate seasons or club history!
      * Deconstruct and specify each element's exact visible pixel hue:
-       - Base fabric color: (e.g., pure solid white #FFFFFF).
-       - Collar & Neckline Trim: Identify exact color! If it is deep navy blue, midnight blue, or dark teal-blue, NEVER call it green!
-       - Shoulder Stripes / Accents: Identify exact color (e.g., 3-stripes in deep purple / magenta). NEVER turn purple into bright red or maroon!
-       - Sleeve Cuffs: Specify matching trim color.
-       - Emblems / Badges: Real Madrid circular royal crest on left chest.
-       - STRICT FORBIDDEN DRIFT: Explicitly forbid the generator from shifting colors: "DO NOT turn navy blue trim into green! DO NOT change shoulder stripe colors!"
+       - Base fabric color: (e.g., pure solid white #FFFFFF, solid navy, heather grey, etc.).
+       - Collar & Neckline Trim: Identify exact visible color directly from pixels!
+       - Shoulder Stripes / Accents: Identify exact count, color, and termination directly from pixels.
+       - Sleeve Cuffs: Specify matching trim color and width.
+       - Emblems / Badges: Record every visible chest emblem, crest, or manufacturer logo exactly where observed.
+       - STRICT FORBIDDEN DRIFT: Explicitly forbid the generator from shifting colors!
    - TROUSERS, CHINOS, JEANS & BOTTOM WEAR (CRITICAL REAL-WORLD COLOR & TEXTILE ACCURACY):
      * Forensic-analyze the exact real-world color, wash, and fabric:
        - If the pants are light beige, khaki, cream, or sand (like chino trousers): explicitly specify "men's flat-front straight-leg chino trousers in smooth light beige / warm khaki cotton twill fabric, with uniform solid matte light beige dye, slant front pockets, and clean straight hems".
@@ -188,7 +188,34 @@ CRITICAL RULES:
    - ORIENTATION RECTIFICATION:
      * Regardless of whether the photo is rotated horizontally (90 degrees sideways), diagonally, or upside down, the output MUST be strictly upright facing forward (0-degree vertical alignment, neckline at top, hemline at bottom).
 
-12. Allowed category values:
+12. MULTI-MARK CHEST & SLEEVE ARTWORK DECOMPOSITION (MANUFACTURER BRAND vs TEAM/CLUB):
+   - You MUST independently inspect and record EVERY visible chest logo, mark, emblem, crest, or text patch!
+   - NEVER drop one chest mark in favor of another! If both a manufacturer logo (e.g., three diagonal bars, swoosh, cat, or letter mark) AND a team crest/emblem are present, BOTH must be recorded as separate items in "chest_marks"!
+   - Keep manufacturer_brand and team_or_club strictly separate!
+   - For every mark, record:
+     * "type": "manufacturer_brand" | "team_or_club" | "sponsor_text" | "crest_or_patch" | "unidentified_mark"
+     * "side": "viewer_left" | "viewer_right" | "center" (strictly viewer perspective: viewer-left is left side of image, viewer-right is right side)
+     * "name": State brand/club name ONLY when unmistakably supported by the visual evidence in the photo. If uncertain or unreadable, set "name": "unidentified_mark" and describe its visual geometry accurately!
+     * "relative_size": "small" (~30-50mm width) | "medium" (~50-80mm width) | "large"
+     * "box_2d": [ymin, xmin, ymax, xmax] tightly enclosing the mark in 0-1000 normalized coordinates.
+     * "description": Exact visual description (e.g., "Black three diagonal parallel bars manufacturer logo on viewer-left chest").
+   - ZERO HALLUCINATION RULE: A guessed brand name must NEVER trigger insertion of a stock logo or additional text! If a shirt is plain or unbranded, record "chest_marks": [].
+
+13. SHOULDER STRIPES & CUFF GEOMETRY (READ EACH SLEEVE INDEPENDENTLY):
+   - You MUST independently inspect the left sleeve (viewer-left) and right sleeve (viewer-right):
+   - Do NOT assume shoulder stripes continue all the way to the cuffs!
+   - Explicitly measure and record in "sleeve_architecture":
+     * "stripe_count": Exact number of parallel stripes on the shoulder (e.g., 3, 2, 1, or 0 if none).
+     * "stripe_color": Exact visible color of stripes.
+     * "stripe_start": Where stripes start (e.g. "collar/shoulder seam").
+     * "stripe_end": Where stripes stop! In many athletic jerseys, stripes terminate at mid-bicep (~45-50% down sleeve) and DO NOT reach the cuff!
+     * "plain_fabric_gap_to_cuff": true/false (true if there is visible plain base fabric between stripe endpoint and cuff band).
+     * "cuff_band_count": Number of cuff trim bands at sleeve opening (e.g. 1 or 0).
+     * "cuff_band_width": "narrow" (~10-15mm) | "medium" | "wide".
+     * "cuff_band_color": Exact visible color of cuff band.
+     * "sleeve_patches": List of any tournament badges, league patches, or sleeve artwork on this sleeve, with box_2d if visible.
+
+14. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
    - For Jewelry: "necklace", "ring", "earrings", "bangles"
 
@@ -196,15 +223,40 @@ Return strictly valid JSON format:
 {
   "garments": [
     {
-      "category": "bangles",
-      "recognized_label": "Pair of Antique 22K Gold Broad Cuff Kada Bangles",
-      "item_count": 2,
-      "piece_descriptor": "exactly 2 matching broad cuff kada bangles (a pair of 2)",
-      "form_factor": "broad thick cuff kada with wide cylindrical band (approx 25-30mm wide) and thick rigid circular walls",
-      "metal_type": "22K Antique Warm Yellow Gold with Matte Relief Luster",
-      "gemstone_type": "none (pure solid gold floral relief carvings, no multicolor enamel)",
-      "box_2d": [200, 100, 800, 900],
-      "garment_description": "A pair of exactly TWO matching antique 22K gold broad cuff kada bangles. Each kada features a wide, thick cylindrical band adorned with intricate hand-carved floral and foliate relief scrollwork, bordered by raised beaded edges and micro-granulation rims."
+      "category": "upper_clothes",
+      "recognized_label": "Men's Pullover Athletic Jersey",
+      "garment_type": "pullover_jersey",
+      "closure_type": "pullover",
+      "base_color": "pure solid white",
+      "chest_marks": [
+        {
+          "type": "manufacturer_brand",
+          "name": "brand_name_if_visible_else_unidentified",
+          "side": "viewer_left",
+          "box_2d": [320, 310, 390, 380],
+          "description": "Black three diagonal parallel bars manufacturer logo on viewer-left chest"
+        },
+        {
+          "type": "team_or_club",
+          "name": "club_name_if_visible_else_unidentified",
+          "side": "viewer_right",
+          "box_2d": [320, 620, 410, 710],
+          "description": "Circular royal crest emblem on viewer-right chest"
+        }
+      ],
+      "sleeve_architecture": {
+        "stripe_count": 3,
+        "stripe_color": "dark purple",
+        "stripe_start": "collar/shoulder seam",
+        "stripe_end": "mid-bicep (~45% down sleeve)",
+        "plain_fabric_gap_to_cuff": true,
+        "cuff_band_count": 1,
+        "cuff_band_width": "narrow (~10-15mm)",
+        "cuff_band_color": "dark navy blue",
+        "sleeve_patches": []
+      },
+      "box_2d": [150, 120, 850, 880],
+      "garment_description": "Men's athletic pullover jersey in pure solid white with dark navy blue collar trim, three purple shoulder stripes stopping at mid-bicep, plain white sleeve fabric before narrow dark navy cuff bands, featuring a manufacturer mark on viewer-left chest and a club crest on viewer-right chest."
     }
   ]
 }"""
@@ -232,6 +284,8 @@ def _build_final_prompt(
     item_count: int | None = None,
     piece_descriptor: str | None = None,
     form_factor: str | None = None,
+    chest_marks: list[dict[str, Any]] | None = None,
+    sleeve_architecture: dict[str, Any] | None = None,
 ) -> str:
     """Put category-specific 3D ghost-mannequin isolation, e-commerce pose straightening, and fabric lock FIRST."""
     cat = (category or "").strip().lower()
@@ -332,11 +386,71 @@ def _build_final_prompt(
             "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, pattern motifs, collar shape, buttons, placket, and stitching directly from the reference photo. "
             "STRICT COLOR FIDELITY: Retain authentic colors of all trims and stripes directly from the photo without hue shift! Do NOT substitute dark blue / navy / black trim with green! Do NOT change purple/magenta shoulder stripes into red! Keep white fabric pure white (#FFFFFF)."
         )
+
+        marks_directive = ""
+        if chest_marks and isinstance(chest_marks, list) and len(chest_marks) > 0:
+            lines = [
+                "MANDATORY CHEST MARKS & EMBLEMS SPECIFICATION (PRESERVE BOTH SIDES):",
+                "The reference photo shows the following authentic chest marks which MUST be preserved in their exact locations:",
+            ]
+            for m in chest_marks:
+                m_side = m.get("side", "viewer_left")
+                m_type = m.get("type", "mark")
+                m_name = m.get("name", "unidentified")
+                m_desc = m.get("description", "")
+                side_label = "VIEWER-LEFT (Right Chest of Wearer)" if m_side == "viewer_left" else "VIEWER-RIGHT (Left Chest of Wearer)"
+                desc_txt = f": {m_desc}" if m_desc else ""
+                lines.append(f"- {side_label}: Authentic {m_type} ({m_name}){desc_txt}. MUST be rendered sharply on the {side_label} chest.")
+            lines.append(
+                "DO NOT DROP OR OMIT ANY MARK! If there are two marks (e.g. manufacturer logo on viewer-left and club crest on viewer-right), "
+                "BOTH MARKS MUST BE VISIBLE SIMULTANEOUSLY ON THEIR RESPECTIVE SIDES. "
+                "CRITICAL: Do NOT invent, hallucinate, or add any unobserved sponsor text, central chest words, or fake logos."
+            )
+            marks_directive = " ".join(lines)
+        elif chest_marks is not None and len(chest_marks) == 0:
+            marks_directive = (
+                "PLAIN UNBRANDED CHEST: The reference garment has ZERO chest logos, ZERO brand marks, and ZERO crests. "
+                "Keep the chest fabric completely clean, plain, and unbranded. Do NOT add any logos, emblems, text, or graphics."
+            )
+
+        sleeve_directive = ""
+        if sleeve_architecture and isinstance(sleeve_architecture, dict):
+            s_count = sleeve_architecture.get("stripe_count", 0)
+            if s_count > 0:
+                s_color = sleeve_architecture.get("stripe_color", "contrasting")
+                s_start = sleeve_architecture.get("stripe_start", "collar/shoulder seam")
+                s_end = sleeve_architecture.get("stripe_end", "mid-bicep")
+                gap = sleeve_architecture.get("plain_fabric_gap_to_cuff", True)
+                c_count = sleeve_architecture.get("cuff_band_count", 1)
+                c_width = sleeve_architecture.get("cuff_band_width", "narrow")
+                c_color = sleeve_architecture.get("cuff_band_color", "contrasting")
+
+                s_lines = [
+                    "SHOULDER STRIPES & CUFF GEOMETRY (DO NOT EXTEND STRIPES TO CUFFS):",
+                    f"- Exactly {s_count} shoulder stripes in {s_color} running from {s_start} down along both sleeves.",
+                    f"- STRIPE TERMINATION: The stripes MUST STOP and TERMINATE at {s_end}.",
+                ]
+                if gap:
+                    s_lines.append(
+                        "MANDATORY PLAIN FABRIC GAP: There is visible plain solid base fabric between the stripe termination endpoint and the sleeve cuff. "
+                        "ABSOLUTELY DO NOT run the shoulder stripes all the way down to the cuffs!"
+                    )
+                s_lines.append(
+                    f"- SLEEVE CUFFS: Symmetrical sleeve cuffs with {c_count} {c_width} trim band in {c_color} at the sleeve hem."
+                )
+                sleeve_directive = " ".join(s_lines)
+            elif s_count == 0:
+                sleeve_directive = "SLEEVE SPECIFICATION: Plain solid sleeves with ZERO shoulder stripes, ZERO arm stripes, and clean cuffs."
+
+        directives = f" {marks_directive}" if marks_directive else ""
+        directives += f" {sleeve_directive}" if sleeve_directive else ""
+
         return (
             f"{isolation_header} "
             f"{pose_rectification} "
             f"{garment_lock} "
-            f"{surface_rejection} "
+            f"{surface_rejection}"
+            f"{directives} "
             f"Exact standalone upper garment to isolate and faithfully reconstruct from reference photo: {desc_clean}. "
             f"{UPPER_STUDIO_RULES}"
         )
@@ -398,7 +512,7 @@ def _build_final_prompt(
         )
 
 
-def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, str]]:
+def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, Any]]:
     """Deterministic fallback prompt if OpenAI API key is absent or unavailable."""
     t = (target_garment or "all").strip().lower()
     mapping = {
@@ -418,7 +532,10 @@ def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, str]]:
             "category": cat,
             "recognized_label": label,
             "garment_description": desc,
-            "prompt": _build_final_prompt(desc, cat),
+            "chest_marks": [],
+            "sleeve_architecture": {},
+            "garment_rotation_degrees": 0.0,
+            "prompt": _build_final_prompt(desc, cat, chest_marks=[], sleeve_architecture={}),
             "prompt_source": "default_fallback",
         }
     ]
@@ -428,7 +545,7 @@ def analyze_garment_and_build_prompts(
     image_rgb: Image.Image,
     target_garment: str = "all",
     custom_prompt: str | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Analyze a model-worn photo using ChatGPT Vision and build Qwen generation prompts.
 
     Args:
@@ -446,6 +563,9 @@ def analyze_garment_and_build_prompts(
                 "category": cat,
                 "recognized_label": "Custom Garment Extraction",
                 "garment_description": custom_prompt.strip(),
+                "chest_marks": [],
+                "sleeve_architecture": {},
+                "garment_rotation_degrees": 0.0,
                 "prompt": f"{custom_prompt.strip()} {COMMON_STUDIO_RULES}",
                 "prompt_source": "custom_prompt",
             }
@@ -469,6 +589,12 @@ def analyze_garment_and_build_prompts(
             "the bedsheet / floor is 100% BACKGROUND. Do NOT mistake bedsheet patterns for garment motifs! "
             "CRITICAL DE-FOLDING & UNWRAPPING: If the garment is folded (e.g. folded diagonally into a triangle, only one sleeve visible, or rotated sideways on a bed), "
             "you MUST detect that it is folded and instruct the full unfolding into a complete, symmetrical 3D ghost mannequin with BOTH matching sleeves, complete torso, and level hemline. "
+            "CRITICAL CHEST MARKS DECOMPOSITION: Extract every visible chest logo, crest, emblem, or sponsor into the 'chest_marks' array. "
+            "Distinguish 'manufacturer_brand' (e.g. viewer-left mark) vs 'team_or_club' crest (e.g. viewer-right crest). "
+            "Record exact side ('viewer_left' or 'viewer_right') and box_2d [ymin, xmin, ymax, xmax] coordinates. "
+            "CRITICAL: If the chest is plain with NO logos, return 'chest_marks': []. NEVER invent or hallucinate logos! "
+            "CRITICAL SLEEVE & CUFF ARCHITECTURE: Deconstruct shoulder stripes and cuffs into 'sleeve_architecture': "
+            "stripe_count (e.g. 3), stripe_color, stripe_start, stripe_end (e.g. 'mid-bicep (~45% down sleeve)'), plain_fabric_gap_to_cuff (true/false), cuff_band_count, cuff_band_width (e.g. 'narrow (~10-15mm)'), cuff_band_color. "
             "CRITICAL COLOR & FABRIC FIDELITY: Identify the EXACT real-world dye shade, darkness, and saturation. If it is dark, muted, dusty, or desaturated (e.g., dusty army-olive, slate-khaki, deep moss), describe that exact deep muted matte shade without brightening or oversaturating. "
             "CRITICAL SILHOUETTE (PULLOVER T-SHIRT / JERSEY vs SHIRT): If this is a T-shirt, athletic jersey, or polo, it is a PULLOVER! The entire front torso must be a solid, seamless continuous panel of fabric with ZERO buttons running down the chest/stomach. "
             "CRITICAL ACCENT COLOR ACCURACY: Forensic-analyze the exact colors of collar trim, shoulder stripes, and sleeve cuffs directly from visible pixels. If the collar/trim is navy blue or dark blue, DO NOT call it green! If shoulder stripes are purple/magenta, preserve purple/magenta without turning them into bright red! "
@@ -507,6 +633,9 @@ def analyze_garment_and_build_prompts(
             "   - Setting architecture (claw prongs, pave halo borders, openwork jaali filigree, articulated V-shaped collar links, jump rings, hanging briolettes). "
             "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
             "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Forensic-extract exact colors of collar trim and shoulder stripes directly from pixels (e.g. do NOT turn navy blue into green, do NOT turn purple stripes into red!). "
+            "   CRITICAL CHEST MARKS & SLEEVE ARCHITECTURE FORENSICS: "
+            "   - Extract all visible chest marks into 'chest_marks' separating manufacturer_brand (viewer-left) and team_or_club (viewer-right) with box_2d. If plain, return []. "
+            "   - Extract stripe count, start/end (mid-bicep), plain fabric gap, and narrow cuff into 'sleeve_architecture'. "
             "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves (strictly no dark shadow bleeding from bedsheets or fold crevices). "
             "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
             "5. Actual Items Only: Only identify the genuine item(s). If a necklace and earrings are both present, return TWO separate entries."
@@ -566,6 +695,9 @@ def analyze_garment_and_build_prompts(
             piece_desc = str(item.get("piece_descriptor", "")).strip() or None
             form_fact = str(item.get("form_factor", "")).strip() or None
             box_2d = item.get("box_2d")
+            chest_marks = item.get("chest_marks", [])
+            sleeve_arch = item.get("sleeve_architecture", {})
+            rot_deg = float(item.get("garment_rotation_degrees", 0.0) or 0.0)
             if not desc:
                 continue
             if target_norm != "all" and cat != target_norm:
@@ -581,6 +713,9 @@ def analyze_garment_and_build_prompts(
                     "piece_descriptor": piece_desc,
                     "form_factor": form_fact,
                     "box_2d": box_2d,
+                    "chest_marks": chest_marks,
+                    "sleeve_architecture": sleeve_arch,
+                    "garment_rotation_degrees": rot_deg,
                     "prompt": _build_final_prompt(
                         garment_description=desc,
                         category=cat,
@@ -590,6 +725,8 @@ def analyze_garment_and_build_prompts(
                         item_count=item_cnt,
                         piece_descriptor=piece_desc,
                         form_factor=form_fact,
+                        chest_marks=chest_marks,
+                        sleeve_architecture=sleeve_arch,
                     ),
                     "prompt_source": f"openai:{model_name}",
                 }
@@ -604,6 +741,9 @@ def analyze_garment_and_build_prompts(
             metal = str(first.get("metal_type", "")).strip() or None
             gemstone = str(first.get("gemstone_type", "")).strip() or None
             box_2d = first.get("box_2d")
+            chest_marks = first.get("chest_marks", [])
+            sleeve_arch = first.get("sleeve_architecture", {})
+            rot_deg = float(first.get("garment_rotation_degrees", 0.0) or 0.0)
             results.append(
                 {
                     "category": cat,
@@ -612,12 +752,17 @@ def analyze_garment_and_build_prompts(
                     "metal_type": metal or "",
                     "gemstone_type": gemstone or "",
                     "box_2d": box_2d,
+                    "chest_marks": chest_marks,
+                    "sleeve_architecture": sleeve_arch,
+                    "garment_rotation_degrees": rot_deg,
                     "prompt": _build_final_prompt(
                         garment_description=desc,
                         category=cat,
                         metal_type=metal,
                         gemstone_type=gemstone,
                         recognized_label=label,
+                        chest_marks=chest_marks,
+                        sleeve_architecture=sleeve_arch,
                     ),
                     "prompt_source": f"openai:{model_name}",
                 }

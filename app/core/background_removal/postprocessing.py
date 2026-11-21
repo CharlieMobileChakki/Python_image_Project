@@ -137,6 +137,13 @@ def validate_garment_background(
         confidence = 0.70
         preservation = "needs_review"
 
+    # 6. Ensure opaque sleeve/torso fabric remains opaque (heal any accidental interior holes)
+    try:
+        from app.core.image_processing.artwork_preserver import ensure_garment_fabric_opacity
+        refined_cutout = ensure_garment_fabric_opacity(refined_cutout)
+    except Exception as exc:
+        pass
+
     return {
         "status": status,
         "confidence": confidence,
