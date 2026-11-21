@@ -25,7 +25,8 @@ UPPER_STUDIO_RULES = (
     "Seamlessly reconstruct the continuous authentic fabric pattern and textile weave across the chest, stomach, and sleeves. "
     "For pullover t-shirts and jerseys, maintain a completely solid, seamless front panel with ZERO buttons or vertical seams down the torso. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, both sleeves hanging straight down along both sides at symmetrical matching angles, and strictly level horizontal hemline. "
-    "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the chest, torso, and ESPECIALLY BOTH SLEEVES must be solid, pristine, completely clean, and uniform in base color with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, ZERO shadow bleeding from the bedsheet or folds, and ZERO armpit burn patches. Both sleeves must have perfectly clean, unblemished, matching fabric surfaces. Any dark contrast trim (like collar or cuff bands) must remain strictly confined to the thin outer edge/cuff hem and NEVER bleed or smudge onto the sleeves or torso. "
+    "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the chest, torso, and ESPECIALLY BOTH SLEEVES must be solid, pristine, completely clean, and uniform in base color with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, ZERO shadow bleeding from the bedsheet or folds, and ZERO armpit burn patches. Both sleeves must have perfectly clean, unblemished, matching fabric surfaces with balanced, identical studio illumination. Any dark contrast trim (like collar or cuff bands) must remain strictly confined to the thin outer edge/cuff hem and NEVER bleed or smudge onto the sleeves or torso. "
+    "CHEST EMBLEMS: Reconstruct all visible chest markings, including any manufacturer brand logo (such as the black Adidas 3-bars logo) on the right chest (viewer's left) alongside the club crest on the left chest (viewer's right) with crisp embroidery detail. "
     "CRITICAL ISOLATION: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, legs, or bottom garments! The bottom half of the image MUST BE 100% empty, clean pure solid white (#FFFFFF). "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
@@ -78,7 +79,10 @@ CRITICAL RULES:
        - Collar & Neckline Trim: Identify exact color! If it is deep navy blue, midnight blue, or dark teal-blue, NEVER call it green!
        - Shoulder Stripes / Accents: Identify exact color (e.g., 3-stripes in deep purple / magenta). NEVER turn purple into bright red or maroon!
        - Sleeve Cuffs: Specify matching trim color.
-       - Emblems / Badges: Real Madrid circular royal crest on left chest.
+       - DUAL CHEST EMBLEMS (BRAND LOGO + TEAM CREST) - MANDATORY ZERO DROPPING:
+         * RIGHT CHEST (viewer's left): The Sportswear Brand Logo (e.g., black embroidered Adidas 3-bars logo, Nike swoosh, Puma cat). You MUST explicitly declare this logo if present: "Embroidered black Adidas 3-bars logo on the right chest".
+         * LEFT CHEST (viewer's right): The Team / Club Crest (e.g., circular Real Madrid royal crest with yellow crown and blue diagonal sash).
+         * MANDATORY: Reconstruct BOTH emblems side-by-side! DO NOT drop or erase the brand logo on the right chest!
        - STRICT FORBIDDEN DRIFT: Explicitly forbid the generator from shifting colors: "DO NOT turn navy blue trim into green! DO NOT change shoulder stripe colors!"
    - TROUSERS, CHINOS, JEANS & BOTTOM WEAR (CRITICAL REAL-WORLD COLOR & TEXTILE ACCURACY):
      * Forensic-analyze the exact real-world color, wash, and fabric:
@@ -330,6 +334,7 @@ def _build_final_prompt(
             "STRICT AUTHENTICITY & DESIGN CLONING (DRESS WAHI REHNA CHAHIYE): "
             "While straightening into the e-commerce studio pose, you MUST preserve the EXACT garment from the reference photo without altering it! "
             "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, pattern motifs, collar shape, buttons, placket, and stitching directly from the reference photo. "
+            "DUAL CHEST EMBLEMS: Faithfully reconstruct all visible chest markings, including any sportswear brand emblem (such as the black Adidas 3-bars logo) on the right chest (viewer's left) alongside the club crest on the left chest (viewer's right). Do NOT drop the right-chest brand logo! "
             "STRICT COLOR FIDELITY: Retain authentic colors of all trims and stripes directly from the photo without hue shift! Do NOT substitute dark blue / navy / black trim with green! Do NOT change purple/magenta shoulder stripes into red! Keep white fabric pure white (#FFFFFF)."
         )
         return (
@@ -471,6 +476,7 @@ def analyze_garment_and_build_prompts(
             "you MUST detect that it is folded and instruct the full unfolding into a complete, symmetrical 3D ghost mannequin with BOTH matching sleeves, complete torso, and level hemline. "
             "CRITICAL COLOR & FABRIC FIDELITY: Identify the EXACT real-world dye shade, darkness, and saturation. If it is dark, muted, dusty, or desaturated (e.g., dusty army-olive, slate-khaki, deep moss), describe that exact deep muted matte shade without brightening or oversaturating. "
             "CRITICAL SILHOUETTE (PULLOVER T-SHIRT / JERSEY vs SHIRT): If this is a T-shirt, athletic jersey, or polo, it is a PULLOVER! The entire front torso must be a solid, seamless continuous panel of fabric with ZERO buttons running down the chest/stomach. "
+            "MANDATORY DUAL CHEST EMBLEMS: Inspect both sides of the chest! If there is a brand logo on the right chest (e.g. black Adidas 3-bars logo) and a club crest on the left chest (e.g. Real Madrid crest), you MUST explicitly describe BOTH logos so neither is dropped. "
             "CRITICAL ACCENT COLOR ACCURACY: Forensic-analyze the exact colors of collar trim, shoulder stripes, and sleeve cuffs directly from visible pixels. If the collar/trim is navy blue or dark blue, DO NOT call it green! If shoulder stripes are purple/magenta, preserve purple/magenta without turning them into bright red! "
             "STRICT SPOTLESS FABRIC & SHADOW REJECTION: The fabric (especially on both sleeves) must be completely clean with ZERO dark smudges, ZERO dirty gray airbrush patches, and ZERO shadow bleed from bedsheets or fold crevices. Any dark collar/cuff trim must stay strictly at the outer edge hem. "
             "CRITICAL POSE STRAIGHTENING (E-COMMERCE CATALOG STANDARD): Reconstruct with level horizontal shoulders, symmetrical hanging sleeves along both sides at matching angles, and vertical plumb alignment, while preserving the exact original fabric, color, prints, and collar ('dress wahi rehna chahiye')."
@@ -506,7 +512,7 @@ def analyze_garment_and_build_prompts(
             "   - Exact metal alloy (warm yellow gold, rose gold, silver rhodium, platinum) and specular polish luster. "
             "   - Setting architecture (claw prongs, pave halo borders, openwork jaali filigree, articulated V-shaped collar links, jump rings, hanging briolettes). "
             "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
-            "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Forensic-extract exact colors of collar trim and shoulder stripes directly from pixels (e.g. do NOT turn navy blue into green, do NOT turn purple stripes into red!). "
+            "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Inspect both sides of chest for DUAL EMBLEMS: brand logo on right chest (e.g. black Adidas 3-bars) AND team crest on left chest (e.g. Real Madrid crest), keeping BOTH logos! Forensic-extract exact colors of collar trim and shoulder stripes directly from pixels (e.g. do NOT turn navy blue into green, do NOT turn purple stripes into red!). "
             "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves (strictly no dark shadow bleeding from bedsheets or fold crevices). "
             "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
             "5. Actual Items Only: Only identify the genuine item(s). If a necklace and earrings are both present, return TWO separate entries."

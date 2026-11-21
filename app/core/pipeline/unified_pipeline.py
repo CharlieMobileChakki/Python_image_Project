@@ -433,6 +433,19 @@ def execute_flow_b_with_person(
             total_items=len(planned_garments),
         )
 
+        # For apparel: pre-clean reference image background to eliminate bedsheet / floor shadow bleed during Qwen conditioning
+        if not is_jewelry:
+            try:
+                fg_ref = extract_isolated_flow_a(item_ref_image)
+                fg_alpha = np.array(fg_ref.split()[3])
+                if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
+                    white_bg_ref = Image.new("RGB", fg_ref.size, (255, 255, 255))
+                    white_bg_ref.paste(fg_ref, (0, 0), mask=fg_ref.split()[3])
+                    item_ref_image = white_bg_ref
+                    logger.info("Successfully pre-cleaned item reference image on pure white canvas to prevent background bleed.")
+            except Exception as exc:
+                logger.warning("Pre-cleaning item reference image failed (%s); using original reference crop.", exc)
+
         if is_jewelry and presentation_mode == "mode_a_product_only":
             # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
             fg_cutout = extract_isolated_flow_a(item_ref_image)
