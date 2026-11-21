@@ -74,20 +74,17 @@ def validate_garment_background(
 
     errors: list[str] = []
 
-    # 1. Perimeter border check: outer boundary band of canvas MUST be 100% transparent
-    border_inset = max(10, int(H * 0.01))
+    # 1. Perimeter border check: outer 10px of canvas MUST be 100% transparent
     border_mask = np.ones((H, W), dtype=bool)
-    border_mask[border_inset : H - border_inset, border_inset : W - border_inset] = False
+    border_mask[10 : H - 10, 10 : W - 10] = False
     border_alpha = alpha[border_mask]
     border_leaks = int((border_alpha > 20).sum())
-    max_border_leaks = max(50, int(H * 0.08))
-    if border_leaks > max_border_leaks:
+    if border_leaks > 50:
         errors.append(f"Perimeter bleed detected: {border_leaks} non-transparent pixels on canvas border")
 
     # 2. Garment presence and solid core check
     solid_core = int((alpha > 70).sum())
-    min_solid_core = max(500, int((H * W) * 0.0005))
-    if solid_core < min_solid_core:
+    if solid_core < 500:
         errors.append("Garment missing or too small (under-extracted)")
 
     # 3. Outer boundary halo inspection
