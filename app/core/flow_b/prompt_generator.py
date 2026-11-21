@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 UPPER_STUDIO_RULES = (
     "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Amazon Fashion hero shot): "
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing the hollow interior with zero human body inside. "
-    "Seamlessly reconstruct the continuous repeating fabric pattern and textile weave across the chest, stomach, placket, and sleeves. "
+    "Seamlessly reconstruct the continuous authentic fabric pattern and textile weave across the chest, stomach, and sleeves. "
+    "For pullover t-shirts and jerseys, maintain a completely solid, seamless front panel with ZERO buttons or vertical seams down the torso. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, both sleeves hanging straight down along both sides at symmetrical matching angles, and strictly level horizontal hemline. "
     "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the chest, torso, and ESPECIALLY BOTH SLEEVES must be solid, pristine, completely clean, and uniform in base color with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, ZERO shadow bleeding from the bedsheet or folds, and ZERO armpit burn patches. Both sleeves must have perfectly clean, unblemished, matching fabric surfaces. Any dark contrast trim (like collar or cuff bands) must remain strictly confined to the thin outer edge/cuff hem and NEVER bleed or smudge onto the sleeves or torso. "
     "CRITICAL ISOLATION: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, legs, or bottom garments! The bottom half of the image MUST BE 100% empty, clean pure solid white (#FFFFFF). "
@@ -70,6 +71,15 @@ CRITICAL RULES:
      * If the fabric has a dark, muted, dusty, desaturated, or earthy tone (e.g., dusty army-olive, muted slate-sage, dark khaki-green, charcoal navy, faded terracotta, dusty peach), explicitly specify the EXACT muted shade: "deep muted dusty army-olive with desaturated matte greyish undertones, exactly preserving the dark muted dye tone and saturation of the reference photo without any artificial brightening, neon tint, or oversaturation".
      * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
      * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
+   - SPORTS KITS, FOOTBALL JERSEYS & BRANDED APPAREL (CRITICAL ACCENT COLOR ACCURACY):
+     * NEVER guess or hallucinate accent colors from alternate seasons or club history!
+     * Deconstruct and specify each element's exact visible pixel hue:
+       - Base fabric color: (e.g., pure solid white #FFFFFF).
+       - Collar & Neckline Trim: Identify exact color! If it is deep navy blue, midnight blue, or dark teal-blue, NEVER call it green!
+       - Shoulder Stripes / Accents: Identify exact color (e.g., 3-stripes in deep purple / magenta). NEVER turn purple into bright red or maroon!
+       - Sleeve Cuffs: Specify matching trim color.
+       - Emblems / Badges: Real Madrid circular royal crest on left chest.
+       - STRICT FORBIDDEN DRIFT: Explicitly forbid the generator from shifting colors: "DO NOT turn navy blue trim into green! DO NOT change shoulder stripe colors!"
    - TROUSERS, CHINOS, JEANS & BOTTOM WEAR (CRITICAL REAL-WORLD COLOR & TEXTILE ACCURACY):
      * Forensic-analyze the exact real-world color, wash, and fabric:
        - If the pants are light beige, khaki, cream, or sand (like chino trousers): explicitly specify "men's flat-front straight-leg chino trousers in smooth light beige / warm khaki cotton twill fabric, with uniform solid matte light beige dye, slant front pockets, and clean straight hems".
@@ -89,11 +99,17 @@ CRITICAL RULES:
    - STRICT AUTHENTICITY ("DRESS WAHI REHNA CHAHIYE"):
      * While straightening the pose into a perfect e-commerce studio display, the garment itself (color, dye hue, fabric weave, texture, pockets, buttons, fly, hems) MUST match the reference photo 100% identically!
 
-4. Silhouette & Construction Anatomy:
-   - Neckline / Collar: Exact shape (e.g., Mandarin stand band collar / Nehru collar with small front slit, standard turn-down point collar, round crew neck, polo collar).
-   - Placket & Fastenings: e.g., front chest button placket with small round matching buttons, contrast stitching, or hook closures.
-   - Sleeves: Full-length, three-quarter, or half/short sleeves; specify if pattern/color continues seamlessly to open cuffs.
-   - Slits & Hemline: Straight knee-length hem, side seam slits, flared A-line hem, curved casual shirt hem, or straight leg cuffs.
+4. Silhouette & Construction Anatomy (T-SHIRT / FOOTBALL JERSEY vs BUTTONED SHIRT DISCRIMINATION):
+   - FIRST CLASSIFY CLOSURE & SILHOUETTE TYPE:
+     * PULLOVER T-SHIRT / SPORTS JERSEY / POLO / HOODIE:
+       If the garment is a pullover, the front torso across chest, stomach, and belly MUST BE a single, continuous, solid seamless fabric panel!
+       STRICT RULE: ABSOLUTELY ZERO full-length buttons running down the front, ZERO vertical button plackets down the belly, ZERO front zipper, and ZERO full-front openings!
+       If there is a collar closure (e.g. henley button tab, polo slit, or mandarin neck slit with single button), it is strictly a short 1-to-2 inch neck opening at the throat only. Below the neck opening, the entire torso is completely smooth, solid, seamless pullover fabric.
+     * FORMAL BUTTON-DOWN SHIRT / JACKET:
+       Only if the garment genuinely has full-length buttons or a zipper running from collar down to hem, declare a front button placket.
+   - Neckline / Collar: Exact shape (e.g., Mandarin stand band collar with small front slit, polo collar, round crew neck, V-neck).
+   - Sleeves: Full-length, three-quarter, or half/short sleeves; note any cuff trim bands.
+   - Slits & Hemline: Straight hemline, athletic curved hem, etc.
 
 5. Outfit Mode & Separates (STRICT REALITY RULE):
    - IF AND ONLY IF the person is actually wearing contrasting separates (e.g. shirt + jeans) OR two distinct garments are clearly laid out:
@@ -267,6 +283,18 @@ def _build_final_prompt(
     )
 
     if cat == "upper_clothes":
+        desc_clean = (garment_description or "").strip()
+        label_clean = (recognized_label or "").strip()
+        full_text = f"{desc_clean} {label_clean}".lower()
+
+        is_pullover = any(
+            k in full_text
+            for k in (
+                "t-shirt", "tshirt", "t shirt", "tee", "jersey", "polo", "hoodie", "sweatshirt",
+                "pullover", "football", "soccer", "cricket", "basketball", "athletic", "track top"
+            )
+        )
+
         isolation_header = (
             "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Amazon fashion hero shot) showing EXCLUSIVELY the standalone "
             "upper-body shirt / top / kurta floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
@@ -274,27 +302,42 @@ def _build_final_prompt(
             "CRITICAL ISOLATION RULE: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, waistline, or legs! "
             "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet. "
         )
+
+        if is_pullover:
+            closure_item = (
+                "3. PULLOVER SOLID FRONT PANEL (ZERO FULL-LENGTH BUTTONS): This is an athletic pullover T-shirt / sports jersey. "
+                "The front torso across the chest, stomach, and belly MUST BE a solid, continuous, seamless fabric panel. "
+                "ABSOLUTELY NO full-length front buttons, NO vertical button placket running down the front, NO front zipper, and NO button-down shirt opening! "
+                "If there is a collar closure at the throat (such as a henley slit, small polo tab, or mandarin collar button), it is strictly a short 1-to-2 inch neck opening only; "
+                "below the neck opening, the entire chest, stomach, and torso MUST be 100% solid, smooth, seamless pullover fabric."
+            )
+        else:
+            closure_item = (
+                "3. Front placket, buttons, or zipper (if present on the original garment) must run in a plumb, perfectly vertical straight line down the center."
+            )
+
         pose_rectification = (
             "MANDATORY E-COMMERCE POSE STRAIGHTENING: "
             "DO NOT COPY ANY BENT ARM, HAND-IN-POCKET, OR TILTED POSTURE FROM THE REFERENCE PHOTO! "
             "Realign into a pristine symmetrical catalog display: "
             "1. Both shoulders must be at the exact same horizontal height (perfectly level shoulders). "
             "2. Both sleeves must hang straight down symmetrically on both sides along the torso at equal matching angles. "
-            "3. Front placket, buttons, zipper, and collar slit must run in a plumb, perfectly vertical straight line down the center. "
+            f"{closure_item} "
             "4. Bottom hemline must be completely straight and horizontally level across. "
             "5. Empty hollow 3D inner neckline aperture, open sleeve cuffs, and open bottom hem showing the hollow interior with zero human body inside. "
         )
         garment_lock = (
             "STRICT AUTHENTICITY & DESIGN CLONING (DRESS WAHI REHNA CHAHIYE): "
             "While straightening into the e-commerce studio pose, you MUST preserve the EXACT garment from the reference photo without altering it! "
-            "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, pattern motifs, collar shape, buttons, placket, and stitching directly from the reference photo."
+            "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, pattern motifs, collar shape, buttons, placket, and stitching directly from the reference photo. "
+            "STRICT COLOR FIDELITY: Retain authentic colors of all trims and stripes directly from the photo without hue shift! Do NOT substitute dark blue / navy / black trim with green! Do NOT change purple/magenta shoulder stripes into red! Keep white fabric pure white (#FFFFFF)."
         )
         return (
             f"{isolation_header} "
             f"{pose_rectification} "
             f"{garment_lock} "
             f"{surface_rejection} "
-            f"Exact standalone upper garment to isolate and faithfully reconstruct from reference photo: {garment_description.strip()}. "
+            f"Exact standalone upper garment to isolate and faithfully reconstruct from reference photo: {desc_clean}. "
             f"{UPPER_STUDIO_RULES}"
         )
 
@@ -427,8 +470,10 @@ def analyze_garment_and_build_prompts(
             "CRITICAL DE-FOLDING & UNWRAPPING: If the garment is folded (e.g. folded diagonally into a triangle, only one sleeve visible, or rotated sideways on a bed), "
             "you MUST detect that it is folded and instruct the full unfolding into a complete, symmetrical 3D ghost mannequin with BOTH matching sleeves, complete torso, and level hemline. "
             "CRITICAL COLOR & FABRIC FIDELITY: Identify the EXACT real-world dye shade, darkness, and saturation. If it is dark, muted, dusty, or desaturated (e.g., dusty army-olive, slate-khaki, deep moss), describe that exact deep muted matte shade without brightening or oversaturating. "
+            "CRITICAL SILHOUETTE (PULLOVER T-SHIRT / JERSEY vs SHIRT): If this is a T-shirt, athletic jersey, or polo, it is a PULLOVER! The entire front torso must be a solid, seamless continuous panel of fabric with ZERO buttons running down the chest/stomach. "
+            "CRITICAL ACCENT COLOR ACCURACY: Forensic-analyze the exact colors of collar trim, shoulder stripes, and sleeve cuffs directly from visible pixels. If the collar/trim is navy blue or dark blue, DO NOT call it green! If shoulder stripes are purple/magenta, preserve purple/magenta without turning them into bright red! "
             "STRICT SPOTLESS FABRIC & SHADOW REJECTION: The fabric (especially on both sleeves) must be completely clean with ZERO dark smudges, ZERO dirty gray airbrush patches, and ZERO shadow bleed from bedsheets or fold crevices. Any dark collar/cuff trim must stay strictly at the outer edge hem. "
-            "CRITICAL POSE STRAIGHTENING (E-COMMERCE CATALOG STANDARD): Reconstruct with level horizontal shoulders, symmetrical hanging sleeves along both sides at matching angles, and vertical placket/buttons, while preserving the exact original fabric, color, prints, and collar ('dress wahi rehna chahiye')."
+            "CRITICAL POSE STRAIGHTENING (E-COMMERCE CATALOG STANDARD): Reconstruct with level horizontal shoulders, symmetrical hanging sleeves along both sides at matching angles, and vertical plumb alignment, while preserving the exact original fabric, color, prints, and collar ('dress wahi rehna chahiye')."
         )
     elif target_norm in ("pants", "skirt"):
         user_instruction = (
@@ -461,6 +506,7 @@ def analyze_garment_and_build_prompts(
             "   - Exact metal alloy (warm yellow gold, rose gold, silver rhodium, platinum) and specular polish luster. "
             "   - Setting architecture (claw prongs, pave halo borders, openwork jaali filigree, articulated V-shaped collar links, jump rings, hanging briolettes). "
             "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
+            "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Forensic-extract exact colors of collar trim and shoulder stripes directly from pixels (e.g. do NOT turn navy blue into green, do NOT turn purple stripes into red!). "
             "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves (strictly no dark shadow bleeding from bedsheets or fold crevices). "
             "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
             "5. Actual Items Only: Only identify the genuine item(s). If a necklace and earrings are both present, return TWO separate entries."
