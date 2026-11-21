@@ -530,11 +530,6 @@ def analyze_garment_and_build_prompts(
                 }
             )
 
-        # When target_garment is explicitly dress, ensure exactly 1 dress generation job is submitted
-        # while preserving multiple detected garments when target_garment == "all"
-        if target_norm == "dress" and results:
-            results = results[:1]
-
         # If target filter eliminated all items, keep the first detected garment rather than failing
         if not results and items:
             first = items[0]

@@ -414,10 +414,6 @@ def execute_flow_b_with_person(
     )
     prompt_time_ms = round((time.perf_counter() - t_prompt_start) * 1000, 2)
 
-    # When target_garment is explicitly dress, ensure exactly 1 dress generation job is submitted
-    if target_garment and target_garment.strip().lower() == "dress":
-        planned_garments = planned_garments[:1]
-
     processed_items: list[dict[str, Any]] = []
     gpu_time_ms = 0.0
 
@@ -465,8 +461,7 @@ def execute_flow_b_with_person(
 
         else:
             # Mode C (Display Stand for Jewelry) OR Standard Ghost Mannequin for Apparel
-            # Native 8-step schedule for Qwen-Image-2.1-Turbo apparel, 26 steps for fine jewelry
-            gpu_steps = 26 if is_jewelry else 8
+            gpu_steps = 26 if is_jewelry else 10
             gpu_guidance = 2.5 if is_jewelry else 1.0
 
             t_gpu_start = time.perf_counter()
@@ -504,7 +499,7 @@ def execute_flow_b_with_person(
                 final_cutout = val_check.get("refined_cutout", normalized_1024)
                 out_filename = f"{job_id}_{g_id}.png"
                 out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", compress_level=1)
+                final_cutout.save(out_path, format="PNG", optimize=True)
                 stand = None
                 val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
                 val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
@@ -776,18 +771,8 @@ def process_garment_pipeline(
     primary_image_rgb = images_rgb[0]
     single_image_bytes = image_bytes if isinstance(image_bytes, bytes) else image_bytes[0]
 
-    # Routing: If flat-lay / without-person / raw_cutout_only is requested, route directly to Flow A
-    # (BiRefNet Lite salient background removal with zero ChatGPT Vision and zero Qwen GPU calls)
-    resolved_flow = resolve_execution_flow(
-        person_mode=person_mode,
-        has_human=has_human,
-        mode_hint=mode_hint,
-    )
-    if (
-        resolved_flow == "without_person"
-        or person_mode in ("flow_a_legacy_raw", "without_person", "raw_cutout_only", "without", "no_person", "flat_lay")
-        or mode_hint in ("raw_cutout_only", "isolated", "flat_lay")
-    ):
+    # Legacy raw-cutout-only fallback (if explicitly requested)
+    if person_mode == "flow_a_legacy_raw" or mode_hint == "raw_cutout_only":
         return execute_flow_a_without_person(
             image_rgb=primary_image_rgb,
             image_bytes=single_image_bytes,

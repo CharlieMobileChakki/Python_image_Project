@@ -174,16 +174,13 @@ def generate_garment_via_gpu(
             job_id = submit_resp.json()["job_id"]
             logger.info("GPU job %s queued; polling status...", job_id)
 
-            # 2. Poll job status with adaptive intervals (0.5s initial, 0.8s subsequent) until done or error
+            # 2. Poll job status every 2.5s until done or error (with retry tolerance for Cloudflare blips)
             consecutive_errors = 0
-            poll_count = 0
             while True:
                 if time.perf_counter() - t_start > max_wait_sec:
                     raise RuntimeError(f"GPU Worker job {job_id} timed out after {max_wait_sec}s.")
 
-                poll_interval = 0.5 if poll_count == 0 else 0.8
-                poll_count += 1
-                time.sleep(poll_interval)
+                time.sleep(2.5)
                 try:
                     status_resp = client.get(f"{remote_url}/jobs/{job_id}", headers=headers)
                 except (httpx.RequestError, httpx.TimeoutException) as poll_exc:
@@ -197,7 +194,7 @@ def generate_garment_via_gpu(
                     consecutive_errors += 1
                     if consecutive_errors > 8:
                         raise RuntimeError(f"GPU Worker status check failed ({status_resp.status_code}) after retries: {status_resp.text[:200]}")
-                    logger.warning("Transient Cloudflare HTTP %d polling GPU (%d/8), retrying in %.1fs...", status_resp.status_code, consecutive_errors, poll_interval)
+                    logger.warning("Transient Cloudflare HTTP %d polling GPU (%d/8), retrying in 2.5s...", status_resp.status_code, consecutive_errors)
                     continue
 
                 if status_resp.status_code != 200:
@@ -233,7 +230,6 @@ def generate_garment_via_gpu(
     metadata = {
         "model": result_resp.headers.get("X-Model-Name", "Qwen-Image-Edit"),
         "inference_time_sec": result_resp.headers.get("X-Inference-Time-Sec", "0"),
-        "lock_wait_sec": result_resp.headers.get("X-Lock-Wait-Sec", "0"),
         "gpu_name": result_resp.headers.get("X-GPU-Name", "RTX 3090"),
         "seed": result_resp.headers.get("X-Seed", str(seed or "")),
     }
