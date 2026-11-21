@@ -13,4 +13,5 @@ outputs/*.png
 scripts/archive/
 scratch/
 .u2net/
+.models/
 *.onnx

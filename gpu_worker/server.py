@@ -91,16 +91,29 @@ def load_qwen21_pipeline():
             torch_dtype=dtype,
         )
 
-        # Model-level CPU offload keeps the active 7B DiT / text encoder 100% in full BF16 on RTX 3090 24GB VRAM
-        if hasattr(pipe, "enable_model_cpu_offload"):
+        gpu_info = _get_gpu_info()
+        vram_total = gpu_info.get("vram_total_gb", 0.0)
+
+        enable_offload_cfg = os.getenv("ENABLE_CPU_OFFLOAD", "auto").strip().lower()
+        should_offload = (
+            enable_offload_cfg in ("1", "true", "yes")
+            or (enable_offload_cfg == "auto" and vram_total > 0.0 and vram_total < 22.0)
+        )
+
+        if should_offload and hasattr(pipe, "enable_model_cpu_offload"):
             pipe.enable_model_cpu_offload()
-            logger.info("Enabled model_cpu_offload (full bfloat16 on RTX 3090 24GB VRAM).")
+            logger.info("Enabled model_cpu_offload (safe memory mode for <22GB VRAM).")
         else:
             pipe.to("cuda")
+            logger.info("Model loaded 100%% VRAM-resident on %s (%.1f GB VRAM) for maximum throughput.", gpu_info.get("gpu_name"), vram_total)
 
-        if hasattr(pipe, "enable_attention_slicing"):
+        enable_attn_slice = os.getenv("ENABLE_ATTENTION_SLICING", "false").strip().lower() in ("1", "true", "yes")
+        if enable_attn_slice and hasattr(pipe, "enable_attention_slicing"):
             pipe.enable_attention_slicing(1)
             logger.info("Enabled attention_slicing (prevents peak VRAM spikes on back-to-back jobs).")
+        else:
+            logger.info("Attention slicing disabled: using full parallel PyTorch 2.x SDPA / Tensor Cores.")
+
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
             pipe.vae.enable_slicing()
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
@@ -143,40 +156,38 @@ def _run_inference_sync(
         prompt,
     )
 
-    import gc
-    gc.collect()
+    t_lock_start = time.perf_counter()
+    with _pipe_lock:
+        lock_wait_sec = round(time.perf_counter() - t_lock_start, 3)
+        t_infer_start = time.perf_counter()
+        with torch.inference_mode():
+            pipe_kwargs = {
+                "prompt": prompt,
+                "image": ref_img,
+                "width": OUTPUT_WIDTH,
+                "height": OUTPUT_HEIGHT,
+                "use_kv_cache": True,
+                "generator": generator,
+            }
+            import inspect
+            call_params = inspect.signature(pipe.__call__).parameters
+            if "num_inference_steps" in call_params and steps and steps > 0:
+                pipe_kwargs["num_inference_steps"] = int(steps)
+            if "true_cfg_scale" in call_params and guidance_scale and guidance_scale > 0:
+                pipe_kwargs["true_cfg_scale"] = float(guidance_scale)
+            elif "guidance_scale" in call_params and guidance_scale and guidance_scale > 0:
+                pipe_kwargs["guidance_scale"] = float(guidance_scale)
+
+            logger.info("Executing Qwen pipe with steps=%s, guidance_scale=%s (lock wait: %.3fs)", steps, guidance_scale, lock_wait_sec)
+            result = pipe(**pipe_kwargs)
+            out_img: Image.Image = result.images[0].copy()
+            del result
+        actual_infer_sec = round(time.perf_counter() - t_infer_start, 3)
+
+    # Post-lock cleanup: release memory outside the lock so waiting jobs can acquire immediately
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    t0 = time.perf_counter()
-    with _pipe_lock, torch.inference_mode():
-        pipe_kwargs = {
-            "prompt": prompt,
-            "image": ref_img,
-            "width": OUTPUT_WIDTH,
-            "height": OUTPUT_HEIGHT,
-            "use_kv_cache": True,
-            "generator": generator,
-        }
-        import inspect
-        call_params = inspect.signature(pipe.__call__).parameters
-        if "num_inference_steps" in call_params and steps and steps > 0:
-            pipe_kwargs["num_inference_steps"] = int(steps)
-        if "true_cfg_scale" in call_params and guidance_scale and guidance_scale > 0:
-            pipe_kwargs["true_cfg_scale"] = float(guidance_scale)
-        elif "guidance_scale" in call_params and guidance_scale and guidance_scale > 0:
-            pipe_kwargs["guidance_scale"] = float(guidance_scale)
-
-        logger.info("Executing Qwen pipe with steps=%s, guidance_scale=%s", steps, guidance_scale)
-        result = pipe(**pipe_kwargs)
-        out_img: Image.Image = result.images[0].copy()
-        del result
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
-
-    elapsed = round(time.perf_counter() - t0, 2)
     gpu_info = _get_gpu_info()
 
     buf = io.BytesIO()
@@ -184,7 +195,8 @@ def _run_inference_sync(
     headers = {
         "X-Model-Name": MODEL_ID,
         "X-GPU-Name": gpu_info["gpu_name"],
-        "X-Inference-Time-Sec": str(elapsed),
+        "X-Inference-Time-Sec": str(actual_infer_sec),
+        "X-Lock-Wait-Sec": str(lock_wait_sec),
         "X-Seed": str(used_seed),
     }
     return buf.getvalue(), headers
@@ -224,7 +236,14 @@ def _background_job_runner(
                 _jobs[job_id]["png_bytes"] = png_bytes
                 _jobs[job_id]["headers"] = headers
                 _jobs[job_id]["finished_at"] = time.time()
-        logger.info("Job %s completed in %ss.", job_id, headers["X-Inference-Time-Sec"])
+                _jobs[job_id]["inference_time_sec"] = headers["X-Inference-Time-Sec"]
+                _jobs[job_id]["lock_wait_sec"] = headers["X-Lock-Wait-Sec"]
+        logger.info(
+            "Job %s completed | lock wait: %ss | actual inference: %ss",
+            job_id,
+            headers["X-Lock-Wait-Sec"],
+            headers["X-Inference-Time-Sec"],
+        )
     except Exception as exc:
         logger.exception("Job %s failed: %s", job_id, exc)
         with _jobs_lock:
