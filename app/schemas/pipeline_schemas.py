@@ -9,10 +9,14 @@ class GarmentItem(BaseModel):
     """Clean production metadata for a single extracted and normalized 2D garment."""
     category: str = Field(default="product", description="Garment category (e.g. upper_clothes, pants, dress)")
     title: str = Field(default="Garment Cutout", description="Human-friendly garment title/label")
-    url: str = Field(..., description="Direct URL to the transparent PNG")
+    url: str = Field(..., description="Direct URL to the transparent garment image")
     resolution: str = Field(default="8192x8192", description="Output canvas resolution (e.g. 8192x8192, 4096x4096)")
+    format: str = Field(default="webp", description="Output format: 'webp' or 'png'")
+    file_size_mb: float | None = Field(default=None, description="Output image file size in MB")
+    file_size_bytes: int | None = Field(default=None, description="Output image file size in bytes")
     # Optional aliases for backwards compatibility
     output_png_url: str | None = Field(default=None, description="Alias for url")
+    output_image_url: str | None = Field(default=None, description="Alias for url")
     recognized_label: str | None = Field(default=None, description="Alias for title")
     garment_id: str | None = Field(default=None, description="Garment identifier")
     output_png_base64: str | None = Field(default=None, description="Optional Base64 data URI")

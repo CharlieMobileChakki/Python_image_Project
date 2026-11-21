@@ -76,6 +76,7 @@ async def background_removal_endpoint(
     presentation_mode: str = Form("mode_c_display_stand", description="Presentation mode: 'mode_a_product_only', 'mode_b_studio_presentation', 'mode_c_display_stand'"),
     item_count_override: int | None = Form(None, description="Optional manual quantity override (e.g. 1 for 1 kada)"),
     output_resolution: str = Form("8k", description="Output canvas resolution: '8k' (8192x8192), '4k' (4096x4096), '2k' (2048x2048), or '1k' (1024x1024)"),
+    output_format: str = Form("webp", description="Output format: 'webp' (default, ~1-3MB ultra-lightweight) or 'png'"),
 ) -> Any:
     """Unified AI 3D Garment & Jewelry Studio API.
 
@@ -127,6 +128,7 @@ async def background_removal_endpoint(
                 presentation_mode=presentation_mode,
                 item_count_override=item_count_override,
                 output_resolution=output_resolution,
+                output_format=output_format,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -138,27 +140,31 @@ async def background_removal_endpoint(
         for f in upload_list:
             await f.close()
 
-    # Check if client requested direct PNG image stream (Option 1)
+    # Check if client requested direct PNG/WebP image stream (Option 1)
     accept_hdr = request.headers.get("accept", "").lower()
     wants_image = (
-        response_format.lower() in ("image_direct", "direct", "image", "stream", "png")
+        response_format.lower() in ("image_direct", "direct", "image", "stream", "png", "webp")
         or ("image/" in accept_hdr and "application/json" not in accept_hdr)
     )
 
     if wants_image and result.get("garments") and len(result["garments"]) == 1:
         top_garment = result["garments"][0]
-        png_path = OUTPUT_DIR / Path(top_garment["output_png_url"]).name
-        if png_path.exists():
+        raw_path_name = Path(top_garment.get("url") or top_garment.get("output_png_url") or "").name
+        img_path = OUTPUT_DIR / raw_path_name
+        if img_path.exists():
+            media_type = "image/webp" if img_path.suffix.lower() == ".webp" else "image/png"
             return FileResponse(
-                path=png_path,
-                media_type="image/png",
-                filename=png_path.name,
+                path=img_path,
+                media_type=media_type,
+                filename=img_path.name,
                 headers={
                     "X-Flow-Mode": result.get("mode", "without_person"),
                     "X-Garment-Category": top_garment["category"],
                     "X-Garment-Label": top_garment["recognized_label"],
                     "X-Execution-Time-Ms": str(result["execution_time_ms"]),
                     "X-Canvas-Size": top_garment.get("resolution", "8192x8192"),
+                    "X-File-Size-MB": str(top_garment.get("file_size_mb", 0)),
+                    "X-Image-Format": top_garment.get("format", "webp"),
                 },
             )
 
@@ -182,7 +188,11 @@ async def background_removal_endpoint(
             "title": title,
             "url": full_url,
             "resolution": g.get("resolution", "8192x8192"),
+            "format": g.get("format", "webp"),
+            "file_size_mb": g.get("file_size_mb"),
+            "file_size_bytes": g.get("file_size_bytes"),
             "output_png_url": full_url,
+            "output_image_url": full_url,
             "recognized_label": title,
             "garment_id": g.get("garment_id"),
             "output_png_base64": g.get("output_png_base64") if include_base64 else None,
@@ -225,6 +235,7 @@ async def jewelry_studio_endpoint(
     custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
     output_resolution: str = Form("8k", description="Output canvas resolution: '8k' (8192x8192), '4k' (4096x4096), '2k' (2048x2048), or '1k' (1024x1024)"),
+    output_format: str = Form("webp", description="Output format: 'webp' (default, ~1-3MB ultra-lightweight) or 'png'"),
 ) -> Any:
     """Dedicated 3D Luxury Jewelry Studio Endpoint.
 
@@ -259,6 +270,7 @@ async def jewelry_studio_endpoint(
                 include_base64=include_base64,
                 custom_prompt=custom_prompt,
                 output_resolution=output_resolution,
+                output_format=output_format,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -285,7 +297,11 @@ async def jewelry_studio_endpoint(
             "title": title,
             "url": full_url,
             "resolution": g.get("resolution", "8192x8192"),
+            "format": g.get("format", "webp"),
+            "file_size_mb": g.get("file_size_mb"),
+            "file_size_bytes": g.get("file_size_bytes"),
             "output_png_url": full_url,
+            "output_image_url": full_url,
             "recognized_label": title,
             "garment_id": g.get("garment_id"),
             "output_png_base64": g.get("output_png_base64") if include_base64 else None,
@@ -307,23 +323,24 @@ async def jewelry_studio_endpoint(
 
 @router.get("/outputs/{filename}")
 async def get_output_image(filename: str) -> FileResponse:
-    """Download or view a processed 1024x1024 transparent garment PNG."""
+    """Download or view a processed transparent garment image (WebP or PNG)."""
     file_path = OUTPUT_DIR / filename
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Requested garment image does not exist.")
-    return FileResponse(path=file_path, media_type="image/png", filename=filename)
+    media_type = "image/webp" if filename.lower().endswith(".webp") else "image/png"
+    return FileResponse(path=file_path, media_type=media_type, filename=filename)
 
 
 @router.get("/download-batch-zip/{job_id}")
 async def download_batch_zip(job_id: str) -> Response:
-    """Download all extracted 1024x1024 transparent garment PNGs for a given job in a single ZIP archive."""
-    png_files = sorted(list(OUTPUT_DIR.glob(f"{job_id}_*.png")))
-    if not png_files:
+    """Download all extracted transparent garment images for a given job in a single ZIP archive."""
+    img_files = sorted([p for p in OUTPUT_DIR.glob(f"{job_id}_*.*") if p.suffix.lower() in (".webp", ".png", ".jpg", ".jpeg")])
+    if not img_files:
         raise HTTPException(status_code=404, detail="No extracted garments found for this job ID.")
 
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for p in png_files:
+        for p in img_files:
             zf.write(p, arcname=p.name)
 
     zip_bytes = zip_buf.getvalue()
@@ -339,27 +356,28 @@ async def forward_downstream_endpoint(
     job_id: str = Form(..., description="Job ID of processed garments"),
     target_api_url: str = Form(..., description="Destination API URL"),
 ) -> Any:
-    """Forward all extracted garment PNGs in ONE single multipart request to a downstream API."""
+    """Forward all extracted garment images in ONE single multipart request to a downstream API."""
     import httpx
-    png_files = sorted(list(OUTPUT_DIR.glob(f"{job_id}_*.png")))
-    if not png_files:
+    img_files = sorted([p for p in OUTPUT_DIR.glob(f"{job_id}_*.*") if p.suffix.lower() in (".webp", ".png")])
+    if not img_files:
         raise HTTPException(status_code=404, detail="No extracted garments found for this job.")
 
     files_payload = []
-    for p in png_files:
-        files_payload.append(("files[]", (p.name, p.read_bytes(), "image/png")))
+    for p in img_files:
+        mime = "image/webp" if p.suffix.lower() == ".webp" else "image/png"
+        files_payload.append(("files[]", (p.name, p.read_bytes(), mime)))
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 target_api_url,
                 files=files_payload,
-                data={"job_id": job_id, "total_garments": str(len(png_files))},
+                data={"job_id": job_id, "total_garments": str(len(img_files))},
             )
             return {
                 "success": resp.is_success,
                 "status_code": resp.status_code,
-                "forwarded_files_count": len(png_files),
+                "forwarded_files_count": len(img_files),
                 "downstream_response": resp.json() if "application/json" in resp.headers.get("content-type", "") else resp.text,
             }
     except Exception as exc:

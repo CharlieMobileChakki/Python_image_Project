@@ -982,12 +982,12 @@ select.studio-select:focus {
         <div class="banner-icon">⚡</div>
         <div class="banner-details">
           <h3>Unified 3D Ghost Mannequin Studio (Node.js & UI)</h3>
-          <p>Single Production Flow: ChatGPT Vision ➔ Remote RTX 3090 GPU Qwen 2.1 ➔ BiRefNet Lite 8K / 4K Ultra-HD Transparent PNG</p>
+          <p>Single Production Flow: ChatGPT Vision ➔ Remote RTX 3090 GPU Qwen 2.1 ➔ BiRefNet Lite 8K / 4K Ultra-HD WebP (~1-3 MB)</p>
         </div>
       </div>
       <div class="banner-tags">
         <span class="mode-pill flow-b">RTX 3090 GPU Active</span>
-        <span class="mode-pill" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);">8K / 4K Ultra-HD Studio Output</span>
+        <span class="mode-pill" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);">8K WebP Studio Output (~1-3 MB)</span>
       </div>
     </div>
 
@@ -1040,6 +1040,14 @@ select.studio-select:focus {
           </select>
         </div>
 
+        <div class="setting-item">
+          <label for="formatModeSelect">Format:</label>
+          <select id="formatModeSelect" class="studio-select" style="min-width: 145px;">
+            <option value="webp" selected>🚀 WebP (~1-3MB Fast)</option>
+            <option value="png">📁 PNG (~30-40MB)</option>
+          </select>
+        </div>
+
         <label class="toggle-switch" title="Combine up to 4 photos of the same jewelry item (top, sides, angle) into 1 single 3D master photo">
           <input type="checkbox" id="multiAngleToggle" />
           <span style="color: #F59E0B; font-weight: 600;">💍 Multi-Angle Fusion (Up to 4 Photos)</span>
@@ -1064,7 +1072,7 @@ select.studio-select:focus {
           <span>▶</span> Process All (<span id="batchCountNum">0</span>)
         </button>
         <button id="downloadAllBtn" class="btn-secondary" onclick="downloadAllCompleted()" disabled>
-          <span>⬇</span> Download Clean PNGs
+          <span>⬇</span> Download Clean Cutouts
         </button>
         <button class="btn-secondary" style="color: var(--text-muted);" onclick="clearAllQueue()">
           Clear
@@ -1132,7 +1140,7 @@ select.studio-select:focus {
               <button class="view-tab" data-view="compare" onclick="switchOutputView('compare')">↔ Compare</button>
             </div>
             <button id="downloadCurrentBtn" class="btn-primary" style="padding: 4px 10px; font-size: 11px; display: none;" onclick="downloadActiveGarment()">
-              ⬇ Download PNG
+              ⬇ Download
             </button>
           </div>
         </div>
@@ -1512,11 +1520,13 @@ select.studio-select:focus {
       const presMode = document.getElementById('presentationModeSelect')?.value || 'mode_c_display_stand';
       const countVal = document.getElementById('itemCountOverride')?.value;
       const resMode = document.getElementById('resolutionModeSelect')?.value || '8k';
+      const fmtMode = document.getElementById('formatModeSelect')?.value || 'webp';
       const isJewelry = ['necklace', 'ring', 'earrings', 'bangles'].includes(selectedCat);
       formData.append('person_mode', isJewelry ? 'jewelry' : 'with_person');
       formData.append('target_garment', selectedCat);
       formData.append('presentation_mode', presMode);
       formData.append('output_resolution', resMode);
+      formData.append('output_format', fmtMode);
       if (countVal && countVal !== 'auto') {
         formData.append('item_count_override', parseInt(countVal, 10));
       }
@@ -1641,6 +1651,8 @@ select.studio-select:focus {
       const qualityScore = valMetrics.mask_quality ? `<div class="telemetry-badge">Quality: <strong>${Math.round(valMetrics.mask_quality * 100)}%</strong></div>` : '';
       const presText = activeGarment.presentation_mode === 'ghost_mannequin' ? '3D Ghost Mannequin' : (activeGarment.presentation_mode || '').replace('mode_', 'Mode ').replace(/_/g, ' ');
       const modeLabel = presText ? `<div class="telemetry-badge" style="color: #35C8E8;">Mode: <strong>${presText}</strong></div>` : '';
+      const fmtLabel = (activeGarment.format || (activeGarment.url && activeGarment.url.endsWith('.png') ? 'png' : 'webp')).toUpperCase();
+      const sizeInfo = activeGarment.file_size_mb ? `<div class="telemetry-badge" style="color: #10B981;">Size: <strong>${activeGarment.file_size_mb} MB (${fmtLabel})</strong></div>` : `<div class="telemetry-badge" style="color: #10B981;">Format: <strong>${fmtLabel}</strong></div>`;
 
       document.getElementById('telemetryRow').innerHTML = `
         <div class="telemetry-badge">Category: <strong>${activeGarment.recognized_label || activeGarment.category}</strong></div>
@@ -1651,6 +1663,7 @@ select.studio-select:focus {
         ${colorBadge}
         ${qualityScore}
         <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || "8192×8192"}</strong></div>
+        ${sizeInfo}
         <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
         <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>
       `;
@@ -1727,24 +1740,26 @@ select.studio-select:focus {
       if (!item || !item.result || !item.result.garments) return;
       const g = item.result.garments[activeGarmentIndex] || item.result.garments[0];
       const baseName = item.file.name.replace(/\.[^/.]+$/, "");
+      const fmt = g.format || (g.url && g.url.endsWith('.png') ? 'png' : 'webp');
 
       const a = document.createElement('a');
-      a.href = g.output_png_url;
-      a.download = `${baseName}_${g.category}_${g.resolution || '2048'}.png`;
+      a.href = g.url || g.output_png_url;
+      a.download = `${baseName}_${g.category}_${g.resolution || '8k'}.${fmt}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
     }
 
-    // Download all completed clean PNGs
+    // Download all completed clean cutouts
     async function downloadAllCompleted() {
       const completed = fileQueue.filter(i => i.status === 'done' && i.result && i.result.garments);
       for (let item of completed) {
         const baseName = item.file.name.replace(/\.[^/.]+$/, "");
         item.result.garments.forEach(g => {
+          const fmt = g.format || (g.url && g.url.endsWith('.png') ? 'png' : 'webp');
           const a = document.createElement('a');
-          a.href = g.output_png_url;
-          a.download = `${baseName}_${g.category}_1024.png`;
+          a.href = g.url || g.output_png_url;
+          a.download = `${baseName}_${g.category}_${g.resolution || '8k'}.${fmt}`;
           document.body.appendChild(a);
           a.click();
           a.remove();
