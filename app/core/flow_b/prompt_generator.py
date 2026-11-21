@@ -24,6 +24,7 @@ UPPER_STUDIO_RULES = (
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing the hollow interior with zero human body inside. "
     "Seamlessly reconstruct the continuous repeating fabric pattern and textile weave across the chest, stomach, placket, and sleeves. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, both sleeves hanging straight down along both sides at symmetrical matching angles, and strictly level horizontal hemline. "
+    "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the chest, torso, and ESPECIALLY BOTH SLEEVES must be solid, pristine, completely clean, and uniform in base color with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, ZERO shadow bleeding from the bedsheet or folds, and ZERO armpit burn patches. Both sleeves must have perfectly clean, unblemished, matching fabric surfaces. Any dark contrast trim (like collar or cuff bands) must remain strictly confined to the thin outer edge/cuff hem and NEVER bleed or smudge onto the sleeves or torso. "
     "CRITICAL ISOLATION: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, legs, or bottom garments! The bottom half of the image MUST BE 100% empty, clean pure solid white (#FFFFFF). "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
@@ -159,7 +160,19 @@ CRITICAL RULES:
        Identify every stone type, cut, and color (e.g. "Natural lustrous white seed pearl fringe", "Faceted blush-pink crystal drops", "Emerald green & ruby red cabochons", "Brilliant-cut clear diamond solitaire").
        Detail the exact position of each stone and its color palette with 100% forensic fidelity!
 
-10. Allowed category values:
+11. FOLDED, CRUMPLED, OR SIDELONG/TILTED CLOTHING (FULL UNWRAPPING & UNFOLDING MANDATE):
+   - Real-world users frequently upload photos where clothing is folded diagonally, crumpled, bunched up, half-hidden, or rotated sideways/horizontally on a bed, sofa, or floor.
+   - MANDATORY DE-FOLDING & SYMMETRY RESTORATION:
+     * You MUST mentally unfold, unwrinkle, and steam-press the garment into its complete, full-size, fully spread-out 3D form.
+     * If the photo shows a shirt folded in half or folded into a triangle with only ONE sleeve visible: You MUST extrapolate and reconstruct the COMPLETE shirt with BOTH MATCHING SLEEVES, fully opened torso, complete chest, and level hemline.
+     * DO NOT generate a folded shirt! Reconstruct it 100% unfolded, fully expanded, and symmetrical.
+   - STRICT ANTI-SHADOW & ANTI-BLEED DIRECTIVE (CRITICAL):
+     * When clothing is folded or placed on high-contrast surfaces (e.g., black-patterned bedsheets, dark carpets), deep shadows and background colors often touch the fabric.
+     * YOU MUST EXPLICITLY INSTRUCT THE GENERATOR TO REJECT ALL SHADOWS: The fabric (especially on both sleeves and chest) must be completely clean, crisp, and uniform. FORBID any dark gray gradients, dirty shadows, armpit smudges, or pigment bleed from bedsheets or fold crevices.
+   - ORIENTATION RECTIFICATION:
+     * Regardless of whether the photo is rotated horizontally (90 degrees sideways), diagonally, or upside down, the output MUST be strictly upright facing forward (0-degree vertical alignment, neckline at top, hemline at bottom).
+
+12. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
    - For Jewelry: "necklace", "ring", "earrings", "bangles"
 
@@ -246,8 +259,10 @@ def _build_final_prompt(
         })
 
     surface_rejection = (
-        "STRICT SURFACE REJECTION: If the reference photo shows clothing placed on a bedsheet, mattress, blanket, floor, rug, carpet, or table, "
+        "STRICT SURFACE & SHADOW REJECTION: If the reference photo shows clothing placed on a bedsheet, mattress, blanket, floor, rug, carpet, or table, "
         "COMPLETELY IGNORE the bedsheet and its background patterns! Do NOT apply any bedsheet print, geometric shapes, or bedding colors to the garment. "
+        "DO NOT BLEED ANY FOLD SHADOWS OR BACKGROUND COLORS ONTO THE FABRIC OR SLEEVES! Both sleeves must be 100% clean and pristine with zero dark smudges. "
+        "If the clothing is folded diagonally or crumpled, FULLY UNFOLD and expand it into a complete, symmetrical, unwrinkled 3D garment. "
         "Reconstruct ONLY the authentic stitched garment itself."
     )
 
@@ -407,9 +422,12 @@ def analyze_garment_and_build_prompts(
         user_instruction = (
             "Analyze ONLY the UPPER-BODY garment (shirt, t-shirt, top, kurta, jacket) in this image. "
             "Completely IGNORE and exclude any pants, jeans, trousers, or bottom wear. "
-            "STRICT BACKGROUND RULE: If the clothing is placed on a bedsheet, mattress, blanket, floor, or table, "
+            "STRICT BACKGROUND & FOLDING RULE: If the clothing is placed on a bedsheet, mattress, blanket, floor, or table, "
             "the bedsheet / floor is 100% BACKGROUND. Do NOT mistake bedsheet patterns for garment motifs! "
+            "CRITICAL DE-FOLDING & UNWRAPPING: If the garment is folded (e.g. folded diagonally into a triangle, only one sleeve visible, or rotated sideways on a bed), "
+            "you MUST detect that it is folded and instruct the full unfolding into a complete, symmetrical 3D ghost mannequin with BOTH matching sleeves, complete torso, and level hemline. "
             "CRITICAL COLOR & FABRIC FIDELITY: Identify the EXACT real-world dye shade, darkness, and saturation. If it is dark, muted, dusty, or desaturated (e.g., dusty army-olive, slate-khaki, deep moss), describe that exact deep muted matte shade without brightening or oversaturating. "
+            "STRICT SPOTLESS FABRIC & SHADOW REJECTION: The fabric (especially on both sleeves) must be completely clean with ZERO dark smudges, ZERO dirty gray airbrush patches, and ZERO shadow bleed from bedsheets or fold crevices. Any dark collar/cuff trim must stay strictly at the outer edge hem. "
             "CRITICAL POSE STRAIGHTENING (E-COMMERCE CATALOG STANDARD): Reconstruct with level horizontal shoulders, symmetrical hanging sleeves along both sides at matching angles, and vertical placket/buttons, while preserving the exact original fabric, color, prints, and collar ('dress wahi rehna chahiye')."
         )
     elif target_norm in ("pants", "skirt"):
@@ -443,6 +461,7 @@ def analyze_garment_and_build_prompts(
             "   - Exact metal alloy (warm yellow gold, rose gold, silver rhodium, platinum) and specular polish luster. "
             "   - Setting architecture (claw prongs, pave halo borders, openwork jaali filigree, articulated V-shaped collar links, jump rings, hanging briolettes). "
             "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
+            "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves (strictly no dark shadow bleeding from bedsheets or fold crevices). "
             "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
             "5. Actual Items Only: Only identify the genuine item(s). If a necklace and earrings are both present, return TWO separate entries."
         )

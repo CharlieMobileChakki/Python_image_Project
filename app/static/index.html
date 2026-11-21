@@ -1619,15 +1619,16 @@ select.studio-select:focus {
       }
 
       // Render Real Telemetry Badges
-      const elapsedSec = (result.execution_time_ms / 1000).toFixed(1);
-      const isFlowB = result.mode === 'with_person' || (result.diagnostics && result.diagnostics.scene_type === 'person') || result.mode === 'jewelry_studio';
+      const elapsedSec = ((result.execution_time_ms || (result.processing_time_sec ? result.processing_time_sec * 1000 : 0)) / 1000).toFixed(1);
+      const isFlowB = result.mode === 'with_person' || (result.diagnostics && result.diagnostics.scene_type === 'person') || result.mode === 'jewelry_studio' || (result.garments && result.garments.some(g => g.presentation_mode === 'ghost_mannequin'));
       const standInfo = activeGarment.stand_type ? `<div class="telemetry-badge">Stand: <strong>${activeGarment.stand_type}</strong></div>` : '';
       const viewsInfo = (activeGarment.views_analyzed && activeGarment.views_analyzed > 1) ? `<div class="telemetry-badge" style="color: #F59E0B;">Angles Fused: <strong>${activeGarment.views_analyzed} views</strong></div>` : '';
       const valMetrics = activeGarment.validation_metrics || {};
       const countStatus = valMetrics.count_status || `${activeGarment.detected_item_count || 1} Item(s) Verified`;
       const colorBadge = valMetrics.color_status ? `<div class="telemetry-badge" style="color: #10B981;">Color: <strong>${valMetrics.color_status}</strong></div>` : '';
       const qualityScore = valMetrics.mask_quality ? `<div class="telemetry-badge">Quality: <strong>${Math.round(valMetrics.mask_quality * 100)}%</strong></div>` : '';
-      const modeLabel = activeGarment.presentation_mode ? `<div class="telemetry-badge" style="color: #35C8E8;">Mode: <strong>${activeGarment.presentation_mode.replace('mode_', 'Mode ').replace(/_/g, ' ')}</strong></div>` : '';
+      const presText = activeGarment.presentation_mode === 'ghost_mannequin' ? '3D Ghost Mannequin' : (activeGarment.presentation_mode || '').replace('mode_', 'Mode ').replace(/_/g, ' ');
+      const modeLabel = presText ? `<div class="telemetry-badge" style="color: #35C8E8;">Mode: <strong>${presText}</strong></div>` : '';
 
       document.getElementById('telemetryRow').innerHTML = `
         <div class="telemetry-badge">Category: <strong>${activeGarment.recognized_label || activeGarment.category}</strong></div>

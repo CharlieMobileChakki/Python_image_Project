@@ -185,6 +185,9 @@ async def background_removal_endpoint(
             "garment_id": g.get("garment_id"),
             "output_png_base64": g.get("output_png_base64") if include_base64 else None,
             "stand_type": g.get("stand_type"),
+            "presentation_mode": g.get("presentation_mode", "ghost_mannequin"),
+            "detected_item_count": g.get("detected_item_count", 1),
+            "validation_metrics": g.get("validation_metrics"),
             "views_analyzed": g.get("views_analyzed", 1),
         })
 
@@ -195,6 +198,9 @@ async def background_removal_endpoint(
         "total_garments": len(clean_garments),
         "garments": clean_garments,
         "processing_time_sec": total_time_sec,
+        "execution_time_ms": result.get("execution_time_ms", int(total_time_sec * 1000)),
+        "mode": result.get("mode", "with_person"),
+        "diagnostics": result.get("diagnostics", {}),
         "job_id": result.get("job_id"),
         "success": True,
     }

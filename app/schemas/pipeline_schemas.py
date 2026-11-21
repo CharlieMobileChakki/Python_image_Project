@@ -34,6 +34,9 @@ class ProcessGarmentResponse(BaseModel):
     success: bool | None = Field(default=True, description="Success flag")
     message: str | None = Field(default=None, description="Status message")
     image: str | None = Field(default=None, description="Base64 data URI if requested")
+    execution_time_ms: float | None = Field(default=None, description="Execution time in milliseconds")
+    mode: str | None = Field(default=None, description="Pipeline execution mode")
+    diagnostics: dict[str, Any] | None = Field(default=None, description="Pipeline diagnostics")
 
 
 class DownstreamPackageRequest(BaseModel):
