@@ -223,7 +223,7 @@ def generate_garment_via_gpu(
 
     except httpx.ConnectError as exc:
         raise RuntimeError(
-            f"Cannot connect to GPU Worker at {remote_url}. Ensure the AIC Cloud RTX 3090 instance is started."
+            f"Cannot connect to GPU Worker at {remote_url}. Ensure the AIC Cloud GPU instance is started and tunnel is active."
         ) from exc
     except RuntimeError:
         raise
@@ -236,9 +236,10 @@ def generate_garment_via_gpu(
         raise RuntimeError(f"Invalid image received from GPU Worker: {exc}") from exc
 
     metadata = {
-        "model": result_resp.headers.get("X-Model-Name", "Qwen-Image-Edit"),
+        "model": result_resp.headers.get("X-Model-Name", "Qwen/Qwen-Image-2.1-Turbo"),
         "inference_time_sec": result_resp.headers.get("X-Inference-Time-Sec", "0"),
-        "gpu_name": result_resp.headers.get("X-GPU-Name", "RTX 3090"),
+        "gpu_name": result_resp.headers.get("X-GPU-Name", "NVIDIA RTX A6000"),
+        "vram_gb": result_resp.headers.get("X-VRAM-GB", "48.0"),
         "seed": result_resp.headers.get("X-Seed", str(seed or "")),
     }
     return generated_img, metadata

@@ -982,11 +982,11 @@ select.studio-select:focus {
         <div class="banner-icon">⚡</div>
         <div class="banner-details">
           <h3>Unified 3D Ghost Mannequin Studio (Node.js & UI)</h3>
-          <p>Single Production Flow: ChatGPT Vision ➔ Remote RTX 3090 GPU Qwen 2.1 ➔ BiRefNet Lite 1024x1024 Transparent PNG</p>
+          <p>Single Production Flow: ChatGPT Vision ➔ Remote GPU Qwen 2.1 ➔ BiRefNet Lite 1024x1024 Transparent PNG</p>
         </div>
       </div>
       <div class="banner-tags">
-        <span class="mode-pill flow-b">RTX 3090 GPU Active</span>
+        <span id="bannerGpuPill" class="mode-pill flow-b">NVIDIA RTX A6000 Active</span>
         <span class="mode-pill" style="background: rgba(53, 200, 232, 0.12); color: #35C8E8; border: 1px solid rgba(53, 200, 232, 0.3);">1024x1024 HD Output</span>
       </div>
     </div>
@@ -1160,7 +1160,7 @@ select.studio-select:focus {
           <div id="progressContainer" class="progress-card" style="display: none;">
             <div class="pulse-spinner"></div>
             <h4 id="progressTitle" style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Generating 3D Studio Garment...</h4>
-            <p id="progressSubtitle" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Delegating to RTX 3090 GPU Worker</p>
+            <p id="progressSubtitle" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Delegating to Remote GPU Worker</p>
 
             <div class="step-tracker">
               <div class="tracker-item" id="trackerStep1">
@@ -1169,7 +1169,7 @@ select.studio-select:focus {
               </div>
               <div class="tracker-item" id="trackerStep2">
                 <span id="trackerDot2">○</span>
-                <span>2. Garment Reconstruction (RTX 3090 Qwen-2.1 Turbo 3D synthesis)</span>
+                <span>2. Garment Reconstruction (Qwen-2.1 Turbo 3D synthesis)</span>
               </div>
               <div class="tracker-item" id="trackerStep3">
                 <span id="trackerDot3">○</span>
@@ -1202,15 +1202,20 @@ select.studio-select:focus {
         if (!res.ok) throw new Error('Health check failed');
         const data = await res.json();
         const gpuOnline = data.models_loaded && data.models_loaded.qwen_gpu_worker_online;
-        const gpuName = (data.hardware && data.hardware.gpu_name) || 'RTX 3090';
+        const gpuName = (data.hardware && data.hardware.gpu_name) || 'NVIDIA RTX A6000';
+        const vramText = (data.hardware && data.hardware.vram_gb) ? `${data.hardware.vram_gb}GB VRAM` : (gpuName.includes('A6000') ? '48GB VRAM' : '24GB VRAM');
 
         if (gpuOnline) {
           gpuDot.className = 'pulse-dot';
-          gpuText.textContent = `${gpuName} • 24GB VRAM (Connected)`;
+          gpuText.textContent = `${gpuName} • ${vramText} (Connected)`;
+          const bannerPill = document.getElementById('bannerGpuPill');
+          if (bannerPill) bannerPill.textContent = `${gpuName} Active`;
           document.getElementById('gpuPill').title = `Connected to ${data.hardware.gpu_worker_url} (Click to change)`;
         } else {
           gpuDot.className = 'pulse-dot amber';
           gpuText.textContent = `GPU Offline • Click to Reconnect`;
+          const bannerPill = document.getElementById('bannerGpuPill');
+          if (bannerPill) bannerPill.textContent = `GPU Offline`;
           document.getElementById('gpuPill').title = `GPU Offline (${data.hardware.gpu_worker_url}). Click to paste new Cloudflare URL.`;
         }
       } catch (err) {
@@ -1639,7 +1644,7 @@ select.studio-select:focus {
         ${colorBadge}
         ${qualityScore}
         <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || (activeGarment.stand_type ? "2048×2048 Ultra-HD PNG" : "1024×1024 PNG")}</strong></div>
-        <div class="telemetry-badge">Engine: <strong>${isFlowB ? 'RTX 3090 Turbo (bfloat16)' : 'BiRefNet Lite CPU'}</strong></div>
+        <div class="telemetry-badge">Engine: <strong>${isFlowB ? (activeGarment.engine || 'RTX A6000 Turbo (bfloat16)') : 'BiRefNet Lite CPU'}</strong></div>
         <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>
       `;
 

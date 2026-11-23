@@ -20,6 +20,8 @@ class GarmentItem(BaseModel):
     presentation_mode: str | None = Field(default="mode_c_display_stand", description="Presentation mode: mode_a_product_only, mode_b_studio_presentation, mode_c_display_stand")
     detected_item_count: int | None = Field(default=1, description="Number of physical product items detected and preserved")
     validation_metrics: dict[str, Any] | None = Field(default=None, description="Real output validation metrics (color Delta-E, item count match, mask score)")
+    engine: str | None = Field(default=None, description="GPU Engine used for synthesis (e.g. NVIDIA RTX A6000 Turbo)")
+    gpu_name: str | None = Field(default=None, description="Name of the GPU used")
     views_analyzed: int | None = Field(default=1, description="Number of multi-angle reference photos analyzed")
 
 

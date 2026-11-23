@@ -1,10 +1,10 @@
-"""Dedicated RTX 3090 GPU Microservice for Arangtik Flow B (Official Qwen/Qwen-Image-2.1-Turbo).
+"""Dedicated High-VRAM GPU Microservice for Arangtik Flow B (Official Qwen/Qwen-Image-2.1-Turbo).
 
 7B Single-Stream DiT architecture with native 8-step Turbo schedule, prefix KV caching,
 and lossless full bfloat16 precision — produces Myntra/Meesho studio-grade garment cutouts
-in real-time on RTX 3090 (24GB VRAM).
+in real-time on NVIDIA RTX A6000 (48GB VRAM).
 
-Run on AIC Cloud RTX 3090 GPU Server (Python 3.11 Conda env):
+Run on AIC Cloud RTX A6000 GPU Server (Python 3.11 Conda env):
     uvicorn server:app --host 0.0.0.0 --port 8001
 """
 from __future__ import annotations
@@ -68,7 +68,7 @@ def _get_gpu_info() -> dict:
 
 
 def load_qwen21_pipeline():
-    """Load official Qwen/Qwen-Image-2.1-Turbo in FULL lossless bfloat16 for RTX 3090 (24GB VRAM)."""
+    """Load official Qwen/Qwen-Image-2.1-Turbo in FULL lossless bfloat16 for RTX A6000 (48GB VRAM)."""
     global _pipeline
     if _pipeline is not None:
         return _pipeline
@@ -201,6 +201,7 @@ def _run_inference_sync(
     headers = {
         "X-Model-Name": MODEL_ID,
         "X-GPU-Name": gpu_info["gpu_name"],
+        "X-VRAM-GB": str(gpu_info["vram_total_gb"]),
         "X-Inference-Time-Sec": str(elapsed),
         "X-Seed": str(used_seed),
     }
@@ -367,7 +368,7 @@ async def generate_garment(
     height: Optional[int] = Form(None),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Run synchronous Qwen-Image-2.1-Turbo generation on RTX 3090."""
+    """Run synchronous Qwen-Image-2.1-Turbo generation on NVIDIA RTX A6000 (48GB VRAM)."""
     _verify_api_key(x_api_key)
 
     raw_bytes = await image.read()

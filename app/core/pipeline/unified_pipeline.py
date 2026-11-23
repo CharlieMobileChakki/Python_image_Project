@@ -540,6 +540,8 @@ def execute_flow_b_with_person(
             "rotation_angle_deg": angle_deg,
             "repaired": True,
             "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
+            "engine": f"{gpu_meta.get('gpu_name', 'NVIDIA RTX A6000')} Turbo (bfloat16)",
+            "gpu_name": gpu_meta.get("gpu_name", "NVIDIA RTX A6000"),
             "width": 2048 if is_jewelry else 1024,
             "height": 2048 if is_jewelry else 1024,
             "image_dimensions": [2048, 2048] if is_jewelry else [1024, 1024],

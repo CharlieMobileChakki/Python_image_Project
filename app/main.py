@@ -151,6 +151,7 @@ async def health_check() -> HealthResponse:
             "device": "remote_cuda" if remote_gpu_online else "cpu",
             "cuda_available": remote_gpu_online,
             "gpu_name": gpu_name,
+            "vram_gb": gpu_health.get("vram_total_gb", 48.0 if "A6000" in gpu_name else 24.0),
             "gpu_worker_url": gpu_health.get("url", "not_set"),
             "gpu_worker_detail": gpu_health.get("detail", "Connected"),
         },

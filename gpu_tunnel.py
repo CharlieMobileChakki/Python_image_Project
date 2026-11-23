@@ -1,5 +1,5 @@
 """Arangtik GPU Tunnel Daemon
-Bridges local 127.0.0.1:8001 -> AIC Cloud RTX 3090 GPU Worker with auto-reconnect.
+Bridges local 127.0.0.1:8001 -> AIC Cloud RTX A6000 (48GB VRAM) GPU Worker with auto-reconnect.
 """
 import socket
 import sys
@@ -11,10 +11,10 @@ import paramiko
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [GPU-TUNNEL] %(message)s")
 logger = logging.getLogger("gpu-tunnel")
 
-HOSTNAME = "ssh2.aiccloud.one"
-PORT = 38738
+HOSTNAME = "gpu-b9900a.aiccloud.one"
+PORT = 36939
 USERNAME = "root"
-PASSWORD = "EFt6xkCntCv56cQ2"
+PASSWORD = "9Vp3qUP9DicZHLDf"
 REMOTE_PORT = 8001
 LOCAL_PORT = 8001
 
@@ -60,7 +60,7 @@ class GpuTunnel:
                 )
                 self.ssh = ssh
                 self.transport = ssh.get_transport()
-                logger.info("SSH connection to RTX 3090 established successfully!")
+                logger.info("SSH connection to RTX A6000 (48GB VRAM) established successfully!")
                 return True
             except Exception as e:
                 logger.warning("SSH connection failed: %s. Retrying in 5s...", e)
