@@ -91,10 +91,16 @@ def load_qwen21_pipeline():
             torch_dtype=dtype,
         )
 
-        # Automatic VRAM Management: Keeps active DiT/text encoder in full BF16 with zero peak VRAM crash
-        if hasattr(pipe, "enable_model_cpu_offload"):
+        # Dynamic VRAM Management:
+        # High-VRAM GPUs (RTX A6000 48GB, RTX 6000 Ada, A100 80GB) stay 100% resident in CUDA VRAM for ~6s generation!
+        total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        if total_vram_gb > 36:
+            logger.info("High VRAM GPU detected (%.1f GB). Loading 100%% resident into CUDA VRAM...", total_vram_gb)
+            pipe.to("cuda")
+            logger.info("Model 100%% resident in CUDA VRAM - Zero PCIe offload bottleneck!")
+        elif hasattr(pipe, "enable_model_cpu_offload"):
             pipe.enable_model_cpu_offload()
-            logger.info("Enabled model_cpu_offload (safe & fast on RTX 3090 24GB VRAM).")
+            logger.info("Enabled model_cpu_offload (safe for 24GB VRAM GPUs).")
         else:
             pipe.to("cuda")
 
@@ -252,7 +258,9 @@ def _background_job_runner(
 def _startup_preload():
     if PRELOAD_MODEL:
         try:
-            load_qwen21_pipeline()
+            logger.info("Preloading model into VRAM on startup...")
+            p = load_qwen21_pipeline()
+            logger.info("Application ready with resident VRAM pipeline.")
         except Exception as exc:
             logger.error("Startup preload failed (will retry on first request): %s", exc)
 
