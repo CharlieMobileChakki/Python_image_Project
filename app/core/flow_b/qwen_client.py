@@ -75,9 +75,11 @@ def check_gpu_worker_health() -> dict[str, Any]:
 def generate_garment_via_gpu(
     reference_image: Image.Image,
     prompt: str,
-    steps: int = 10,
+    steps: int = 8,
     guidance_scale: float = 1.0,
     seed: int | None = None,
+    width: int | None = None,
+    height: int | None = None,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """Submit reference photo + ChatGPT prompt to RTX 3090 GPU Worker and poll until PNG is ready.
 
@@ -86,9 +88,11 @@ def generate_garment_via_gpu(
     Args:
         reference_image: Original model-worn PIL image.
         prompt: Detailed garment extraction prompt (from ChatGPT Vision + studio rules).
-        steps: Denoising inference steps on GPU (default 18 for fast, crisp RTX 3090 output).
+        steps: Denoising inference steps on GPU (default 8 for ultra-fast RTX 3090 turbo output).
         guidance_scale: Guidance scale for Qwen-Image-Edit.
         seed: Optional deterministic random seed.
+        width: Optional output width (defaults to GPU worker configured resolution, e.g. 896 or 1024).
+        height: Optional output height.
 
     Returns:
         Tuple of (generated PIL Image, metadata dict).
@@ -124,6 +128,10 @@ def generate_garment_via_gpu(
     }
     if seed is not None:
         form_data["seed"] = str(seed)
+    if width and width > 0:
+        form_data["width"] = str(width)
+    if height and height > 0:
+        form_data["height"] = str(height)
 
     max_wait_sec = _get_timeout()
     t_start = time.perf_counter()
@@ -174,13 +182,13 @@ def generate_garment_via_gpu(
             job_id = submit_resp.json()["job_id"]
             logger.info("GPU job %s queued; polling status...", job_id)
 
-            # 2. Poll job status every 2.5s until done or error (with retry tolerance for Cloudflare blips)
+            # 2. Poll job status every 1.0s until done or error (fast reaction time as soon as GPU finishes)
             consecutive_errors = 0
             while True:
                 if time.perf_counter() - t_start > max_wait_sec:
                     raise RuntimeError(f"GPU Worker job {job_id} timed out after {max_wait_sec}s.")
 
-                time.sleep(2.5)
+                time.sleep(1.0)
                 try:
                     status_resp = client.get(f"{remote_url}/jobs/{job_id}", headers=headers)
                 except (httpx.RequestError, httpx.TimeoutException) as poll_exc:

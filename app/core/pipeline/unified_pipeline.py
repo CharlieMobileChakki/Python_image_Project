@@ -474,7 +474,7 @@ def execute_flow_b_with_person(
 
         else:
             # Mode C (Display Stand for Jewelry) OR Standard Ghost Mannequin for Apparel
-            gpu_steps = 26 if is_jewelry else 10
+            gpu_steps = 26 if is_jewelry else 8
             gpu_guidance = 2.5 if is_jewelry else 1.0
 
             t_gpu_start = time.perf_counter()
@@ -483,6 +483,8 @@ def execute_flow_b_with_person(
                 prompt=qwen_prompt,
                 steps=gpu_steps,
                 guidance_scale=gpu_guidance,
+                width=896 if not is_jewelry else 1024,
+                height=896 if not is_jewelry else 1024,
             )
             gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
