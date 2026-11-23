@@ -91,28 +91,21 @@ def load_qwen21_pipeline():
             torch_dtype=dtype,
         )
 
-        # Phase 1: High-Speed VRAM Resident Pipeline (Zero PCIe offload thrashing)
-        # RTX 3090 has 24GB VRAM; Qwen 7B bfloat16 is ~14GB, leaving ~10GB free for VAE & KV cache
-        pipe = pipe.to("cuda")
-        logger.info("Model placed 100%% permanently resident in CUDA VRAM (RTX 3090 24GB).")
+        # Automatic VRAM Management: Keeps active DiT/text encoder in full BF16 with zero peak VRAM crash
+        if hasattr(pipe, "enable_model_cpu_offload"):
+            pipe.enable_model_cpu_offload()
+            logger.info("Enabled model_cpu_offload (safe & fast on RTX 3090 24GB VRAM).")
+        else:
+            pipe.to("cuda")
 
         # PyTorch 2.x Ampere Tensor Core TF32 acceleration & cuDNN auto-tuner
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.backends.cudnn.benchmark = True
 
-        # Attention Slicing is strictly disabled:
-        # Allows all 10,496 CUDA cores to compute full SDPA attention in parallel
-        # (reduces DiT step time from 2.78s to ~0.8s)
+        # Attention Slicing is disabled to allow all 10,496 CUDA cores to compute SDPA in parallel
         if hasattr(pipe, "disable_attention_slicing"):
             pipe.disable_attention_slicing()
-        if hasattr(pipe, "set_attn_processor"):
-            try:
-                from diffusers.models.attention_processor import AttnProcessor2_0
-                pipe.set_attn_processor(AttnProcessor2_0())
-                logger.info("Configured AttnProcessor2_0 for native parallel SDPA.")
-            except Exception as e:
-                logger.warning("Could not set AttnProcessor2_0 (using native SDPA default): %s", e)
 
         # Keep VAE slicing and tiling enabled for memory-safe latent decoding
         if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
