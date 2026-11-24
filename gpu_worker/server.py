@@ -93,9 +93,9 @@ def load_rmbg_model():
 
 
 def remove_background_gpu(image: Image.Image) -> Image.Image:
-    """GPU-accelerated salient background removal in <50ms using NVIDIA Blackwell CUDA."""
+    """GPU-accelerated salient background removal using official BRIA RMBG-1.4 pipeline."""
     import numpy as np
-    from torchvision import transforms
+    from torchvision.transforms.functional import normalize
 
     model = load_rmbg_model()
     device = next(model.parameters()).device
@@ -104,29 +104,32 @@ def remove_background_gpu(image: Image.Image) -> Image.Image:
     orig_w, orig_h = image.size
     rgb_img = image.convert("RGB")
 
-    transform = transforms.Compose([
-        transforms.Resize((1024, 1024)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ])
-    tensor = transform(rgb_img).unsqueeze(0).to(device=device, dtype=dtype)
+    # 1. Official BRIA RMBG-1.4 preprocessing:
+    # Resize to (1024, 1024), float32 in [0, 1], normalize with mean=[0.5, 0.5, 0.5], std=[1.0, 1.0, 1.0]
+    im_np = np.array(rgb_img)
+    if len(im_np.shape) < 3:
+        im_np = im_np[:, :, np.newaxis]
+    im_tensor = torch.tensor(im_np, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
+    im_tensor = torch.nn.functional.interpolate(im_tensor, size=(1024, 1024), mode="bilinear")
+    im_tensor = im_tensor / 255.0
+    im_tensor = normalize(im_tensor, [0.5, 0.5, 0.5], [1.0, 1.0, 1.0]).to(device=device, dtype=dtype)
 
     with torch.inference_mode():
-        output = model(tensor)
-        # Recursively unwrap any nested lists or tuples from BriaRMBG until we reach the raw Tensor
+        output = model(im_tensor)
+        # Recursively unwrap any nested lists or tuples until we reach the raw Tensor
         pred = output
         while isinstance(pred, (tuple, list)):
             pred = pred[0]
 
-        # Guarantee strict 4D tensor (N, C, H, W) for bilinear interpolation
+        # Guarantee strict 4D tensor (1, 1, H, W) for bilinear interpolation
         while pred.dim() > 4:
             pred = pred.squeeze(0)
         while pred.dim() < 4:
             pred = pred.unsqueeze(0)
 
-        pred = torch.sigmoid(pred.float())
+        # Official BRIA post-processing: DO NOT apply torch.sigmoid (model already outputs salience maps)
         pred = torch.nn.functional.interpolate(
-            pred,
+            pred.float(),
             size=(orig_h, orig_w),
             mode="bilinear",
             align_corners=False,
@@ -135,9 +138,13 @@ def remove_background_gpu(image: Image.Image) -> Image.Image:
         mi = torch.min(pred)
         if (ma - mi) > 1e-6:
             pred = (pred - mi) / (ma - mi)
-        pred = pred[0, 0].cpu().numpy()
 
-    mask_arr = (np.clip(pred, 0.0, 1.0) * 255.0).astype(np.uint8)
+        # Hard clean floor: clear any residual background noise under 0.15 to guarantee 100% pure 0 alpha
+        pred = torch.where(pred < 0.15, torch.zeros_like(pred), pred)
+
+        pred_np = pred[0, 0].cpu().numpy()
+
+    mask_arr = (np.clip(pred_np, 0.0, 1.0) * 255.0).astype(np.uint8)
     mask = Image.fromarray(mask_arr, mode="L")
 
     rgba_img = rgb_img.copy()
@@ -229,7 +236,7 @@ def _prepare_ref_image(raw_bytes: bytes) -> Image.Image:
     """Decode and preserve RGBA format as recommended by official Qwen-Image-2.1 docs."""
     ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGBA")
     w, h = ref_img.size
-    max_in = 1280
+    max_in = 896
     if max(w, h) > max_in:
         scale = max_in / float(max(w, h))
         ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)

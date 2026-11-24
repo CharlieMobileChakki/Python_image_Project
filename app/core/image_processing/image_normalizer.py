@@ -97,8 +97,8 @@ def normalize_to_1024(cutout_rgba: Image.Image, target_size: int = 1024, fill_ra
     arr = np.array(cutout_rgba).copy()
     alpha = arr[:, :, 3]
 
-    # 1. Eliminate faint alpha noise and ghost box artifacts (< 20 is background noise)
-    alpha[alpha < 20] = 0
+    # 1. Eliminate faint alpha noise, smoke haze, and ghost box artifacts (< 35 is background noise)
+    alpha[alpha < 35] = 0
 
     # 2. Strict RGB decontamination: zero out RGB where alpha is 0
     arr[:, :, :3] = np.where(alpha[:, :, None] == 0, 0, arr[:, :, :3])
