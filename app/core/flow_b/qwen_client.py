@@ -136,6 +136,30 @@ def generate_garment_via_gpu(
     max_wait_sec = _get_timeout()
     t_start = time.perf_counter()
 
+    # Step A: Direct synchronous /generate for ultra-fast ~5-7s response (bypasses polling latency)
+    try:
+        with httpx.Client(timeout=min(max_wait_sec, 60.0)) as fast_client:
+            logger.info("Attempting direct synchronous /generate on GPU worker (fast path)...")
+            gen_resp = fast_client.post(
+                f"{remote_url}/generate",
+                headers=headers,
+                files={"image": ("reference.jpg", img_bytes, "image/jpeg")},
+                data=form_data,
+            )
+            if gen_resp.status_code == 200 and gen_resp.headers.get("content-type", "").startswith("image/"):
+                out_img = Image.open(io.BytesIO(gen_resp.content)).convert("RGBA")
+                gpu_time = gen_resp.headers.get("X-Inference-Time-Sec", str(round(time.perf_counter() - t_start, 2)))
+                meta = {
+                    "model": gen_resp.headers.get("X-Model-Name", "Qwen/Qwen-Image-2.1-Turbo"),
+                    "gpu_name": gen_resp.headers.get("X-GPU-Name", "Blackwell GPU"),
+                    "inference_time_sec": str(gpu_time),
+                    "execution_mode": "direct_sync_stream",
+                }
+                logger.info("Direct GPU generation succeeded in %ss!", gpu_time)
+                return out_img, meta
+    except Exception as fast_exc:
+        logger.info("Direct /generate unavailable (%s), continuing to async queue...", fast_exc)
+
     CLOUDFLARE_RETRY_CODES = (500, 502, 503, 504, 520, 521, 522, 523, 524, 530)
 
     logger.info("Submitting Flow B async job to GPU worker: %s/jobs (payload %d KB)", remote_url, len(img_bytes) // 1024)

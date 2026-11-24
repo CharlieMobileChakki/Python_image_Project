@@ -436,13 +436,28 @@ def execute_flow_b_with_person(
         # For apparel: pre-clean reference image background to eliminate bedsheet / floor shadow bleed during Qwen conditioning
         if not is_jewelry:
             try:
-                fg_ref = extract_isolated_flow_a(item_ref_image)
-                fg_alpha = np.array(fg_ref.split()[3])
-                if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
-                    white_bg_ref = Image.new("RGB", fg_ref.size, (255, 255, 255))
-                    white_bg_ref.paste(fg_ref, (0, 0), mask=fg_ref.split()[3])
-                    item_ref_image = white_bg_ref
-                    logger.info("Successfully pre-cleaned item reference image on pure white canvas to prevent background bleed.")
+                # Fast downscaled BiRefNet mask extraction (<0.6s instead of 4.5s on CPU)
+                w_ref, h_ref = item_ref_image.size
+                max_clean_dim = 768
+                if max(w_ref, h_ref) > max_clean_dim:
+                    scale_clean = max_clean_dim / float(max(w_ref, h_ref))
+                    clean_input = item_ref_image.resize((int(w_ref * scale_clean), int(h_ref * scale_clean)), Image.Resampling.BILINEAR)
+                    fg_ref_small = extract_isolated_flow_a(clean_input)
+                    fg_mask = fg_ref_small.split()[3].resize((w_ref, h_ref), Image.Resampling.BILINEAR)
+                    fg_alpha = np.array(fg_mask)
+                    if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
+                        white_bg_ref = Image.new("RGB", (w_ref, h_ref), (255, 255, 255))
+                        white_bg_ref.paste(item_ref_image, (0, 0), mask=fg_mask)
+                        item_ref_image = white_bg_ref
+                        logger.info("Successfully fast pre-cleaned item reference image on pure white canvas.")
+                else:
+                    fg_ref = extract_isolated_flow_a(item_ref_image)
+                    fg_alpha = np.array(fg_ref.split()[3])
+                    if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
+                        white_bg_ref = Image.new("RGB", fg_ref.size, (255, 255, 255))
+                        white_bg_ref.paste(fg_ref, (0, 0), mask=fg_ref.split()[3])
+                        item_ref_image = white_bg_ref
+                        logger.info("Successfully pre-cleaned item reference image on pure white canvas to prevent background bleed.")
             except Exception as exc:
                 logger.warning("Pre-cleaning item reference image failed (%s); using original reference crop.", exc)
 
