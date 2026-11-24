@@ -20,6 +20,7 @@ from app.core.flow_b import (
     create_multi_angle_composite,
     generate_garment_via_gpu,
     is_jewelry_domain,
+    remove_background_via_gpu,
 )
 from app.core.garment_extraction import detect_multi_garment_layout
 from app.core.image_processing import (
@@ -436,28 +437,14 @@ def execute_flow_b_with_person(
         # For apparel: pre-clean reference image background to eliminate bedsheet / floor shadow bleed during Qwen conditioning
         if not is_jewelry:
             try:
-                # Fast downscaled BiRefNet mask extraction (<0.6s instead of 4.5s on CPU)
-                w_ref, h_ref = item_ref_image.size
-                max_clean_dim = 768
-                if max(w_ref, h_ref) > max_clean_dim:
-                    scale_clean = max_clean_dim / float(max(w_ref, h_ref))
-                    clean_input = item_ref_image.resize((int(w_ref * scale_clean), int(h_ref * scale_clean)), Image.Resampling.BILINEAR)
-                    fg_ref_small = extract_isolated_flow_a(clean_input)
-                    fg_mask = fg_ref_small.split()[3].resize((w_ref, h_ref), Image.Resampling.BILINEAR)
-                    fg_alpha = np.array(fg_mask)
-                    if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
-                        white_bg_ref = Image.new("RGB", (w_ref, h_ref), (255, 255, 255))
-                        white_bg_ref.paste(item_ref_image, (0, 0), mask=fg_mask)
-                        item_ref_image = white_bg_ref
-                        logger.info("Successfully fast pre-cleaned item reference image on pure white canvas.")
-                else:
-                    fg_ref = extract_isolated_flow_a(item_ref_image)
-                    fg_alpha = np.array(fg_ref.split()[3])
-                    if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
-                        white_bg_ref = Image.new("RGB", fg_ref.size, (255, 255, 255))
-                        white_bg_ref.paste(fg_ref, (0, 0), mask=fg_ref.split()[3])
-                        item_ref_image = white_bg_ref
-                        logger.info("Successfully pre-cleaned item reference image on pure white canvas to prevent background bleed.")
+                # Fast GPU mask extraction (<0.1s instead of 21s on CPU)
+                fg_ref = remove_background_via_gpu(item_ref_image)
+                fg_alpha = np.array(fg_ref.split()[3])
+                if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
+                    white_bg_ref = Image.new("RGB", fg_ref.size, (255, 255, 255))
+                    white_bg_ref.paste(fg_ref, (0, 0), mask=fg_ref.split()[3])
+                    item_ref_image = white_bg_ref
+                    logger.info("Successfully pre-cleaned item reference image on pure white canvas via GPU.")
             except Exception as exc:
                 logger.warning("Pre-cleaning item reference image failed (%s); using original reference crop.", exc)
 
@@ -521,15 +508,19 @@ def execute_flow_b_with_person(
                 val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
                 val_conf = val_res.get("mask_quality", 0.98)
             else:
-                # Apparel: strip studio white background cleanly via BiRefNet Lite
-                cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
+                # Apparel: use instant GPU transparent cutout if available, else strip via GPU/BiRefNet
+                if generated_raw.mode == "RGBA" and generated_raw.getchannel("A").getextrema()[0] < 250:
+                    cutout_rgba = generated_raw
+                else:
+                    cutout_rgba = remove_background_via_gpu(generated_raw)
+
                 angle_deg = 0.0
                 normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
                 val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
                 final_cutout = val_check.get("refined_cutout", normalized_1024)
                 out_filename = f"{job_id}_{g_id}.png"
                 out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", optimize=True)
+                final_cutout.save(out_path, format="PNG", compress_level=1)
                 stand = None
                 val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
                 val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))

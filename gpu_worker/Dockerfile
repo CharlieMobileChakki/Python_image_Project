@@ -54,6 +54,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY requirements-gpu.txt /app/requirements-gpu.txt
 RUN pip install --no-cache-dir -r requirements-gpu.txt
 
+# 3.5. Pre-cache high-speed SOTA background removal model (RMBG-1.4, 170MB) for ultra-fast GPU matting (<50ms)
+RUN python3.11 -c "from transformers import AutoModelForImageSegmentation; AutoModelForImageSegmentation.from_pretrained('briaai/RMBG-1.4', trust_remote_code=True)"
+
 # 4. Copy worker application code (Zero model weights baked into image)
 COPY server.py /app/server.py
 
