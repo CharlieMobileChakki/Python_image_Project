@@ -62,6 +62,10 @@ def load_rmbg_model():
         if _rmbg_model is not None:
             return _rmbg_model
 
+        import torch.nn as nn
+        if not hasattr(nn.Module, "all_tied_weights_keys"):
+            nn.Module.all_tied_weights_keys = {}
+
         from transformers import AutoModelForImageSegmentation
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
