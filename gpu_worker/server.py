@@ -113,11 +113,10 @@ def remove_background_gpu(image: Image.Image) -> Image.Image:
 
     with torch.inference_mode():
         output = model(tensor)
-        # Handle list, tuple, or raw tensor output from BriaRMBG
-        if isinstance(output, (tuple, list)):
-            pred = output[0]
-        else:
-            pred = output
+        # Recursively unwrap any nested lists or tuples from BriaRMBG until we reach the raw Tensor
+        pred = output
+        while isinstance(pred, (tuple, list)):
+            pred = pred[0]
 
         # Guarantee strict 4D tensor (N, C, H, W) for bilinear interpolation
         while pred.dim() > 4:
@@ -547,9 +546,13 @@ async def remove_background_endpoint(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
-    t0 = time.perf_counter()
-    rgba = remove_background_gpu(img)
-    elapsed = round(time.perf_counter() - t0, 3)
+    try:
+        t0 = time.perf_counter()
+        rgba = remove_background_gpu(img)
+        elapsed = round(time.perf_counter() - t0, 3)
+    except Exception as exc:
+        logger.exception("GPU background removal failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"GPU background removal failed: {exc}") from exc
 
     buf = io.BytesIO()
     rgba.save(buf, format="PNG", compress_level=1)
