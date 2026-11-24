@@ -3,41 +3,25 @@
 # =============================================================================
 
 steps:
-  # 1. Build production Docker image with CUDA 12.4 + Python 3.11 + PyTorch
+  # 1. Build production Docker image with CUDA 12.8 + Python 3.11 + PyTorch
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
       - '-f'
       - 'gpu_worker/Dockerfile'
       - 'gpu_worker'
     id: 'build-gpu-image'
 
-  # 2. Push SHA-tagged image to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
-    id: 'push-sha-image'
-
-  # 3. Push latest-tagged image to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
-    id: 'push-latest-image'
-
 images:
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
 
 substitutions:
   _REGION: 'asia-southeast1'
   _REPO_NAME: 'arangtik-gpu'
   _IMAGE_NAME: 'qwen-gpu-worker'
+  _TAG: 'latest'
 
 options:
   machineType: 'E2_HIGHCPU_8'
