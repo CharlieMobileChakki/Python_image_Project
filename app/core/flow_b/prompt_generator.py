@@ -216,8 +216,8 @@ Return strictly valid JSON format:
 }"""
 
 
-def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> str:
-    """Resize and base64-encode PIL RGB image as JPEG for high-detail Vision API calls."""
+def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1024) -> str:
+    """Resize and base64-encode PIL RGB image as JPEG for fast high-detail Vision API calls."""
     img = image_rgb.convert("RGB")
     w, h = img.size
     if max(w, h) > max_edge:
@@ -225,7 +225,7 @@ def _encode_image_for_vision(image_rgb: Image.Image, max_edge: int = 1536) -> st
         img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.LANCZOS)
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=92)
+    img.save(buf, format="JPEG", quality=85)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
