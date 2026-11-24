@@ -83,11 +83,13 @@ def load_qwen21_pipeline():
         from diffusers import QwenImage21Pipeline
 
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        logger.info("Loading %s (full lossless %s)...", MODEL_ID, dtype)
+        # Check mounted GCS volume first (/models/Qwen-Image-2.1-Turbo) to avoid internet downloads
+        model_source = "/models/Qwen-Image-2.1-Turbo" if os.path.exists("/models/Qwen-Image-2.1-Turbo") else MODEL_ID
+        logger.info("Loading %s from '%s' (full lossless %s)...", MODEL_ID, model_source, dtype)
         t0 = time.perf_counter()
 
         pipe = QwenImage21Pipeline.from_pretrained(
-            MODEL_ID,
+            model_source,
             torch_dtype=dtype,
         )
 
