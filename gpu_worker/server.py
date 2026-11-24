@@ -135,7 +135,7 @@ def remove_background_gpu(image: Image.Image) -> Image.Image:
         mi = torch.min(pred)
         if (ma - mi) > 1e-6:
             pred = (pred - mi) / (ma - mi)
-        pred = pred.squeeze().cpu().numpy()
+        pred = pred[0, 0].cpu().numpy()
 
     mask_arr = (np.clip(pred, 0.0, 1.0) * 255.0).astype(np.uint8)
     mask = Image.fromarray(mask_arr, mode="L")
