@@ -3,10 +3,20 @@
 # =============================================================================
 
 steps:
-  # 1. Build production Docker image with CUDA 12.8 + Python 3.11 + PyTorch
+  # 0. Pull previous image to use as build cache (saves ~8-10 minutes on rebuilds!)
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest || exit 0'
+    id: 'pull-previous-cache'
+
+  # 1. Build production Docker image using layer caching
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--cache-from'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
       - '-t'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
       - '-f'
