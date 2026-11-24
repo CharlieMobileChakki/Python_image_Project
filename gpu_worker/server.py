@@ -73,11 +73,18 @@ def load_rmbg_model():
 
         source = "/models/RMBG-1.4" if os.path.exists("/models/RMBG-1.4") else "briaai/RMBG-1.4"
         logger.info("Loading GPU RMBG-1.4 background removal model from '%s'...", source)
-        model = AutoModelForImageSegmentation.from_pretrained(
-            source,
-            trust_remote_code=True,
-            torch_dtype=dtype,
-        )
+        try:
+            model = AutoModelForImageSegmentation.from_pretrained(
+                source,
+                trust_remote_code=True,
+                dtype=dtype,
+            )
+        except TypeError:
+            model = AutoModelForImageSegmentation.from_pretrained(
+                source,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            )
         model.to(device)
         model.eval()
         _rmbg_model = model
@@ -106,14 +113,29 @@ def remove_background_gpu(image: Image.Image) -> Image.Image:
 
     with torch.inference_mode():
         output = model(tensor)
-        pred = output[0][0] if isinstance(output, tuple) else output[0]
+        # Handle list, tuple, or raw tensor output from BriaRMBG
+        if isinstance(output, (tuple, list)):
+            pred = output[0]
+        else:
+            pred = output
+
+        # Guarantee strict 4D tensor (N, C, H, W) for bilinear interpolation
+        while pred.dim() > 4:
+            pred = pred.squeeze(0)
+        while pred.dim() < 4:
+            pred = pred.unsqueeze(0)
+
         pred = torch.sigmoid(pred.float())
         pred = torch.nn.functional.interpolate(
-            pred.unsqueeze(0),
+            pred,
             size=(orig_h, orig_w),
             mode="bilinear",
             align_corners=False,
         )
+        ma = torch.max(pred)
+        mi = torch.min(pred)
+        if (ma - mi) > 1e-6:
+            pred = (pred - mi) / (ma - mi)
         pred = pred.squeeze().cpu().numpy()
 
     mask_arr = (np.clip(pred, 0.0, 1.0) * 255.0).astype(np.uint8)
@@ -357,6 +379,12 @@ def _background_job_runner(
 
 @app.on_event("startup")
 def _startup_preload():
+    try:
+        logger.info("Preloading GPU RMBG-1.4 into VRAM on startup...")
+        load_rmbg_model()
+    except Exception as exc:
+        logger.warning("Startup RMBG preload failed (will load on first request): %s", exc)
+
     if PRELOAD_MODEL:
         try:
             logger.info("Preloading model into VRAM on startup...")

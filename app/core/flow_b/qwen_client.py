@@ -290,7 +290,7 @@ def remove_background_via_gpu(image: Image.Image) -> Image.Image:
             if api_key:
                 headers["X-API-Key"] = api_key
 
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=45.0) as client:
                 resp = client.post(
                     f"{remote_url}/remove-background",
                     headers=headers,
