@@ -145,10 +145,13 @@ def generate_garment_via_gpu(
     max_wait_sec = _get_timeout()
     t_start = time.perf_counter()
 
-    # Step A: Direct synchronous /generate for ultra-fast ~5-7s response (bypasses polling latency)
+    # Step A: Direct synchronous /generate for ultra-fast ~6s warm response (and ~55-70s cold start without duplicating jobs)
+    # Only use short 60s fast-path cutoff for Cloudflare tunnels (100s proxy cap); allow Cloud Run up to 150s cleanly.
+    is_cloudflare = "trycloudflare.com" in remote_url
+    direct_timeout = min(max_wait_sec, 60.0 if is_cloudflare else 150.0)
     try:
-        with httpx.Client(timeout=min(max_wait_sec, 60.0)) as fast_client:
-            logger.info("Attempting direct synchronous /generate on GPU worker (fast path)...")
+        with httpx.Client(timeout=direct_timeout) as fast_client:
+            logger.info("Attempting direct synchronous /generate on GPU worker (timeout=%.0fs)...", direct_timeout)
             gen_resp = fast_client.post(
                 f"{remote_url}/generate",
                 headers=headers,
@@ -167,6 +170,12 @@ def generate_garment_via_gpu(
                 }
                 logger.info("Direct GPU generation succeeded in %ss!", gpu_time)
                 return out_img, meta
+    except httpx.ReadTimeout as timeout_exc:
+        if not is_cloudflare:
+            raise RuntimeError(
+                f"GPU Worker /generate timed out after {direct_timeout:.0f}s (avoiding duplicate /jobs re-submission): {timeout_exc}"
+            ) from timeout_exc
+        logger.info("Direct /generate hit Cloudflare cutoff (%s), continuing to async queue...", timeout_exc)
     except Exception as fast_exc:
         logger.info("Direct /generate unavailable (%s), continuing to async queue...", fast_exc)
 
@@ -175,9 +184,9 @@ def generate_garment_via_gpu(
     logger.info("Submitting Flow B async job to GPU worker: %s/jobs (payload %d KB)", remote_url, len(img_bytes) // 1024)
     try:
         with httpx.Client(timeout=45.0) as client:
-            # 1. Submit job (with robust retry for transient Cloudflare tunnel reconnects)
+            # 1. Submit job (with bounded retry for transient reconnects)
             submit_resp = None
-            max_submit_attempts = 6
+            max_submit_attempts = 3
             for submit_attempt in range(1, max_submit_attempts + 1):
                 try:
                     submit_resp = client.post(
