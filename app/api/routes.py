@@ -188,6 +188,8 @@ async def background_removal_endpoint(
             "presentation_mode": g.get("presentation_mode", "ghost_mannequin"),
             "detected_item_count": g.get("detected_item_count", 1),
             "validation_metrics": g.get("validation_metrics"),
+            "engine": g.get("engine"),
+            "gpu_name": g.get("gpu_name"),
             "views_analyzed": g.get("views_analyzed", 1),
         })
 

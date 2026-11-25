@@ -14,8 +14,9 @@ import logging
 import os
 import sys
 
-# Prevent PyTorch CUDA memory fragmentation on back-to-back jobs
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Lazy CUDA module loading speeds up cold start; avoid expandable_segments:True which can deadlock large .to("cuda") transfers
+os.environ.setdefault("CUDA_MODULE_LOADING", "LAZY")
+os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
 
 import threading
 import time
@@ -38,12 +39,14 @@ logger = logging.getLogger("qwen21-gpu-worker")
 MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-2.1-Turbo").strip()
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
 PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
+AUTO_WARMUP_QWEN = os.getenv("AUTO_WARMUP_QWEN", "true").strip().lower() in ("1", "true", "yes")
 OUTPUT_WIDTH = int(os.getenv("QWEN_OUTPUT_WIDTH", "896"))
 OUTPUT_HEIGHT = int(os.getenv("QWEN_OUTPUT_HEIGHT", "896"))
 
 app = FastAPI(title="Arangtik Qwen-Image-2.1-Turbo GPU Worker", version="3.0.0")
 
 _pipeline = None
+_pipeline_warming = False
 _pipe_lock = threading.Lock()
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
@@ -74,18 +77,28 @@ def load_rmbg_model():
 
         source = "/models/RMBG-1.4" if os.path.exists("/models/RMBG-1.4") else "briaai/RMBG-1.4"
         logger.info("Loading GPU RMBG-1.4 background removal model from '%s'...", source)
-        try:
-            model = AutoModelForImageSegmentation.from_pretrained(
-                source,
-                trust_remote_code=True,
-                dtype=dtype,
-            )
-        except TypeError:
-            model = AutoModelForImageSegmentation.from_pretrained(
-                source,
-                trust_remote_code=True,
-                torch_dtype=dtype,
-            )
+        model = None
+        for local_only in (True, False):
+            try:
+                try:
+                    model = AutoModelForImageSegmentation.from_pretrained(
+                        source,
+                        trust_remote_code=True,
+                        local_files_only=local_only,
+                        dtype=dtype,
+                    )
+                except TypeError:
+                    model = AutoModelForImageSegmentation.from_pretrained(
+                        source,
+                        trust_remote_code=True,
+                        local_files_only=local_only,
+                        torch_dtype=dtype,
+                    )
+                break
+            except Exception:
+                if not local_only:
+                    raise
+                logger.info("RMBG-1.4 not found in local cache, fetching from HuggingFace...")
         model.to(device)
         model.eval()
         _rmbg_model = model
@@ -173,7 +186,7 @@ def _get_gpu_info() -> dict:
 
 
 def load_qwen21_pipeline():
-    """Load official Qwen/Qwen-Image-2.1-Turbo in FULL lossless bfloat16 for RTX A6000 (48GB VRAM)."""
+    """Load official Qwen/Qwen-Image-2.1-Turbo in FULL lossless bfloat16 without GCS mmap/CUDA stalls."""
     global _pipeline
     if _pipeline is not None:
         return _pipeline
@@ -185,43 +198,99 @@ def load_qwen21_pipeline():
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA GPU not detected on this server.")
 
+        import gc
         from diffusers import QwenImage21Pipeline
 
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         # Check mounted GCS volume first (/models/Qwen-Image-2.1-Turbo) to avoid internet downloads
-        model_source = "/models/Qwen-Image-2.1-Turbo" if os.path.exists("/models/Qwen-Image-2.1-Turbo") else MODEL_ID
-        logger.info("Loading %s from '%s' (full lossless %s)...", MODEL_ID, model_source, dtype)
+        has_local_mount = os.path.exists("/models/Qwen-Image-2.1-Turbo/model_index.json")
+        model_source = "/models/Qwen-Image-2.1-Turbo" if has_local_mount else MODEL_ID
+        total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        logger.info("Loading %s from '%s' (full lossless %s, VRAM=%.1f GB)...", MODEL_ID, model_source, dtype, total_vram_gb)
         t0 = time.perf_counter()
 
-        pipe = QwenImage21Pipeline.from_pretrained(
-            model_source,
-            torch_dtype=dtype,
-        )
+        pipe = None
+        loaded_via_device_map = False
+
+        # Prefer direct device_map="cuda" on high-VRAM GPUs to stream weights directly to VRAM
+        # without intermediate CPU RAM copy or massive pipe.to("cuda") GCS mmap stalls.
+        if total_vram_gb > 36:
+            try:
+                t_dm = time.perf_counter()
+                logger.info("Attempting direct CUDA stream load (device_map='cuda')...")
+                try:
+                    pipe = QwenImage21Pipeline.from_pretrained(
+                        model_source,
+                        dtype=dtype,
+                        device_map="cuda",
+                        low_cpu_mem_usage=True,
+                        local_files_only=has_local_mount,
+                    )
+                except TypeError:
+                    pipe = QwenImage21Pipeline.from_pretrained(
+                        model_source,
+                        torch_dtype=dtype,
+                        device_map="cuda",
+                        low_cpu_mem_usage=True,
+                        local_files_only=has_local_mount,
+                    )
+                loaded_via_device_map = True
+                logger.info("Direct CUDA stream load succeeded in %.2fs.", time.perf_counter() - t_dm)
+            except Exception as dm_exc:
+                logger.warning("Direct device_map='cuda' unsupported (%s); falling back to staged component transfer.", dm_exc)
+                pipe = None
+                gc.collect()
+                torch.cuda.empty_cache()
+
+        if pipe is None:
+            try:
+                pipe = QwenImage21Pipeline.from_pretrained(
+                    model_source,
+                    dtype=dtype,
+                    low_cpu_mem_usage=True,
+                    local_files_only=has_local_mount,
+                )
+            except TypeError:
+                pipe = QwenImage21Pipeline.from_pretrained(
+                    model_source,
+                    torch_dtype=dtype,
+                    low_cpu_mem_usage=True,
+                    local_files_only=has_local_mount,
+                )
 
         # Dynamic VRAM Management:
-        # High-VRAM GPUs (RTX A6000 48GB, RTX 6000 Ada, A100 80GB) stay 100% resident in CUDA VRAM for ~6s generation!
-        total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-        if total_vram_gb > 36:
-            logger.info("High VRAM GPU detected (%.1f GB). Loading 100%% resident into CUDA VRAM...", total_vram_gb)
-            pipe.to("cuda")
+        # High-VRAM GPUs (>36 GB) keep all components 100% resident in CUDA VRAM via staged per-component transfer
+        if total_vram_gb > 36 and not loaded_via_device_map:
+            logger.info("High VRAM GPU detected (%.1f GB). Transferring components to CUDA...", total_vram_gb)
+            for comp_name, comp in pipe.components.items():
+                if isinstance(comp, torch.nn.Module):
+                    tc = time.perf_counter()
+                    # Materialize contiguous CPU tensors before transfer to prevent GCS FUSE mmap stalls
+                    for p in (*comp.parameters(), *comp.buffers()):
+                        if p.device.type == "cpu" and not p.is_contiguous():
+                            p.data = p.data.contiguous()
+                    comp.to("cuda")
+                    torch.cuda.synchronize()
+                    gc.collect()
+                    logger.info("Moved '%s' to CUDA in %.2fs.", comp_name, time.perf_counter() - tc)
             logger.info("Model 100%% resident in CUDA VRAM - Zero PCIe offload bottleneck!")
-        elif hasattr(pipe, "enable_model_cpu_offload"):
-            pipe.enable_model_cpu_offload()
-            logger.info("Enabled model_cpu_offload (safe for 24GB VRAM GPUs).")
-        else:
-            pipe.to("cuda")
+        elif total_vram_gb <= 36:
+            if hasattr(pipe, "enable_model_cpu_offload"):
+                pipe.enable_model_cpu_offload()
+                logger.info("Enabled model_cpu_offload (safe for 24GB VRAM GPUs).")
+            else:
+                pipe.to("cuda")
 
-        # PyTorch 2.x Ampere Tensor Core TF32 acceleration & cuDNN auto-tuner
+        # PyTorch 2.x Ampere/Blackwell Tensor Core TF32 acceleration & cuDNN auto-tuner
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.backends.cudnn.benchmark = True
 
-        # Attention Slicing is disabled to allow all 10,496 CUDA cores to compute SDPA in parallel
+        # Attention Slicing is disabled to allow all CUDA cores to compute SDPA in parallel
         if hasattr(pipe, "disable_attention_slicing"):
             pipe.disable_attention_slicing()
 
-        # Disable VAE slicing and tiling — on NVIDIA RTX PRO 6000 (96 GB VRAM),
-        # full-tensor VRAM decoding executes in milliseconds (<0.1s) without CPU/tiling bottlenecks.
+        # Disable VAE slicing and tiling — full-tensor VRAM decoding executes in <0.1s
         if hasattr(pipe, "vae"):
             if hasattr(pipe.vae, "disable_slicing"):
                 pipe.vae.disable_slicing()
@@ -408,6 +477,19 @@ def _background_job_runner(
                 _jobs[job_id]["error"] = str(exc)
 
 
+def _background_qwen_warmup():
+    global _pipeline_warming
+    _pipeline_warming = True
+    try:
+        logger.info("Background Qwen warmup thread started...")
+        load_qwen21_pipeline()
+        logger.info("Background Qwen warmup complete - GPU pipeline 100%% resident.")
+    except Exception as exc:
+        logger.error("Background Qwen warmup failed (will retry on first request): %s", exc)
+    finally:
+        _pipeline_warming = False
+
+
 @app.on_event("startup")
 def _startup_preload():
     try:
@@ -416,13 +498,11 @@ def _startup_preload():
     except Exception as exc:
         logger.warning("Startup RMBG preload failed (will load on first request): %s", exc)
 
-    if PRELOAD_MODEL:
-        try:
-            logger.info("Preloading model into VRAM on startup...")
-            p = load_qwen21_pipeline()
-            logger.info("Application ready with resident VRAM pipeline.")
-        except Exception as exc:
-            logger.error("Startup preload failed (will retry on first request): %s", exc)
+    # Start Qwen loading in background daemon thread so Uvicorn opens port 8001 in ~2s
+    # while weights begin streaming into VRAM immediately (no 150s cold-request surprise!).
+    should_warmup = PRELOAD_MODEL or (AUTO_WARMUP_QWEN and os.path.exists("/models/Qwen-Image-2.1-Turbo/model_index.json"))
+    if should_warmup:
+        threading.Thread(target=_background_qwen_warmup, daemon=True, name="qwen-warmup").start()
 
 
 @app.get("/health")
@@ -434,6 +514,7 @@ def health(x_api_key: Optional[str] = Header(default=None)):
         "model_id": MODEL_ID,
         "precision": "full_bfloat16",
         "model_loaded": _pipeline is not None,
+        "model_warming": _pipeline_warming,
         "rmbg_loaded": _rmbg_model is not None,
         "pre_clean_supported": True,
         "output_size": f"{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}",

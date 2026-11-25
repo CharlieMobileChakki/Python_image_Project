@@ -17,7 +17,7 @@ ENV PORT=8001
 ENV CUDA_HOME=/usr/local/cuda
 ENV PATH="${CUDA_HOME}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
-ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+ENV CUDA_MODULE_LOADING="LAZY"
 
 # 1. Install base system utilities and Python 3.11
 RUN apt-get update && apt-get install -y --no-install-recommends \
