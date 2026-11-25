@@ -85,6 +85,7 @@ def generate_garment_via_gpu(
     width: int | None = None,
     height: int | None = None,
     transparent: bool = True,
+    pre_clean: bool = False,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """Submit reference photo + ChatGPT prompt to GPU Worker and retrieve crisp studio PNG.
 
@@ -132,6 +133,7 @@ def generate_garment_via_gpu(
         "steps": str(steps),
         "guidance_scale": str(guidance_scale),
         "transparent": "true" if transparent else "false",
+        "pre_clean": "true" if pre_clean else "false",
     }
     if seed is not None:
         form_data["seed"] = str(seed)
@@ -160,6 +162,7 @@ def generate_garment_via_gpu(
                     "model": gen_resp.headers.get("X-Model-Name", "Qwen/Qwen-Image-2.1-Turbo"),
                     "gpu_name": gen_resp.headers.get("X-GPU-Name", "Blackwell GPU"),
                     "inference_time_sec": str(gpu_time),
+                    "preclean_time_sec": gen_resp.headers.get("X-Preclean-Time-Sec", "0"),
                     "execution_mode": "direct_sync_stream",
                 }
                 logger.info("Direct GPU generation succeeded in %ss!", gpu_time)
@@ -269,6 +272,7 @@ def generate_garment_via_gpu(
     metadata = {
         "model": result_resp.headers.get("X-Model-Name", "Qwen/Qwen-Image-2.1-Turbo"),
         "inference_time_sec": result_resp.headers.get("X-Inference-Time-Sec", "0"),
+        "preclean_time_sec": result_resp.headers.get("X-Preclean-Time-Sec", "0"),
         "gpu_name": result_resp.headers.get("X-GPU-Name", "NVIDIA RTX A6000"),
         "vram_gb": result_resp.headers.get("X-VRAM-GB", "48.0"),
         "seed": result_resp.headers.get("X-Seed", str(seed or "")),

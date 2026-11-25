@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image, ImageOps
+from starlette.concurrency import run_in_threadpool
 import torch
 
 load_dotenv()
@@ -252,8 +253,11 @@ def _run_inference_sync(
     width: Optional[int] = None,
     height: Optional[int] = None,
     transparent: bool = False,
+    pre_clean: bool = False,
 ) -> tuple[bytes, dict[str, str]]:
-    """Run official Qwen-Image-2.1-Turbo 8-step editing with KV cache and optional GPU background removal."""
+    """Run official Qwen-Image-2.1-Turbo 8-step editing with KV cache and optional in-GPU pre-clean + matting."""
+    import numpy as np
+
     pipe = load_qwen21_pipeline()
     used_seed = seed if seed is not None else int(time.time()) % 1000000
     # Official Qwen-Image-2.1 README uses CPU generator for deterministic reproducibility
@@ -262,11 +266,30 @@ def _run_inference_sync(
     target_w = int(width) if width and int(width) > 0 else OUTPUT_WIDTH
     target_h = int(height) if height and int(height) > 0 else OUTPUT_HEIGHT
 
+    t0 = time.perf_counter()
+
+    # Optional zero-roundtrip reference background pre-cleaning directly in Blackwell VRAM (~30ms)
+    preclean_sec = 0.0
+    if pre_clean:
+        t_pre = time.perf_counter()
+        try:
+            rgba_ref = remove_background_gpu(ref_img)
+            alpha_ch = rgba_ref.split()[3]
+            if np.sum(np.array(alpha_ch) > 30) > 0.05 * (rgba_ref.width * rgba_ref.height):
+                white_bg_ref = Image.new("RGB", rgba_ref.size, (255, 255, 255))
+                white_bg_ref.paste(rgba_ref, (0, 0), mask=alpha_ch)
+                ref_img = white_bg_ref.convert("RGBA")
+                preclean_sec = round(time.perf_counter() - t_pre, 3)
+                logger.info("In-GPU reference pre-clean completed in %.3fs.", preclean_sec)
+        except Exception as exc:
+            logger.warning("In-GPU reference pre-clean failed (%s); using original reference image.", exc)
+
     logger.info(
-        "Running Qwen-Image-2.1-Turbo (size=%dx%d, in=%s, transparent=%s) | prompt: %.200s...",
+        "Running Qwen-Image-2.1-Turbo (size=%dx%d, in=%s, pre_clean=%s, transparent=%s) | prompt: %.200s...",
         target_w,
         target_h,
         ref_img.size,
+        pre_clean,
         transparent,
         prompt,
     )
@@ -279,7 +302,6 @@ def _run_inference_sync(
             gc.collect()
             torch.cuda.empty_cache()
 
-    t0 = time.perf_counter()
     with _pipe_lock, torch.inference_mode():
         pipe_kwargs = {
             "prompt": prompt,
@@ -328,6 +350,7 @@ def _run_inference_sync(
         "X-GPU-Name": gpu_info["gpu_name"],
         "X-VRAM-GB": str(gpu_info["vram_total_gb"]),
         "X-Inference-Time-Sec": str(elapsed),
+        "X-Preclean-Time-Sec": str(preclean_sec),
         "X-Seed": str(used_seed),
         "X-Transparent": str(transparent).lower(),
     }
@@ -352,6 +375,7 @@ def _background_job_runner(
     width: Optional[int] = None,
     height: Optional[int] = None,
     transparent: bool = False,
+    pre_clean: bool = False,
 ) -> None:
     with _jobs_lock:
         if job_id in _jobs:
@@ -367,6 +391,7 @@ def _background_job_runner(
             width=width,
             height=height,
             transparent=transparent,
+            pre_clean=pre_clean,
         )
         with _jobs_lock:
             if job_id in _jobs:
@@ -410,6 +435,7 @@ def health(x_api_key: Optional[str] = Header(default=None)):
         "precision": "full_bfloat16",
         "model_loaded": _pipeline is not None,
         "rmbg_loaded": _rmbg_model is not None,
+        "pre_clean_supported": True,
         "output_size": f"{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}",
         **gpu,
     }
@@ -425,6 +451,7 @@ async def submit_job(
     width: Optional[int] = Form(None),
     height: Optional[int] = Form(None),
     transparent: bool = Form(False),
+    pre_clean: bool = Form(False),
     x_api_key: Optional[str] = Header(default=None),
 ):
     """Submit an async Qwen-Image-2.1-Turbo generation job (immune to Cloudflare 524!)."""
@@ -453,7 +480,7 @@ async def submit_job(
 
     thread = threading.Thread(
         target=_background_job_runner,
-        args=(job_id, ref_img, prompt, steps, guidance_scale, seed, width, height, transparent),
+        args=(job_id, ref_img, prompt, steps, guidance_scale, seed, width, height, transparent, pre_clean),
         daemon=True,
     )
     thread.start()
@@ -503,9 +530,10 @@ async def generate_garment(
     width: Optional[int] = Form(None),
     height: Optional[int] = Form(None),
     transparent: bool = Form(False),
+    pre_clean: bool = Form(False),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Run synchronous Qwen-Image-2.1-Turbo generation on NVIDIA GPU."""
+    """Run synchronous Qwen-Image-2.1-Turbo generation in worker thread so /health stays responsive."""
     _verify_api_key(x_api_key)
 
     raw_bytes = await image.read()
@@ -519,7 +547,8 @@ async def generate_garment(
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
     try:
-        png_bytes, headers = _run_inference_sync(
+        png_bytes, headers = await run_in_threadpool(
+            _run_inference_sync,
             ref_img=ref_img,
             prompt=prompt,
             steps=steps,
@@ -528,12 +557,22 @@ async def generate_garment(
             width=width,
             height=height,
             transparent=transparent,
+            pre_clean=pre_clean,
         )
     except Exception as exc:
         logger.exception("Qwen-Image-2.1-Turbo inference error: %s", exc)
         raise HTTPException(status_code=500, detail=f"GPU inference failed: {exc}") from exc
 
     return Response(content=png_bytes, media_type="image/png", headers=headers)
+
+
+def _run_rmbg_sync(img: Image.Image) -> tuple[bytes, float]:
+    t0 = time.perf_counter()
+    rgba = remove_background_gpu(img)
+    elapsed = round(time.perf_counter() - t0, 3)
+    buf = io.BytesIO()
+    rgba.save(buf, format="PNG", compress_level=1)
+    return buf.getvalue(), elapsed
 
 
 @app.post("/remove-background")
@@ -554,18 +593,14 @@ async def remove_background_endpoint(
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
     try:
-        t0 = time.perf_counter()
-        rgba = remove_background_gpu(img)
-        elapsed = round(time.perf_counter() - t0, 3)
+        png_bytes, elapsed = await run_in_threadpool(_run_rmbg_sync, img)
     except Exception as exc:
         logger.exception("GPU background removal failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"GPU background removal failed: {exc}") from exc
 
-    buf = io.BytesIO()
-    rgba.save(buf, format="PNG", compress_level=1)
     gpu_info = _get_gpu_info()
     headers = {
         "X-Inference-Time-Sec": str(elapsed),
         "X-GPU-Name": gpu_info["gpu_name"],
     }
-    return Response(content=buf.getvalue(), media_type="image/png", headers=headers)
+    return Response(content=png_bytes, media_type="image/png", headers=headers)

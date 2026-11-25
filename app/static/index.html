@@ -982,7 +982,7 @@ select.studio-select:focus {
         <div class="banner-icon">⚡</div>
         <div class="banner-details">
           <h3>Unified 3D Ghost Mannequin Studio (Node.js & UI)</h3>
-          <p>Single Production Flow: ChatGPT Vision ➔ Remote GPU Qwen 2.1 ➔ BiRefNet Lite 1024x1024 Transparent PNG</p>
+          <p>Single Production Flow: ChatGPT Vision ➔ Remote GPU Qwen 2.1 + RMBG-1.4 ➔ 1024x1024 Transparent PNG</p>
         </div>
       </div>
       <div class="banner-tags">
@@ -1160,7 +1160,7 @@ select.studio-select:focus {
           <div id="progressContainer" class="progress-card" style="display: none;">
             <div class="pulse-spinner"></div>
             <h4 id="progressTitle" style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Generating 3D Studio Garment...</h4>
-            <p id="progressSubtitle" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Delegating to Remote GPU Worker</p>
+            <p id="progressSubtitle" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Delegating to Remote GPU Worker (Single-Trip)</p>
 
             <div class="step-tracker">
               <div class="tracker-item" id="trackerStep1">
@@ -1169,11 +1169,11 @@ select.studio-select:focus {
               </div>
               <div class="tracker-item" id="trackerStep2">
                 <span id="trackerDot2">○</span>
-                <span>2. Garment Reconstruction (Qwen-2.1 Turbo 3D synthesis)</span>
+                <span>2. GPU Synthesis &amp; Matting (Qwen-2.1 + RMBG-1.4 CUDA)</span>
               </div>
               <div class="tracker-item" id="trackerStep3">
                 <span id="trackerDot3">○</span>
-                <span>3. Background &amp; Alpha Extraction (BiRefNet Lite 1024x1024 normalization)</span>
+                <span>3. Canvas Normalization &amp; Lock (1024x1024 Transparent PNG)</span>
               </div>
             </div>
             <span id="elapsedTimer" style="display: inline-block; margin-top: 12px; font-size: 11px; font-family: monospace; color: var(--accent-primary);">Time: 0.0s</span>
@@ -1216,7 +1216,7 @@ select.studio-select:focus {
           gpuText.textContent = `GPU Offline • Click to Reconnect`;
           const bannerPill = document.getElementById('bannerGpuPill');
           if (bannerPill) bannerPill.textContent = `GPU Offline`;
-          document.getElementById('gpuPill').title = `GPU Offline (${data.hardware.gpu_worker_url}). Click to paste new Cloudflare URL.`;
+          document.getElementById('gpuPill').title = `GPU Offline (${data.hardware.gpu_worker_url}). Click to update GPU Worker URL.`;
         }
       } catch (err) {
         gpuDot.className = 'pulse-dot amber';
@@ -1454,6 +1454,8 @@ select.studio-select:focus {
       document.getElementById('downloadCurrentBtn').style.display = 'none';
 
       // Reset Step Tracker
+      const subtitleEl = document.getElementById('progressSubtitle');
+      if (subtitleEl) subtitleEl.textContent = 'Delegating to Remote GPU Worker (Single-Trip)';
       const dot1 = document.getElementById('trackerDot1');
       const dot2 = document.getElementById('trackerDot2');
       const dot3 = document.getElementById('trackerDot3');
@@ -1466,20 +1468,24 @@ select.studio-select:focus {
 
       let startTime = Date.now();
       timerInterval = setInterval(() => {
-        const sec = ((Date.now() - startTime) / 1000).toFixed(1);
+        const secNum = (Date.now() - startTime) / 1000;
+        const sec = secNum.toFixed(1);
         document.getElementById('elapsedTimer').textContent = `Time: ${sec}s`;
 
-        if (sec > 3.5 && dot2.textContent === '○') {
+        if (secNum > 4.0 && dot2.textContent === '○') {
           dot1.textContent = '✓';
           dot1.parentElement.className = 'tracker-item done';
           dot2.textContent = '⟳';
           dot2.parentElement.className = 'tracker-item active';
         }
-        if (sec > 42.0 && dot3.textContent === '○') {
+        if (secNum > 10.5 && dot3.textContent === '○') {
           dot2.textContent = '✓';
           dot2.parentElement.className = 'tracker-item done';
           dot3.textContent = '⟳';
           dot3.parentElement.className = 'tracker-item active';
+        }
+        if (secNum > 18.0 && subtitleEl) {
+          subtitleEl.textContent = 'Warming up GPU VRAM weights on cold start (~45s first run, ~11s next)...';
         }
       }, 100);
     }
@@ -1567,6 +1573,7 @@ select.studio-select:focus {
         const item = fileQueue[i];
         if (item.status === 'done') continue;
 
+        item.status = 'processing';
         selectQueueIndex(i);
         startScanning();
 
@@ -1625,6 +1632,14 @@ select.studio-select:focus {
 
       // Render Real Telemetry Badges
       const elapsedSec = ((result.execution_time_ms || (result.processing_time_sec ? result.processing_time_sec * 1000 : 0)) / 1000).toFixed(1);
+      const diag = result.diagnostics || {};
+      const timeDetails = [
+        diag.prompt_time_ms ? `Vision: ${(diag.prompt_time_ms / 1000).toFixed(2)}s` : '',
+        diag.gpu_generation_time_ms ? `GPU: ${(diag.gpu_generation_time_ms / 1000).toFixed(2)}s` : '',
+        diag.preclean_time_ms ? `PreClean: ${(diag.preclean_time_ms / 1000).toFixed(2)}s` : '',
+        diag.postprocess_time_ms ? `Post: ${(diag.postprocess_time_ms / 1000).toFixed(2)}s` : '',
+      ].filter(Boolean).join(' | ');
+      const timeTitle = timeDetails ? `title="${timeDetails}"` : '';
       const isFlowB = result.mode === 'with_person' || (result.diagnostics && result.diagnostics.scene_type === 'person') || result.mode === 'jewelry_studio' || (result.garments && result.garments.some(g => g.presentation_mode === 'ghost_mannequin'));
       const standInfo = activeGarment.stand_type ? `<div class="telemetry-badge">Stand: <strong>${activeGarment.stand_type}</strong></div>` : '';
       const viewsInfo = (activeGarment.views_analyzed && activeGarment.views_analyzed > 1) ? `<div class="telemetry-badge" style="color: #F59E0B;">Angles Fused: <strong>${activeGarment.views_analyzed} views</strong></div>` : '';
@@ -1645,7 +1660,7 @@ select.studio-select:focus {
         ${qualityScore}
         <div class="telemetry-badge">Canvas: <strong>${activeGarment.resolution || (activeGarment.stand_type ? "2048×2048 Ultra-HD PNG" : "1024×1024 PNG")}</strong></div>
         <div class="telemetry-badge">Engine: <strong>${isFlowB ? (activeGarment.engine || 'RTX A6000 Turbo (bfloat16)') : 'BiRefNet Lite CPU'}</strong></div>
-        <div class="telemetry-badge">Time: <strong>${elapsedSec}s</strong></div>
+        <div class="telemetry-badge" ${timeTitle}>Time: <strong>${elapsedSec}s</strong></div>
       `;
 
       switchOutputView(currentOutputView);
@@ -1737,7 +1752,7 @@ select.studio-select:focus {
         item.result.garments.forEach(g => {
           const a = document.createElement('a');
           a.href = g.output_png_url;
-          a.download = `${baseName}_${g.category}_1024.png`;
+          a.download = `${baseName}_${g.category}_${g.resolution || '1024x1024'}.png`;
           document.body.appendChild(a);
           a.click();
           a.remove();

@@ -417,6 +417,8 @@ def execute_flow_b_with_person(
 
     processed_items: list[dict[str, Any]] = []
     gpu_time_ms = 0.0
+    preclean_time_ms = 0.0
+    postprocess_time_ms = 0.0
 
     for idx, plan in enumerate(planned_garments):
         cat_key = plan["category"]
@@ -426,27 +428,13 @@ def execute_flow_b_with_person(
         is_jewelry = is_jewelry_domain(cat_key)
         expected_cnt = item_count_override or plan.get("item_count", 1)
 
-        # Macro zoom & square-conditioned reference image (ensures Qwen sees exact micro-facets with zero distortion)
+        # Macro zoom & square-conditioned reference image (1400x1400 preserved for apparel & jewelry detail)
         item_ref_image = get_optimal_item_reference_crop(
             image=image_rgb,
             category=cat_key,
             box_2d=plan.get("box_2d"),
             total_items=len(planned_garments),
         )
-
-        # For apparel: pre-clean reference image background to eliminate bedsheet / floor shadow bleed during Qwen conditioning
-        if not is_jewelry:
-            try:
-                # Fast GPU mask extraction (<0.1s instead of 21s on CPU)
-                fg_ref = remove_background_via_gpu(item_ref_image)
-                fg_alpha = np.array(fg_ref.split()[3])
-                if np.sum(fg_alpha > 30) > 0.05 * fg_alpha.size:
-                    white_bg_ref = Image.new("RGB", fg_ref.size, (255, 255, 255))
-                    white_bg_ref.paste(fg_ref, (0, 0), mask=fg_ref.split()[3])
-                    item_ref_image = white_bg_ref
-                    logger.info("Successfully pre-cleaned item reference image on pure white canvas via GPU.")
-            except Exception as exc:
-                logger.warning("Pre-cleaning item reference image failed (%s); using original reference crop.", exc)
 
         if is_jewelry and presentation_mode == "mode_a_product_only":
             # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
@@ -476,6 +464,7 @@ def execute_flow_b_with_person(
 
         else:
             # Mode C (Display Stand for Jewelry) OR Standard Ghost Mannequin for Apparel
+            # Apparel pre-clean (bedsheet/floor removal) now executes directly inside GPU worker VRAM (~30ms) on the same /generate trip!
             gpu_steps = 26 if is_jewelry else 8
             gpu_guidance = 2.5 if is_jewelry else 1.0
 
@@ -487,9 +476,15 @@ def execute_flow_b_with_person(
                 guidance_scale=gpu_guidance,
                 width=896 if not is_jewelry else 1024,
                 height=896 if not is_jewelry else 1024,
+                pre_clean=not is_jewelry,
             )
             gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
+            try:
+                preclean_time_ms += round(float(gpu_meta.get("preclean_time_sec", 0) or 0) * 1000, 2)
+            except (TypeError, ValueError):
+                pass
 
+            t_post_start = time.perf_counter()
             if is_jewelry:
                 from PIL import ImageFilter
                 raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
@@ -524,6 +519,7 @@ def execute_flow_b_with_person(
                 stand = None
                 val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
                 val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
+            postprocess_time_ms += round((time.perf_counter() - t_post_start) * 1000, 2)
 
         b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
 
@@ -583,6 +579,8 @@ def execute_flow_b_with_person(
             "scene_type": "person",
             "prompt_time_ms": prompt_time_ms,
             "gpu_generation_time_ms": round(gpu_time_ms, 2),
+            "preclean_time_ms": round(preclean_time_ms, 2),
+            "postprocess_time_ms": round(postprocess_time_ms, 2),
         },
     }
 
