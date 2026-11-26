@@ -1,6 +1,7 @@
 """Master Pipeline Orchestrator: Coordinates Flow A (Without Person) and Flow B (With Person)."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
 from typing import Any
@@ -19,6 +20,7 @@ from app.core.flow_b import (
     analyze_jewelry_and_build_prompts,
     create_multi_angle_composite,
     generate_garment_via_gpu,
+    get_worker_capacity,
     is_jewelry_domain,
     remove_background_via_gpu,
 )
@@ -381,6 +383,150 @@ def get_optimal_item_reference_crop(
         return image
 
 
+def _process_single_planned_garment(
+    idx: int,
+    plan: dict[str, Any],
+    total_planned: int,
+    image_rgb: Image.Image,
+    job_id: str,
+    include_base64: bool,
+    presentation_mode: str,
+    item_count_override: int | None,
+) -> tuple[dict[str, Any], float, float, float]:
+    """Process one planned garment or jewelry item cleanly."""
+    cat_key = plan["category"]
+    cat_label = plan["recognized_label"]
+    qwen_prompt = plan["prompt"]
+    g_id = f"garment_{idx + 1:03d}"
+    is_jewelry = is_jewelry_domain(cat_key)
+    expected_cnt = item_count_override or plan.get("item_count", 1)
+
+    gpu_ms = 0.0
+    preclean_ms = 0.0
+    postprocess_ms = 0.0
+
+    # Macro zoom & square-conditioned reference image (1400x1400 preserved for apparel & jewelry detail)
+    item_ref_image = get_optimal_item_reference_crop(
+        image=image_rgb,
+        category=cat_key,
+        box_2d=plan.get("box_2d"),
+        total_items=total_planned,
+    )
+
+    if is_jewelry and presentation_mode == "mode_a_product_only":
+        fg_cutout = extract_isolated_flow_a(item_ref_image)
+        final_cutout = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
+        out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+        out_path = OUTPUT_DIR / out_filename
+        final_cutout.save(out_path, format="PNG", compress_level=1)
+        stand = None
+        angle_deg = 0.0
+        val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+        val_conf = val_res.get("mask_quality", 0.98)
+        gpu_meta = {"model": "bi_refnet_identity_preserved", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+
+    elif is_jewelry and presentation_mode == "mode_b_studio_presentation":
+        fg_cutout = extract_isolated_flow_a(item_ref_image)
+        final_cutout = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
+        out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+        out_path = OUTPUT_DIR / out_filename
+        final_cutout.save(out_path, format="PNG", compress_level=1)
+        stand = None
+        angle_deg = 0.0
+        val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+        val_conf = val_res.get("mask_quality", 0.98)
+        gpu_meta = {"model": "studio_composer_shadow_composite", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+
+    else:
+        gpu_steps = 26 if is_jewelry else 8
+        gpu_guidance = 2.5 if is_jewelry else 1.0
+
+        t_gpu_start = time.perf_counter()
+        generated_raw, gpu_meta = generate_garment_via_gpu(
+            reference_image=item_ref_image,
+            prompt=qwen_prompt,
+            steps=gpu_steps,
+            guidance_scale=gpu_guidance,
+            width=896 if not is_jewelry else 1024,
+            height=896 if not is_jewelry else 1024,
+            pre_clean=not is_jewelry,
+        )
+        gpu_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
+        try:
+            preclean_ms = round(float(gpu_meta.get("preclean_time_sec", 0) or 0) * 1000, 2)
+        except (TypeError, ValueError):
+            pass
+
+        t_post_start = time.perf_counter()
+        if is_jewelry:
+            from PIL import ImageFilter
+            raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
+            sharpened = raw_calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
+            final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", compress_level=1)
+            stand = (
+                "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
+                else ("beige_velvet_brass_ring_block" if cat_key == "ring"
+                else ("beige_velvet_brass_bangle_bar" if cat_key in ("bangles", "kada")
+                else "beige_velvet_brass_neck_bust"))
+            )
+            angle_deg = 0.0
+            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
+            val_conf = val_res.get("mask_quality", 0.98)
+        else:
+            if generated_raw.mode == "RGBA" and generated_raw.getchannel("A").getextrema()[0] < 250:
+                cutout_rgba = generated_raw
+            else:
+                cutout_rgba = remove_background_via_gpu(generated_raw)
+
+            angle_deg = 0.0
+            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
+            val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
+            final_cutout = val_check.get("refined_cutout", normalized_1024)
+            out_filename = f"{job_id}_{g_id}.png"
+            out_path = OUTPUT_DIR / out_filename
+            final_cutout.save(out_path, format="PNG", compress_level=1)
+            stand = None
+            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
+            val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
+        postprocess_ms = round((time.perf_counter() - t_post_start) * 1000, 2)
+
+    b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
+    item_payload = {
+        "garment_id": g_id,
+        "category": cat_key,
+        "recognized_label": cat_label,
+        "title": cat_label,
+        "stand_type": stand,
+        "presentation_mode": presentation_mode if is_jewelry else "ghost_mannequin",
+        "detected_item_count": val_res.get("detected_count", expected_cnt),
+        "validation_metrics": val_res,
+        "image": out_filename,
+        "url": f"/api/outputs/{out_filename}",
+        "output_png_url": f"/api/outputs/{out_filename}",
+        "confidence": val_conf,
+        "coverage_percentage": round(100.0 / max(1, total_planned), 1),
+        "priority": "first_priority",
+        "is_fused": False,
+        "rotation_angle_deg": angle_deg,
+        "repaired": True,
+        "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
+        "engine": f"{gpu_meta.get('gpu_name', 'NVIDIA GPU')} Turbo (bfloat16)",
+        "gpu_name": gpu_meta.get("gpu_name", "NVIDIA GPU"),
+        "width": 2048 if is_jewelry else 1024,
+        "height": 2048 if is_jewelry else 1024,
+        "image_dimensions": [2048, 2048] if is_jewelry else [1024, 1024],
+        "output_png_base64": b64_data,
+        "background_removal_status": val_res.get("status", "success"),
+        "background_removal_confidence": val_conf,
+        "garment_preservation_status": "preserved" if val_res.get("verified", True) else "modified",
+        "validation_errors": [] if val_res.get("verified", True) else [val_res.get("count_status", "Check count")],
+    }
+    return item_payload, gpu_ms, preclean_ms, postprocess_ms
+
+
 def execute_flow_b_with_person(
     image_rgb: Image.Image,
     image_bytes: bytes,
@@ -394,7 +540,7 @@ def execute_flow_b_with_person(
     presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
 ) -> dict[str, Any]:
-    """Execute Flow B: Direct ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Extraction.
+    """Execute Flow B: ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo Garment Extraction.
 
     Supports three presentation modes for product accuracy:
     - Mode A: Original Product Only (100% original pixels, background removed, clean white/transparent).
@@ -415,144 +561,46 @@ def execute_flow_b_with_person(
     )
     prompt_time_ms = round((time.perf_counter() - t_prompt_start) * 1000, 2)
 
-    processed_items: list[dict[str, Any]] = []
-    gpu_time_ms = 0.0
-    preclean_time_ms = 0.0
-    postprocess_time_ms = 0.0
+    total_planned = len(planned_garments)
+    worker_capacity = get_worker_capacity()
 
-    for idx, plan in enumerate(planned_garments):
-        cat_key = plan["category"]
-        cat_label = plan["recognized_label"]
-        qwen_prompt = plan["prompt"]
-        g_id = f"garment_{idx + 1:03d}"
-        is_jewelry = is_jewelry_domain(cat_key)
-        expected_cnt = item_count_override or plan.get("item_count", 1)
-
-        # Macro zoom & square-conditioned reference image (1400x1400 preserved for apparel & jewelry detail)
-        item_ref_image = get_optimal_item_reference_crop(
-            image=image_rgb,
-            category=cat_key,
-            box_2d=plan.get("box_2d"),
-            total_items=len(planned_garments),
-        )
-
-        if is_jewelry and presentation_mode == "mode_a_product_only":
-            # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
-            fg_cutout = extract_isolated_flow_a(item_ref_image)
-            final_cutout = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
-            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = None
-            angle_deg = 0.0
-            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-            val_conf = val_res.get("mask_quality", 0.98)
-            gpu_meta = {"model": "bi_refnet_identity_preserved", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
-
-        elif is_jewelry and presentation_mode == "mode_b_studio_presentation":
-            # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
-            fg_cutout = extract_isolated_flow_a(item_ref_image)
-            final_cutout = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
-            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = None
-            angle_deg = 0.0
-            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-            val_conf = val_res.get("mask_quality", 0.98)
-            gpu_meta = {"model": "studio_composer_shadow_composite", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
-
-        else:
-            # Mode C (Display Stand for Jewelry) OR Standard Ghost Mannequin for Apparel
-            # Apparel pre-clean (bedsheet/floor removal) now executes directly inside GPU worker VRAM (~30ms) on the same /generate trip!
-            gpu_steps = 26 if is_jewelry else 8
-            gpu_guidance = 2.5 if is_jewelry else 1.0
-
-            t_gpu_start = time.perf_counter()
-            generated_raw, gpu_meta = generate_garment_via_gpu(
-                reference_image=item_ref_image,
-                prompt=qwen_prompt,
-                steps=gpu_steps,
-                guidance_scale=gpu_guidance,
-                width=896 if not is_jewelry else 1024,
-                height=896 if not is_jewelry else 1024,
-                pre_clean=not is_jewelry,
-            )
-            gpu_time_ms += round((time.perf_counter() - t_gpu_start) * 1000, 2)
-            try:
-                preclean_time_ms += round(float(gpu_meta.get("preclean_time_sec", 0) or 0) * 1000, 2)
-            except (TypeError, ValueError):
-                pass
-
-            t_post_start = time.perf_counter()
-            if is_jewelry:
-                from PIL import ImageFilter
-                raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
-                sharpened = raw_calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
-                final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
-                out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-                out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", compress_level=1)
-                stand = (
-                    "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
-                    else ("beige_velvet_brass_ring_block" if cat_key == "ring"
-                    else ("beige_velvet_brass_bangle_bar" if cat_key in ("bangles", "kada")
-                    else "beige_velvet_brass_neck_bust"))
+    if total_planned > 1 and worker_capacity > 1:
+        max_parallel = min(total_planned, worker_capacity, 4)
+        with ThreadPoolExecutor(max_workers=max_parallel) as pool:
+            futures = [
+                pool.submit(
+                    _process_single_planned_garment,
+                    idx,
+                    plan,
+                    total_planned,
+                    image_rgb,
+                    job_id,
+                    include_base64,
+                    presentation_mode,
+                    item_count_override,
                 )
-                angle_deg = 0.0
-                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-                val_conf = val_res.get("mask_quality", 0.98)
-            else:
-                # Apparel: use instant GPU transparent cutout if available, else strip via GPU/BiRefNet
-                if generated_raw.mode == "RGBA" and generated_raw.getchannel("A").getextrema()[0] < 250:
-                    cutout_rgba = generated_raw
-                else:
-                    cutout_rgba = remove_background_via_gpu(generated_raw)
+                for idx, plan in enumerate(planned_garments)
+            ]
+            item_results = [f.result() for f in futures]
+    else:
+        item_results = [
+            _process_single_planned_garment(
+                idx,
+                plan,
+                total_planned,
+                image_rgb,
+                job_id,
+                include_base64,
+                presentation_mode,
+                item_count_override,
+            )
+            for idx, plan in enumerate(planned_garments)
+        ]
 
-                angle_deg = 0.0
-                normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-                val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
-                final_cutout = val_check.get("refined_cutout", normalized_1024)
-                out_filename = f"{job_id}_{g_id}.png"
-                out_path = OUTPUT_DIR / out_filename
-                final_cutout.save(out_path, format="PNG", compress_level=1)
-                stand = None
-                val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
-                val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
-            postprocess_time_ms += round((time.perf_counter() - t_post_start) * 1000, 2)
-
-        b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
-
-        processed_items.append({
-            "garment_id": g_id,
-            "category": cat_key,
-            "recognized_label": cat_label,
-            "title": cat_label,
-            "stand_type": stand,
-            "presentation_mode": presentation_mode if is_jewelry else "ghost_mannequin",
-            "detected_item_count": val_res.get("detected_count", expected_cnt),
-            "validation_metrics": val_res,
-            "image": out_filename,
-            "url": f"/api/outputs/{out_filename}",
-            "output_png_url": f"/api/outputs/{out_filename}",
-            "confidence": val_conf,
-            "coverage_percentage": round(100.0 / max(1, len(planned_garments)), 1),
-            "priority": "first_priority",
-            "is_fused": False,
-            "rotation_angle_deg": angle_deg,
-            "repaired": True,
-            "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
-            "engine": f"{gpu_meta.get('gpu_name', 'NVIDIA RTX A6000')} Turbo (bfloat16)",
-            "gpu_name": gpu_meta.get("gpu_name", "NVIDIA RTX A6000"),
-            "width": 2048 if is_jewelry else 1024,
-            "height": 2048 if is_jewelry else 1024,
-            "image_dimensions": [2048, 2048] if is_jewelry else [1024, 1024],
-            "output_png_base64": b64_data,
-            "background_removal_status": val_res.get("status", "success"),
-            "background_removal_confidence": val_conf,
-            "garment_preservation_status": "preserved" if val_res.get("verified", True) else "modified",
-            "validation_errors": [] if val_res.get("verified", True) else [val_res.get("count_status", "Check count")],
-        })
+    processed_items = [r[0] for r in item_results]
+    gpu_time_ms = round(sum(r[1] for r in item_results), 2)
+    preclean_time_ms = round(sum(r[2] for r in item_results), 2)
+    postprocess_time_ms = round(sum(r[3] for r in item_results), 2)
 
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
     return {

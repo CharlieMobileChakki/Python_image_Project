@@ -24,18 +24,32 @@ ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 _semaphore: asyncio.Semaphore | None = None
 _semaphore_loop: asyncio.AbstractEventLoop | None = None
+_semaphore_limit: int = 0
+
+
+def _resolve_concurrency_limit() -> int:
+    raw = os.getenv("MAX_CONCURRENT_JOBS", "auto").strip().lower()
+    if raw and raw != "auto":
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    from app.core.flow_b import get_worker_capacity
+    return max(4, get_worker_capacity() * 2)
 
 
 def get_semaphore() -> asyncio.Semaphore:
-    global _semaphore, _semaphore_loop
+    global _semaphore, _semaphore_loop, _semaphore_limit
     try:
         current_loop = asyncio.get_running_loop()
     except RuntimeError:
         current_loop = None
 
+    target_limit = _resolve_concurrency_limit()
     if _semaphore is None or _semaphore_loop != current_loop:
-        _semaphore = asyncio.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "4"))))
+        _semaphore = asyncio.Semaphore(target_limit)
         _semaphore_loop = current_loop
+        _semaphore_limit = target_limit
     return _semaphore
 
 
@@ -366,31 +380,47 @@ async def forward_downstream_endpoint(
 
 @router.post("/set-gpu-url")
 async def set_gpu_url_endpoint(
-    url: str = Form(..., description="New Cloudflare GPU Worker URL"),
+    url: str = Form(..., description="Remote GPU endpoint URL (RunPod https://api.runpod.ai/v2/<ID> or HTTP URL(s))"),
+    api_key: str | None = Form(None, description="Optional updated API key (RunPod or X-API-Key)"),
 ) -> Any:
-    """Dynamically update the remote GPU worker URL in-memory and in .env without server restart."""
+    """Dynamically update remote GPU endpoint URL(s) in-memory and in .env without restart."""
     from app.core.flow_b import check_gpu_worker_health
-    cleaned_url = url.strip().rstrip("/")
-    if not (cleaned_url.startswith("http://") or cleaned_url.startswith("https://")):
-        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
 
+    raw_urls = [u.strip().rstrip("/") for u in url.split(",") if u.strip()]
+    if not raw_urls or any(not (u.startswith("http://") or u.startswith("https://")) for u in raw_urls):
+        raise HTTPException(status_code=400, detail="Invalid URL. Each endpoint must start with http:// or https://")
+
+    cleaned_url = ",".join(raw_urls)
     os.environ["QWEN_REMOTE_URL"] = cleaned_url
+    if api_key is not None and api_key.strip():
+        cleaned_key = api_key.strip()
+        if "api.runpod.ai" in cleaned_url.lower():
+            os.environ["RUNPOD_API_KEY"] = cleaned_key
+        else:
+            os.environ["QWEN_API_KEY"] = cleaned_key
 
-    # Persist into .env file
+    # Persist updates into .env cleanly without duplicating lines
     env_file = Path(".env")
+    updates: dict[str, str] = {"QWEN_REMOTE_URL": f'"{cleaned_url}"'}
+    if api_key is not None and api_key.strip():
+        key_var = "RUNPOD_API_KEY" if "api.runpod.ai" in cleaned_url.lower() else "QWEN_API_KEY"
+        updates[key_var] = f'"{api_key.strip()}"'
+
     if env_file.exists():
         try:
             lines = env_file.read_text(encoding="utf-8").splitlines()
+            seen: set[str] = set()
             new_lines = []
-            found = False
             for line in lines:
-                if line.startswith("QWEN_REMOTE_URL="):
-                    new_lines.append(f"QWEN_REMOTE_URL={cleaned_url}")
-                    found = True
+                matched_key = next((k for k in updates if line.startswith(f"{k}=")), None)
+                if matched_key:
+                    new_lines.append(f"{matched_key}={updates[matched_key]}")
+                    seen.add(matched_key)
                 else:
                     new_lines.append(line)
-            if not found:
-                new_lines.append(f"QWEN_REMOTE_URL={cleaned_url}")
+            for k, v in updates.items():
+                if k not in seen:
+                    new_lines.append(f"{k}={v}")
             env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
         except Exception:
             pass

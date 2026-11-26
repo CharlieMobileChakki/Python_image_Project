@@ -1,4 +1,4 @@
-"""Flow B subpackage: ChatGPT Vision prompt generation + Remote RTX 3090 Qwen GPU client."""
+"""Flow B subpackage: ChatGPT Vision prompt generation + Provider-Agnostic Remote Qwen GPU client."""
 from __future__ import annotations
 
 from app.core.flow_b.prompt_generator import (
@@ -11,6 +11,7 @@ from app.core.flow_b.prompt_generator import (
 from app.core.flow_b.qwen_client import (
     check_gpu_worker_health,
     generate_garment_via_gpu,
+    get_worker_capacity,
     is_gpu_worker_configured,
     remove_background_via_gpu,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "check_gpu_worker_health",
     "create_multi_angle_composite",
     "generate_garment_via_gpu",
+    "get_worker_capacity",
     "is_gpu_worker_configured",
     "is_jewelry_domain",
     "remove_background_via_gpu",

@@ -2,6 +2,7 @@
 # Arangtik Qwen-Image-2.1-Turbo GPU Worker Requirements (Python 3.11 + CUDA)
 # =============================================================================
 
+runpod>=1.7.0
 fastapi==0.115.6
 uvicorn==0.32.1
 python-multipart>=0.0.9

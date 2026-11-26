@@ -1,10 +1,9 @@
-"""Dedicated High-VRAM GPU Microservice for Arangtik Flow B (Official Qwen/Qwen-Image-2.1-Turbo).
+"""FastAPI HTTP Microservice for Arangtik Flow B (Qwen/Qwen-Image-2.1-Turbo + BRIA RMBG-1.4).
 
-7B Single-Stream DiT architecture with native 8-step Turbo schedule, prefix KV caching,
-and lossless full bfloat16 precision — produces Myntra/Meesho studio-grade garment cutouts
-in real-time on NVIDIA RTX A6000 (48GB VRAM).
+Used for HTTP-based GPU servers (RunPod Pods, Vast.ai, Dedicated Multi-GPU Nodes, Modal ASGI).
+RunPod Serverless Queue mode (`rp_handler.py`) shares the exact same `engine.py` inference core.
 
-Run on AIC Cloud RTX A6000 GPU Server (Python 3.11 Conda env):
+Run:
     uvicorn server:app --host 0.0.0.0 --port 8001
 """
 from __future__ import annotations
@@ -12,418 +11,49 @@ from __future__ import annotations
 import io
 import logging
 import os
+import pathlib
 import sys
-
-# Lazy CUDA module loading speeds up cold start; avoid expandable_segments:True which can deadlock large .to("cuda") transfers
-os.environ.setdefault("CUDA_MODULE_LOADING", "LAZY")
-os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
-
 import threading
 import time
 from typing import Any, Optional
 import uuid
 
-from dotenv import load_dotenv
+_THIS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
-from PIL import Image, ImageOps
+from PIL import Image
 from starlette.concurrency import run_in_threadpool
-import torch
 
-load_dotenv()
+from engine import (
+    API_KEY,
+    MODEL_ID,
+    OUTPUT_HEIGHT,
+    OUTPUT_WIDTH,
+    get_gpu_info,
+    is_pipeline_loaded,
+    is_pipeline_warming,
+    is_rmbg_loaded,
+    preload_models,
+    prepare_ref_image,
+    run_inference_sync,
+    run_rmbg_sync,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("qwen21-gpu-worker")
 
-# Official Qwen-Image-2.1-Turbo (7B, native 8-step editing + product preservation)
-MODEL_ID = os.getenv("QWEN_MODEL_ID", "Qwen/Qwen-Image-2.1-Turbo").strip()
-API_KEY = os.getenv("QWEN_API_KEY", "").strip()
-PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "false").strip().lower() in ("1", "true", "yes")
-AUTO_WARMUP_QWEN = os.getenv("AUTO_WARMUP_QWEN", "true").strip().lower() in ("1", "true", "yes")
-OUTPUT_WIDTH = int(os.getenv("QWEN_OUTPUT_WIDTH", "896"))
-OUTPUT_HEIGHT = int(os.getenv("QWEN_OUTPUT_HEIGHT", "896"))
+app = FastAPI(title="Arangtik Qwen-Image-2.1-Turbo GPU Worker", version="4.0.0")
 
-app = FastAPI(title="Arangtik Qwen-Image-2.1-Turbo GPU Worker", version="3.0.0")
-
-_pipeline = None
-_pipeline_warming = False
-_pipe_lock = threading.Lock()
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
-
-# SOTA Background Removal on GPU (BRIA RMBG-1.4)
-_rmbg_model = None
-_rmbg_lock = threading.Lock()
-
-
-def load_rmbg_model():
-    """Load BRIA RMBG-1.4 directly into CUDA VRAM for sub-50ms background removal."""
-    global _rmbg_model
-    if _rmbg_model is not None:
-        return _rmbg_model
-
-    with _rmbg_lock:
-        if _rmbg_model is not None:
-            return _rmbg_model
-
-        import torch.nn as nn
-        if not hasattr(nn.Module, "all_tied_weights_keys"):
-            nn.Module.all_tied_weights_keys = {}
-
-        from transformers import AutoModelForImageSegmentation
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float32
-
-        source = "/models/RMBG-1.4" if os.path.exists("/models/RMBG-1.4") else "briaai/RMBG-1.4"
-        logger.info("Loading GPU RMBG-1.4 background removal model from '%s'...", source)
-        model = None
-        for local_only in (True, False):
-            try:
-                try:
-                    model = AutoModelForImageSegmentation.from_pretrained(
-                        source,
-                        trust_remote_code=True,
-                        local_files_only=local_only,
-                        dtype=dtype,
-                    )
-                except TypeError:
-                    model = AutoModelForImageSegmentation.from_pretrained(
-                        source,
-                        trust_remote_code=True,
-                        local_files_only=local_only,
-                        torch_dtype=dtype,
-                    )
-                break
-            except Exception:
-                if not local_only:
-                    raise
-                logger.info("RMBG-1.4 not found in local cache, fetching from HuggingFace...")
-        model.to(device)
-        model.eval()
-        _rmbg_model = model
-        logger.info("RMBG-1.4 background removal model loaded on %s (%s).", device, dtype)
-        return _rmbg_model
-
-
-def remove_background_gpu(image: Image.Image) -> Image.Image:
-    """GPU-accelerated salient background removal using official BRIA RMBG-1.4 pipeline."""
-    import numpy as np
-    from torchvision.transforms.functional import normalize
-
-    model = load_rmbg_model()
-    device = next(model.parameters()).device
-    dtype = next(model.parameters()).dtype
-
-    orig_w, orig_h = image.size
-    rgb_img = image.convert("RGB")
-
-    # 1. Official BRIA RMBG-1.4 preprocessing:
-    # Resize to (1024, 1024), float32 in [0, 1], normalize with mean=[0.5, 0.5, 0.5], std=[1.0, 1.0, 1.0]
-    im_np = np.array(rgb_img)
-    if len(im_np.shape) < 3:
-        im_np = im_np[:, :, np.newaxis]
-    im_tensor = torch.tensor(im_np, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0)
-    im_tensor = torch.nn.functional.interpolate(im_tensor, size=(1024, 1024), mode="bilinear")
-    im_tensor = im_tensor / 255.0
-    im_tensor = normalize(im_tensor, [0.5, 0.5, 0.5], [1.0, 1.0, 1.0]).to(device=device, dtype=dtype)
-
-    with torch.inference_mode():
-        output = model(im_tensor)
-        # Recursively unwrap any nested lists or tuples until we reach the raw Tensor
-        pred = output
-        while isinstance(pred, (tuple, list)):
-            pred = pred[0]
-
-        # Guarantee strict 4D tensor (1, 1, H, W) for bilinear interpolation
-        while pred.dim() > 4:
-            pred = pred.squeeze(0)
-        while pred.dim() < 4:
-            pred = pred.unsqueeze(0)
-
-        # Official BRIA post-processing: DO NOT apply torch.sigmoid (model already outputs salience maps)
-        pred = torch.nn.functional.interpolate(
-            pred.float(),
-            size=(orig_h, orig_w),
-            mode="bilinear",
-            align_corners=False,
-        )
-        ma = torch.max(pred)
-        mi = torch.min(pred)
-        if (ma - mi) > 1e-6:
-            pred = (pred - mi) / (ma - mi)
-
-        # Hard clean floor: clear any residual background noise under 0.15 to guarantee 100% pure 0 alpha
-        pred = torch.where(pred < 0.15, torch.zeros_like(pred), pred)
-
-        pred_np = pred[0, 0].cpu().numpy()
-
-    mask_arr = (np.clip(pred_np, 0.0, 1.0) * 255.0).astype(np.uint8)
-    mask = Image.fromarray(mask_arr, mode="L")
-
-    rgba_img = rgb_img.copy()
-    rgba_img.putalpha(mask)
-    return rgba_img
 
 
 def _verify_api_key(x_api_key: Optional[str]) -> None:
     if API_KEY and (x_api_key or "").strip() != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header.")
-
-
-def _get_gpu_info() -> dict:
-    if not torch.cuda.is_available():
-        return {"cuda_available": False, "gpu_name": "CPU (No CUDA)", "vram_total_gb": 0.0, "vram_used_gb": 0.0}
-    props = torch.cuda.get_device_properties(0)
-    total_gb = round(props.total_memory / (1024 ** 3), 2)
-    used_gb = round(torch.cuda.memory_allocated(0) / (1024 ** 3), 2)
-    return {
-        "cuda_available": True,
-        "gpu_name": props.name,
-        "vram_total_gb": total_gb,
-        "vram_used_gb": used_gb,
-    }
-
-
-def load_qwen21_pipeline():
-    """Load official Qwen/Qwen-Image-2.1-Turbo in FULL lossless bfloat16 without GCS mmap/CUDA stalls."""
-    global _pipeline
-    if _pipeline is not None:
-        return _pipeline
-
-    with _pipe_lock:
-        if _pipeline is not None:
-            return _pipeline
-
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA GPU not detected on this server.")
-
-        import gc
-        from diffusers import QwenImage21Pipeline
-
-        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        # Check mounted GCS volume first (/models/Qwen-Image-2.1-Turbo) to avoid internet downloads
-        has_local_mount = os.path.exists("/models/Qwen-Image-2.1-Turbo/model_index.json")
-        model_source = "/models/Qwen-Image-2.1-Turbo" if has_local_mount else MODEL_ID
-        total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-        logger.info("Loading %s from '%s' (full lossless %s, VRAM=%.1f GB)...", MODEL_ID, model_source, dtype, total_vram_gb)
-        t0 = time.perf_counter()
-
-        pipe = None
-        loaded_via_device_map = False
-
-        # Prefer direct device_map="cuda" on high-VRAM GPUs to stream weights directly to VRAM
-        # without intermediate CPU RAM copy or massive pipe.to("cuda") GCS mmap stalls.
-        if total_vram_gb > 36:
-            try:
-                t_dm = time.perf_counter()
-                logger.info("Attempting direct CUDA stream load (device_map='cuda')...")
-                try:
-                    pipe = QwenImage21Pipeline.from_pretrained(
-                        model_source,
-                        dtype=dtype,
-                        device_map="cuda",
-                        low_cpu_mem_usage=True,
-                        local_files_only=has_local_mount,
-                    )
-                except TypeError:
-                    pipe = QwenImage21Pipeline.from_pretrained(
-                        model_source,
-                        torch_dtype=dtype,
-                        device_map="cuda",
-                        low_cpu_mem_usage=True,
-                        local_files_only=has_local_mount,
-                    )
-                loaded_via_device_map = True
-                logger.info("Direct CUDA stream load succeeded in %.2fs.", time.perf_counter() - t_dm)
-            except Exception as dm_exc:
-                logger.warning("Direct device_map='cuda' unsupported (%s); falling back to staged component transfer.", dm_exc)
-                pipe = None
-                gc.collect()
-                torch.cuda.empty_cache()
-
-        if pipe is None:
-            try:
-                pipe = QwenImage21Pipeline.from_pretrained(
-                    model_source,
-                    dtype=dtype,
-                    low_cpu_mem_usage=True,
-                    local_files_only=has_local_mount,
-                )
-            except TypeError:
-                pipe = QwenImage21Pipeline.from_pretrained(
-                    model_source,
-                    torch_dtype=dtype,
-                    low_cpu_mem_usage=True,
-                    local_files_only=has_local_mount,
-                )
-
-        # Dynamic VRAM Management:
-        # High-VRAM GPUs (>36 GB) keep all components 100% resident in CUDA VRAM via staged per-component transfer
-        if total_vram_gb > 36 and not loaded_via_device_map:
-            logger.info("High VRAM GPU detected (%.1f GB). Transferring components to CUDA...", total_vram_gb)
-            for comp_name, comp in pipe.components.items():
-                if isinstance(comp, torch.nn.Module):
-                    tc = time.perf_counter()
-                    # Materialize contiguous CPU tensors before transfer to prevent GCS FUSE mmap stalls
-                    for p in (*comp.parameters(), *comp.buffers()):
-                        if p.device.type == "cpu" and not p.is_contiguous():
-                            p.data = p.data.contiguous()
-                    comp.to("cuda")
-                    torch.cuda.synchronize()
-                    gc.collect()
-                    logger.info("Moved '%s' to CUDA in %.2fs.", comp_name, time.perf_counter() - tc)
-            logger.info("Model 100%% resident in CUDA VRAM - Zero PCIe offload bottleneck!")
-        elif total_vram_gb <= 36:
-            if hasattr(pipe, "enable_model_cpu_offload"):
-                pipe.enable_model_cpu_offload()
-                logger.info("Enabled model_cpu_offload (safe for 24GB VRAM GPUs).")
-            else:
-                pipe.to("cuda")
-
-        # PyTorch 2.x Ampere/Blackwell Tensor Core TF32 acceleration & cuDNN auto-tuner
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-        torch.backends.cudnn.benchmark = True
-
-        # Attention Slicing is disabled to allow all CUDA cores to compute SDPA in parallel
-        if hasattr(pipe, "disable_attention_slicing"):
-            pipe.disable_attention_slicing()
-
-        # Disable VAE slicing and tiling — full-tensor VRAM decoding executes in <0.1s
-        if hasattr(pipe, "vae"):
-            if hasattr(pipe.vae, "disable_slicing"):
-                pipe.vae.disable_slicing()
-            if hasattr(pipe.vae, "disable_tiling"):
-                pipe.vae.disable_tiling()
-
-        _pipeline = pipe
-        logger.info("Model %s ready in %.2fs.", MODEL_ID, time.perf_counter() - t0)
-        return _pipeline
-
-
-def _prepare_ref_image(raw_bytes: bytes) -> Image.Image:
-    """Decode and preserve RGBA format as recommended by official Qwen-Image-2.1 docs."""
-    ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGBA")
-    w, h = ref_img.size
-    max_in = 896
-    if max(w, h) > max_in:
-        scale = max_in / float(max(w, h))
-        ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
-    return ref_img
-
-
-def _run_inference_sync(
-    ref_img: Image.Image,
-    prompt: str,
-    steps: int = 8,
-    guidance_scale: float = 1.0,
-    seed: Optional[int] = None,
-    width: Optional[int] = None,
-    height: Optional[int] = None,
-    transparent: bool = False,
-    pre_clean: bool = False,
-) -> tuple[bytes, dict[str, str]]:
-    """Run official Qwen-Image-2.1-Turbo 8-step editing with KV cache and optional in-GPU pre-clean + matting."""
-    import numpy as np
-
-    pipe = load_qwen21_pipeline()
-    used_seed = seed if seed is not None else int(time.time()) % 1000000
-    # Official Qwen-Image-2.1 README uses CPU generator for deterministic reproducibility
-    generator = torch.Generator("cpu").manual_seed(used_seed)
-
-    target_w = int(width) if width and int(width) > 0 else OUTPUT_WIDTH
-    target_h = int(height) if height and int(height) > 0 else OUTPUT_HEIGHT
-
-    t0 = time.perf_counter()
-
-    # Optional zero-roundtrip reference background pre-cleaning directly in Blackwell VRAM (~30ms)
-    preclean_sec = 0.0
-    if pre_clean:
-        t_pre = time.perf_counter()
-        try:
-            rgba_ref = remove_background_gpu(ref_img)
-            alpha_ch = rgba_ref.split()[3]
-            if np.sum(np.array(alpha_ch) > 30) > 0.05 * (rgba_ref.width * rgba_ref.height):
-                white_bg_ref = Image.new("RGB", rgba_ref.size, (255, 255, 255))
-                white_bg_ref.paste(rgba_ref, (0, 0), mask=alpha_ch)
-                ref_img = white_bg_ref.convert("RGBA")
-                preclean_sec = round(time.perf_counter() - t_pre, 3)
-                logger.info("In-GPU reference pre-clean completed in %.3fs.", preclean_sec)
-        except Exception as exc:
-            logger.warning("In-GPU reference pre-clean failed (%s); using original reference image.", exc)
-
-    logger.info(
-        "Running Qwen-Image-2.1-Turbo (size=%dx%d, in=%s, pre_clean=%s, transparent=%s) | prompt: %.200s...",
-        target_w,
-        target_h,
-        ref_img.size,
-        pre_clean,
-        transparent,
-        prompt,
-    )
-
-    # Keep CUDA caching allocator warm between inferences; avoid heavy empty_cache unless memory > 85GB
-    if torch.cuda.is_available():
-        mem_gb = torch.cuda.memory_allocated(0) / (1024 ** 3)
-        if mem_gb > 85.0:
-            import gc
-            gc.collect()
-            torch.cuda.empty_cache()
-
-    with _pipe_lock, torch.inference_mode():
-        pipe_kwargs = {
-            "prompt": prompt,
-            "image": ref_img,
-            "width": target_w,
-            "height": target_h,
-            "use_kv_cache": True,
-            "generator": generator,
-        }
-        import inspect
-        call_params = inspect.signature(pipe.__call__).parameters
-        if "num_inference_steps" in call_params and steps and steps > 0:
-            pipe_kwargs["num_inference_steps"] = int(steps)
-        if "true_cfg_scale" in call_params and guidance_scale and guidance_scale > 0:
-            pipe_kwargs["true_cfg_scale"] = float(guidance_scale)
-        elif "guidance_scale" in call_params and guidance_scale and guidance_scale > 0:
-            pipe_kwargs["guidance_scale"] = float(guidance_scale)
-
-        logger.info("Executing Qwen pipe with steps=%s, guidance_scale=%s, size=%dx%d", steps, guidance_scale, target_w, target_h)
-        t_pipe = time.perf_counter()
-        result = pipe(**pipe_kwargs)
-        out_img: Image.Image = result.images[0].copy()
-        del result
-        logger.info("Qwen pipe execution finished in %.2fs", time.perf_counter() - t_pipe)
-
-    # Instant GPU background matting (<50ms on Blackwell GPU)
-    if transparent:
-        t_rmbg = time.perf_counter()
-        try:
-            out_img = remove_background_gpu(out_img)
-            logger.info("GPU background removal finished in %.3fs", time.perf_counter() - t_rmbg)
-        except Exception as exc:
-            logger.exception("GPU background removal failed (%s); returning original RGB image.", exc)
-
-    t_save = time.perf_counter()
-    buf = io.BytesIO()
-    # Fast PNG compression (compress_level=1) is 10x faster than default level 6, saving ~1.5s with 0% quality loss
-    out_img.save(buf, format="PNG", compress_level=1)
-    logger.info("PNG encode finished in %.2fs", time.perf_counter() - t_save)
-
-    elapsed = round(time.perf_counter() - t0, 2)
-    gpu_info = _get_gpu_info()
-
-    headers = {
-        "X-Model-Name": MODEL_ID,
-        "X-GPU-Name": gpu_info["gpu_name"],
-        "X-VRAM-GB": str(gpu_info["vram_total_gb"]),
-        "X-Inference-Time-Sec": str(elapsed),
-        "X-Preclean-Time-Sec": str(preclean_sec),
-        "X-Seed": str(used_seed),
-        "X-Transparent": str(transparent).lower(),
-    }
-    return buf.getvalue(), headers
 
 
 def _prune_old_jobs() -> None:
@@ -451,7 +81,7 @@ def _background_job_runner(
             _jobs[job_id]["status"] = "running"
 
     try:
-        png_bytes, headers = _run_inference_sync(
+        png_bytes, headers, _ = run_inference_sync(
             ref_img=ref_img,
             prompt=prompt,
             steps=steps,
@@ -477,46 +107,24 @@ def _background_job_runner(
                 _jobs[job_id]["error"] = str(exc)
 
 
-def _background_qwen_warmup():
-    global _pipeline_warming
-    _pipeline_warming = True
-    try:
-        logger.info("Background Qwen warmup thread started...")
-        load_qwen21_pipeline()
-        logger.info("Background Qwen warmup complete - GPU pipeline 100%% resident.")
-    except Exception as exc:
-        logger.error("Background Qwen warmup failed (will retry on first request): %s", exc)
-    finally:
-        _pipeline_warming = False
-
-
 @app.on_event("startup")
-def _startup_preload():
-    try:
-        logger.info("Preloading GPU RMBG-1.4 into VRAM on startup...")
-        load_rmbg_model()
-    except Exception as exc:
-        logger.warning("Startup RMBG preload failed (will load on first request): %s", exc)
-
-    # Start Qwen loading in background daemon thread so Uvicorn opens port 8001 in ~2s
-    # while weights begin streaming into VRAM immediately (no 150s cold-request surprise!).
-    should_warmup = PRELOAD_MODEL or (AUTO_WARMUP_QWEN and os.path.exists("/models/Qwen-Image-2.1-Turbo/model_index.json"))
-    if should_warmup:
-        threading.Thread(target=_background_qwen_warmup, daemon=True, name="qwen-warmup").start()
+def _startup_preload() -> None:
+    preload_models(background_qwen=True)
 
 
 @app.get("/health")
 def health(x_api_key: Optional[str] = Header(default=None)):
     _verify_api_key(x_api_key)
-    gpu = _get_gpu_info()
+    gpu = get_gpu_info()
     return {
         "status": "ok",
         "model_id": MODEL_ID,
         "precision": "full_bfloat16",
-        "model_loaded": _pipeline is not None,
-        "model_warming": _pipeline_warming,
-        "rmbg_loaded": _rmbg_model is not None,
+        "model_loaded": is_pipeline_loaded(),
+        "model_warming": is_pipeline_warming(),
+        "rmbg_loaded": is_rmbg_loaded(),
         "pre_clean_supported": True,
+        "workers_total": int(os.getenv("GPU_WORKERS_TOTAL", "1")),
         "output_size": f"{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}",
         **gpu,
     }
@@ -535,7 +143,7 @@ async def submit_job(
     pre_clean: bool = Form(False),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Submit an async Qwen-Image-2.1-Turbo generation job (immune to Cloudflare 524!)."""
+    """Submit an async Qwen-Image-2.1-Turbo generation job."""
     _verify_api_key(x_api_key)
     _prune_old_jobs()
 
@@ -545,7 +153,7 @@ async def submit_job(
         raise HTTPException(status_code=400, detail="Empty image uploaded.")
 
     try:
-        ref_img = _prepare_ref_image(raw_bytes)
+        ref_img = prepare_ref_image(raw_bytes)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
@@ -623,13 +231,13 @@ async def generate_garment(
         raise HTTPException(status_code=400, detail="Empty image uploaded.")
 
     try:
-        ref_img = _prepare_ref_image(raw_bytes)
+        ref_img = prepare_ref_image(raw_bytes)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
     try:
-        png_bytes, headers = await run_in_threadpool(
-            _run_inference_sync,
+        png_bytes, headers, _ = await run_in_threadpool(
+            run_inference_sync,
             ref_img=ref_img,
             prompt=prompt,
             steps=steps,
@@ -647,21 +255,12 @@ async def generate_garment(
     return Response(content=png_bytes, media_type="image/png", headers=headers)
 
 
-def _run_rmbg_sync(img: Image.Image) -> tuple[bytes, float]:
-    t0 = time.perf_counter()
-    rgba = remove_background_gpu(img)
-    elapsed = round(time.perf_counter() - t0, 3)
-    buf = io.BytesIO()
-    rgba.save(buf, format="PNG", compress_level=1)
-    return buf.getvalue(), elapsed
-
-
 @app.post("/remove-background")
 async def remove_background_endpoint(
     image: UploadFile = File(..., description="Image to remove background."),
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Fast standalone GPU background removal endpoint (<50ms on Blackwell GPU)."""
+    """Fast standalone GPU background removal endpoint."""
     _verify_api_key(x_api_key)
     raw_bytes = await image.read()
     await image.close()
@@ -674,14 +273,14 @@ async def remove_background_endpoint(
         raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
 
     try:
-        png_bytes, elapsed = await run_in_threadpool(_run_rmbg_sync, img)
+        png_bytes, elapsed = await run_in_threadpool(run_rmbg_sync, img)
     except Exception as exc:
         logger.exception("GPU background removal failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"GPU background removal failed: {exc}") from exc
 
-    gpu_info = _get_gpu_info()
+    gpu_info = get_gpu_info()
     headers = {
         "X-Inference-Time-Sec": str(elapsed),
-        "X-GPU-Name": gpu_info["gpu_name"],
+        "X-GPU-Name": str(gpu_info["gpu_name"]),
     }
     return Response(content=png_bytes, media_type="image/png", headers=headers)

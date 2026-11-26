@@ -132,6 +132,9 @@ async def health_check() -> HealthResponse:
 
     remote_gpu_online = bool(gpu_health.get("online", False))
     gpu_name = gpu_health.get("gpu_name", "Remote GPU Offline") if remote_gpu_online else "Not Connected"
+    workers_total = int(gpu_health.get("workers_total") or (1 if remote_gpu_online else 0))
+    batch_concurrency = max(1, min(workers_total, 10)) if remote_gpu_online else 1
+    backend_type = gpu_health.get("backend", "unconfigured")
 
     return HealthResponse(
         status="ok",
@@ -148,10 +151,13 @@ async def health_check() -> HealthResponse:
         },
         hardware={
             "cpu_cores": os.cpu_count() or 1,
-            "device": "remote_cuda" if remote_gpu_online else "cpu",
+            "device": backend_type if remote_gpu_online else "cpu",
+            "backend": backend_type,
             "cuda_available": remote_gpu_online,
             "gpu_name": gpu_name,
-            "vram_gb": gpu_health.get("vram_total_gb", 48.0 if "A6000" in gpu_name else 24.0),
+            "vram_gb": gpu_health.get("vram_total_gb", 48.0 if remote_gpu_online else 0.0),
+            "workers_total": workers_total,
+            "batch_concurrency": batch_concurrency,
             "gpu_worker_url": gpu_health.get("url", "not_set"),
             "gpu_worker_detail": gpu_health.get("detail", "Connected"),
         },

@@ -1192,6 +1192,8 @@ select.studio-select:focus {
     let activeGarmentIndex = 0;
     let isProcessing = false;
     let timerInterval = null;
+    let batchConcurrency = 1;
+    let currentGpuUrl = '';
 
     // Initialize Hardware Status on page load
     async function checkHardware() {
@@ -1202,21 +1204,28 @@ select.studio-select:focus {
         if (!res.ok) throw new Error('Health check failed');
         const data = await res.json();
         const gpuOnline = data.models_loaded && data.models_loaded.qwen_gpu_worker_online;
-        const gpuName = (data.hardware && data.hardware.gpu_name) || 'NVIDIA RTX A6000';
-        const vramText = (data.hardware && data.hardware.vram_gb) ? `${data.hardware.vram_gb}GB VRAM` : (gpuName.includes('A6000') ? '48GB VRAM' : '24GB VRAM');
+        const hw = data.hardware || {};
+        currentGpuUrl = hw.gpu_worker_url || '';
+        const workersTotal = Math.max(1, Number(hw.workers_total || 1));
+        batchConcurrency = Math.max(1, Math.min(10, Number(hw.batch_concurrency || 1)));
+
+        const gpuName = hw.gpu_name || 'RunPod Serverless GPU';
+        const vramText = hw.vram_gb ? `${hw.vram_gb}GB VRAM` : '48GB VRAM';
+        const scaleTag = workersTotal > 1 ? ` • ${workersTotal}x Auto-Scale` : '';
 
         if (gpuOnline) {
           gpuDot.className = 'pulse-dot';
-          gpuText.textContent = `${gpuName} • ${vramText} (Connected)`;
+          gpuText.textContent = `${gpuName} • ${vramText}${scaleTag} (Connected)`;
           const bannerPill = document.getElementById('bannerGpuPill');
-          if (bannerPill) bannerPill.textContent = `${gpuName} Active`;
-          document.getElementById('gpuPill').title = `Connected to ${data.hardware.gpu_worker_url} (Click to change)`;
+          if (bannerPill) bannerPill.textContent = workersTotal > 1 ? `${gpuName} (${workersTotal}x Parallel)` : `${gpuName} Active`;
+          document.getElementById('gpuPill').title = `Connected to ${currentGpuUrl} (Click to change)`;
         } else {
+          batchConcurrency = 1;
           gpuDot.className = 'pulse-dot amber';
-          gpuText.textContent = `GPU Offline • Click to Reconnect`;
+          gpuText.textContent = `GPU Offline • Click to Connect`;
           const bannerPill = document.getElementById('bannerGpuPill');
           if (bannerPill) bannerPill.textContent = `GPU Offline`;
-          document.getElementById('gpuPill').title = `GPU Offline (${data.hardware.gpu_worker_url}). Click to update GPU Worker URL.`;
+          document.getElementById('gpuPill').title = `GPU Offline (${currentGpuUrl || 'not configured'}). Click to set RunPod or HTTP GPU URL.`;
         }
       } catch (err) {
         gpuDot.className = 'pulse-dot amber';
@@ -1225,15 +1234,16 @@ select.studio-select:focus {
     }
     window.addEventListener('DOMContentLoaded', checkHardware);
 
-    let currentGpuUrl = '';
-
     async function updateGpuUrl() {
-      const newUrl = prompt('Enter active Cloudflare GPU Worker URL:\n(Example: https://xxxx-xxxx.trycloudflare.com)', currentGpuUrl || 'https://');
+      const newUrl = prompt(
+        'Enter GPU Endpoint URL (RunPod Serverless or HTTP Server):\n(Example: https://api.runpod.ai/v2/<ENDPOINT_ID>  or  http://<GPU_IP>:8001)',
+        currentGpuUrl || 'https://api.runpod.ai/v2/'
+      );
       if (!newUrl || !newUrl.trim() || newUrl.trim() === 'https://') return;
       
       const gpuText = document.getElementById('gpuText');
       const gpuDot = document.getElementById('gpuDot');
-      gpuText.textContent = 'Connecting to new GPU URL...';
+      gpuText.textContent = 'Connecting to GPU Endpoint...';
       gpuDot.className = 'pulse-dot amber';
       
       try {
@@ -1242,9 +1252,9 @@ select.studio-select:focus {
         const res = await fetch('/api/set-gpu-url', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.online) {
-          alert('🎉 GPU Worker Connected Successfully!\nGPU: ' + (data.gpu_health.gpu_name || 'NVIDIA RTX 3090'));
+          alert('GPU Endpoint Connected Successfully!\nGPU: ' + (data.gpu_health.gpu_name || 'Remote GPU'));
         } else {
-          alert('⚠️ GPU URL saved, but worker returned offline:\n' + (data.gpu_health.detail || 'Could not connect. Make sure uvicorn is running on port 8001.'));
+          alert('GPU URL saved, but health check returned offline:\n' + (data.gpu_health.detail || 'Verify endpoint URL and API key in .env.'));
         }
         checkHardware();
       } catch (err) {
@@ -1563,33 +1573,78 @@ select.studio-select:focus {
       }
     }
 
-    // Process all queue items
+    // Process all queue items (scales automatically: sequential for 1 GPU, parallel for RunPod/multi-GPU)
     async function processAllBatch() {
       if (fileQueue.length === 0 || isProcessing) return;
+      const pendingIndices = fileQueue
+        .map((it, idx) => (it.status !== 'done' ? idx : -1))
+        .filter(idx => idx >= 0);
+      if (!pendingIndices.length) return;
+
       isProcessing = true;
       updateToolbar();
 
-      for (let i = 0; i < fileQueue.length; i++) {
-        const item = fileQueue[i];
-        if (item.status === 'done') continue;
+      const maxParallel = Math.max(1, Math.min(batchConcurrency || 1, pendingIndices.length));
+      let cursor = 0;
 
-        item.status = 'processing';
-        selectQueueIndex(i);
-        startScanning();
-
-        try {
-          const result = await processItem(item);
-          item.result = result;
-          item.status = 'done';
-          stopScanning();
-          renderOutputResult(result);
-        } catch (err) {
-          item.status = 'error';
-          item.errorMsg = err.message;
-          stopScanning();
-          showErrorState(err.message);
+      if (maxParallel === 1) {
+        for (const i of pendingIndices) {
+          const item = fileQueue[i];
+          item.status = 'processing';
+          selectQueueIndex(i);
+          startScanning();
+          try {
+            const result = await processItem(item);
+            item.result = result;
+            item.status = 'done';
+            stopScanning();
+            renderOutputResult(result);
+          } catch (err) {
+            item.status = 'error';
+            item.errorMsg = err.message;
+            stopScanning();
+            showErrorState(err.message);
+          }
+          renderQueue();
         }
-        renderQueue();
+      } else {
+        selectQueueIndex(pendingIndices[0]);
+        startScanning();
+        const subtitleEl = document.getElementById('progressSubtitle');
+        if (subtitleEl) subtitleEl.textContent = `Running ${pendingIndices.length} images in parallel (${maxParallel}x GPU workers)...`;
+
+        let lastRenderedResult = null;
+        let lastError = null;
+        const worker = async () => {
+          while (cursor < pendingIndices.length) {
+            const idx = pendingIndices[cursor++];
+            const item = fileQueue[idx];
+            item.status = 'processing';
+            renderQueue();
+            try {
+              const result = await processItem(item);
+              item.result = result;
+              item.status = 'done';
+              lastRenderedResult = result;
+            } catch (err) {
+              item.status = 'error';
+              item.errorMsg = err.message;
+              lastError = err.message;
+            }
+            renderQueue();
+          }
+        };
+
+        await Promise.all(Array.from({ length: maxParallel }, () => worker()));
+        stopScanning();
+        const selected = fileQueue[selectedIndex];
+        if (selected && selected.status === 'done' && selected.result) {
+          renderOutputResult(selected.result);
+        } else if (lastRenderedResult) {
+          renderOutputResult(lastRenderedResult);
+        } else if (lastError) {
+          showErrorState(lastError);
+        }
       }
 
       isProcessing = false;

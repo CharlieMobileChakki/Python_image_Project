@@ -1,4 +1,4 @@
-"""FastAPI router for Flow B: ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Generation."""
+"""FastAPI router for Flow B: ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo Garment Generation."""
 from __future__ import annotations
 
 import io
@@ -74,8 +74,8 @@ def _run_qwen_pipeline_sync(
     buf = io.BytesIO()
     normalized_1024.save(buf, format="PNG", optimize=True)
     meta = {
-        "model": gpu_meta.get("model", "Qwen-Image-Edit"),
-        "gpu_name": gpu_meta.get("gpu_name", "RTX 3090"),
+        "model": gpu_meta.get("model", "Qwen/Qwen-Image-2.1-Turbo"),
+        "gpu_name": gpu_meta.get("gpu_name", "Remote GPU"),
         "inference_time_sec": str(gpu_meta.get("inference_time_sec", "0")),
         "seed": str(gpu_meta.get("seed", "")),
         "prompt_source": primary.get("prompt_source", "default"),
