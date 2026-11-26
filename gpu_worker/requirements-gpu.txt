@@ -1,5 +1,5 @@
 # =============================================================================
-# Arangtik Qwen-Image-2.1-Turbo GPU Worker Requirements (Python 3.11 + CUDA)
+# Arangtik Qwen-Image-2.1-Turbo Slim GPU Worker Requirements (Python 3.11)
 # =============================================================================
 
 runpod>=1.7.0
@@ -9,9 +9,8 @@ python-multipart>=0.0.9
 python-dotenv>=1.0.0
 Pillow>=10.0.0
 numpy>=1.26.0
-scikit-image>=0.22.0
 
-# Official Qwen-Image-2.1-Turbo stack (requires Python >= 3.11)
+# Official Qwen-Image-2.1-Turbo stack (torch/torchvision provided by runpod/pytorch base)
 transformers>=4.48.0
 git+https://github.com/huggingface/diffusers.git
 accelerate>=1.0.0

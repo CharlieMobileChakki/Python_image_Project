@@ -69,4 +69,4 @@ curl -s http://127.0.0.1:8000/health
   ```env
   QWEN_REMOTE_URL="http://<IP_1>:8001,http://<IP_2>:8001"
   ```
-- **Blackwell Cards (`B200` / `RTX PRO 6000` / `RTX 5090`):** Pass Docker build args `--build-arg CUDA_IMAGE=nvidia/cuda:12.8.0-runtime-ubuntu22.04 --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128` without editing any source file.
+- **Blackwell Cards (`B200` / `RTX PRO 6000` / `RTX 5090`):** Pass Docker build arg `--build-arg BASE_IMAGE=pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime` without editing any source file.

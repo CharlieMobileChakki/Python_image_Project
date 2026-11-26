@@ -287,6 +287,15 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
         self.assertIn(".studio-output-bg", style_css)
         self.assertNotIn(".checkerboard-bg", style_css)
 
+        root_dir = Path(__file__).resolve().parent.parent
+        dockerfile_text = (root_dir / "gpu_worker" / "Dockerfile").read_text(encoding="utf-8")
+        reqs_gpu_text = (root_dir / "gpu_worker" / "requirements-gpu.txt").read_text(encoding="utf-8")
+        self.assertIn("cuda12.4-cudnn9-runtime", dockerfile_text)
+        self.assertIn("ENTRYPOINT []", dockerfile_text)
+        self.assertNotIn("torchaudio", dockerfile_text)
+        self.assertNotIn("RMBG", dockerfile_text)
+        self.assertNotIn("scikit-image", reqs_gpu_text)
+
         fake_plan = [{
             "category": "upper_clothes",
             "recognized_label": "Studio Shirt",
