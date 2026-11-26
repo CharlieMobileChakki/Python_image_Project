@@ -253,6 +253,48 @@ class TestGpuWorkerModules(unittest.TestCase):
         self.assertTrue({"/background-removal", "/jewelry-studio", "/set-gpu-url"}.issubset(api_paths))
         self.assertIn("/qwen-image", recon_paths)
 
+    def test_apparel_flow_b_direct_1024_skips_post_bg_removal(self):
+        from app.core.pipeline import unified_pipeline
+
+        fake_plan = [{
+            "category": "upper_clothes",
+            "recognized_label": "Studio Kurta",
+            "prompt": "Clean white studio kurta",
+            "box_2d": None,
+            "item_count": 1,
+        }]
+        fake_generated = Image.new("RGB", (1024, 1024), (255, 255, 255))
+
+        with patch.object(unified_pipeline, "analyze_garment_and_build_prompts", return_value=fake_plan), patch.object(
+            unified_pipeline,
+            "generate_garment_via_gpu",
+            return_value=(fake_generated, {"model": "Qwen/Qwen-Image-2.1-Turbo", "gpu_name": "RTX A6000"}),
+        ) as mock_gpu, patch.object(
+            unified_pipeline, "normalize_to_1024", side_effect=AssertionError("normalize_to_1024 should not be called")
+        ), patch.object(
+            unified_pipeline, "validate_garment_background", side_effect=AssertionError("validate_garment_background should not be called")
+        ):
+            src = Image.new("RGB", (512, 512), (240, 240, 240))
+            res = unified_pipeline.execute_flow_b_with_person(
+                image_rgb=src,
+                image_bytes=b"123",
+                job_id="testdirect1024",
+            )
+
+        self.assertTrue(res["success"])
+        call_kwargs = mock_gpu.call_args.kwargs
+        self.assertEqual(call_kwargs["width"], 1024)
+        self.assertEqual(call_kwargs["height"], 1024)
+        self.assertFalse(call_kwargs["transparent"])
+        out_path = unified_pipeline.OUTPUT_DIR / res["garments"][0]["image"]
+        try:
+            with Image.open(out_path) as saved:
+                self.assertEqual(saved.size, (1024, 1024))
+                self.assertEqual(saved.mode, "RGB")
+        finally:
+            if out_path.exists():
+                out_path.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

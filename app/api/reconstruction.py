@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -10,13 +11,11 @@ from fastapi.responses import Response
 from PIL import Image, ImageOps
 from starlette.concurrency import run_in_threadpool
 
-from app.core.background_removal import extract_isolated_flow_a
 from app.core.flow_b import (
     analyze_garment_and_build_prompts,
     generate_garment_via_gpu,
     is_gpu_worker_configured,
 )
-from app.core.image_processing import normalize_to_1024
 
 logger = logging.getLogger(__name__)
 reconstruction_router = APIRouter(tags=["Flow B: Qwen GPU Garment Generation"])
@@ -59,20 +58,24 @@ def _run_qwen_pipeline_sync(
     )
     primary = plans[0]
 
+    apparel_size = max(512, int(os.getenv("QWEN_APPAREL_SIZE", "1024")))
     generated_raw, gpu_meta = generate_garment_via_gpu(
         reference_image=original_pil,
         prompt=primary["prompt"],
         steps=steps,
         guidance_scale=guidance_scale,
         seed=seed,
+        width=apparel_size,
+        height=apparel_size,
+        transparent=False,
     )
 
-    # Strip pure white background into razor-sharp transparent RGBA PNG via BiRefNet Lite
-    cutout_rgba = extract_isolated_flow_a(generated_raw.convert("RGB"))
-    normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
+    direct_img = generated_raw.convert("RGB")
+    if direct_img.size != (1024, 1024):
+        direct_img = direct_img.resize((1024, 1024), Image.Resampling.LANCZOS)
 
     buf = io.BytesIO()
-    normalized_1024.save(buf, format="PNG", optimize=True)
+    direct_img.save(buf, format="PNG", compress_level=1)
     meta = {
         "model": gpu_meta.get("model", "Qwen/Qwen-Image-2.1-Turbo"),
         "gpu_name": gpu_meta.get("gpu_name", "Remote GPU"),

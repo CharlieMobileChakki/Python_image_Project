@@ -27,11 +27,13 @@ This guide explains how to deploy `gpu_worker/` cleanly onto **RunPod Serverless
      - Select **`48 GB — A6000, A40`** (`$1.22/hr`, `$0.000339/s`, best cost-to-VRAM fit)
      - *(Optional faster tier: **`48 GB — L40, L40S, 6000 Ada`** at `$1.89/hr`)*
      - **Do NOT select 32 GB / 24 GB GPUs** (`Qwen-Image-2.1-Turbo` + `RMBG-1.4` requires `~33–34 GB` VRAM).
-   - **Workers Scaling:**
-     - **Active Workers (Min):** `0` *(no idle cost)*
-     - **Max Workers:** `5` *(or `10` for 10x parallel bursts)*
-     - **Idle Timeout:** `10` seconds
-     - **Execution Timeout:** `300` seconds
+- **Workers Scaling:**
+  - **Active Workers (Min):** `0` *(no idle cost)*
+  - **Max Workers:** `5` *(or `10` for 10x parallel bursts)*
+  - **Idle Timeout:** `10` seconds
+  - **Initialization / Execution Timeout:** `600` seconds
+  - **CUDA Version:** `Use minimum CUDA version = 12.4`
+  - **GPU Configuration:** Tick `Previous generation -> 48 GB ($1.22/hr)` and optionally `Latest generation -> 48 GB ($1.89/hr)` with `Worker priority: Cost`.
    - **Container Disk:** `30 GB` minimum *(Qwen cached weights sit on `/runpod-volume/huggingface-cache`, and RMBG-1.4 is pre-baked in Docker)*.
    - **Cached Models (Important!):** Add **`Qwen/Qwen-Image-2.1-Turbo`** in the **Model** field so RunPod caches the 30.2 GiB weights on host NVMe instead of billing you to download them every cold start.
 4. Click **Deploy Endpoint** and wait for the GitHub Docker build + worker cache warm-up.
@@ -46,8 +48,8 @@ Copy your **Endpoint ID** from RunPod and your **RunPod API Key** (**Settings �
 MAX_CONCURRENT_JOBS=auto
 QWEN_REMOTE_URL="https://api.runpod.ai/v2/<YOUR_ENDPOINT_ID>"
 RUNPOD_API_KEY="rpa_xxxxxxxxxxxxxxxxxxxx"
-RUNPOD_MAX_WORKERS=5
-QWEN_TIMEOUT_SECONDS=300
+RUNPOD_MAX_WORKERS=1
+QWEN_TIMEOUT_SECONDS=600
 ```
 
 Restart Uvicorn on Contabo (`systemctl restart ...` or your process manager), then verify:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import os
 import time
 from typing import Any
 import uuid
@@ -22,7 +23,6 @@ from app.core.flow_b import (
     generate_garment_via_gpu,
     get_worker_capacity,
     is_jewelry_domain,
-    remove_background_via_gpu,
 )
 from app.core.garment_extraction import detect_multi_garment_layout
 from app.core.image_processing import (
@@ -440,6 +440,10 @@ def _process_single_planned_garment(
     else:
         gpu_steps = 26 if is_jewelry else 8
         gpu_guidance = 2.5 if is_jewelry else 1.0
+        apparel_size = max(512, int(os.getenv("QWEN_APPAREL_SIZE", "1024")))
+        use_preclean = (not is_jewelry) and (
+            os.getenv("QWEN_PRECLEAN_INPUT", "true").strip().lower() in ("1", "true", "yes")
+        )
 
         t_gpu_start = time.perf_counter()
         generated_raw, gpu_meta = generate_garment_via_gpu(
@@ -447,9 +451,10 @@ def _process_single_planned_garment(
             prompt=qwen_prompt,
             steps=gpu_steps,
             guidance_scale=gpu_guidance,
-            width=896 if not is_jewelry else 1024,
-            height=896 if not is_jewelry else 1024,
-            pre_clean=not is_jewelry,
+            width=1024 if is_jewelry else apparel_size,
+            height=1024 if is_jewelry else apparel_size,
+            transparent=False,
+            pre_clean=use_preclean,
         )
         gpu_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
         try:
@@ -476,21 +481,18 @@ def _process_single_planned_garment(
             val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
             val_conf = val_res.get("mask_quality", 0.98)
         else:
-            if generated_raw.mode == "RGBA" and generated_raw.getchannel("A").getextrema()[0] < 250:
-                cutout_rgba = generated_raw
-            else:
-                cutout_rgba = remove_background_via_gpu(generated_raw)
-
-            angle_deg = 0.0
-            normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-            val_check = validate_garment_background(normalized_1024, original_rgb=generated_raw.convert("RGB"))
-            final_cutout = val_check.get("refined_cutout", normalized_1024)
+            # Direct 1024x1024 Qwen studio image (post-generation BG removal skipped)
+            direct_rgb = generated_raw.convert("RGB")
+            if direct_rgb.size != (1024, 1024):
+                direct_rgb = direct_rgb.resize((1024, 1024), Image.Resampling.LANCZOS)
+            final_cutout = direct_rgb
             out_filename = f"{job_id}_{g_id}.png"
             out_path = OUTPUT_DIR / out_filename
             final_cutout.save(out_path, format="PNG", compress_level=1)
             stand = None
+            angle_deg = 0.0
             val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
-            val_conf = val_check.get("confidence", val_res.get("mask_quality", 0.95))
+            val_conf = val_res.get("mask_quality", 0.98)
         postprocess_ms = round((time.perf_counter() - t_post_start) * 1000, 2)
 
     b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None

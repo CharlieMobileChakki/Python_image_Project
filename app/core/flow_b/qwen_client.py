@@ -460,7 +460,7 @@ def generate_garment_via_gpu(
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
-    transparent: bool = True,
+    transparent: bool = False,
     pre_clean: bool = False,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """Generate studio product PNG via configured GPU backend (RunPod Serverless or HTTP cluster)."""
