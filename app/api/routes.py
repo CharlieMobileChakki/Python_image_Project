@@ -5,17 +5,15 @@ import asyncio
 from io import BytesIO
 import os
 from pathlib import Path
-import time
 from typing import Any
 import zipfile
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from PIL import Image
 from starlette.concurrency import run_in_threadpool
 
-from app.schemas import HealthResponse, ProcessGarmentResponse
 from app.core.pipeline import OUTPUT_DIR, process_garment_pipeline
+from app.schemas import ProcessGarmentResponse
 
 router = APIRouter()
 
@@ -68,76 +66,95 @@ async def validate_and_read_image(file: UploadFile) -> bytes:
     return image_bytes
 
 
-@router.post(
-    "/background-removal",
-    response_model=ProcessGarmentResponse,
-    response_model_exclude_none=True,
-    summary="Primary Background Removal & Garment Processing API",
-)
-async def background_removal_endpoint(
-    request: Request,
-    file: UploadFile = File(None, description="Primary input image (garment, model, flat-lay, or jewelry)"),
-    files: list[UploadFile] = File(None, description="Optional multi-angle input images (up to 4 photos for jewelry/rings)"),
-    person_mode: str = Form("with_person", description="Execution mode: 'with_person', 'without_person', 'jewelry'"),
-    has_human: str | bool | None = Form(None, description="Optional flag"),
-    target_garment: str = Form("all", description="Target filter: 'all', 'upper_clothes', 'pants', 'dress', 'necklace', 'ring', 'earrings', 'bangles'"),
-    auto_repair: bool = Form(True, description="Enable fabric inpainting"),
-    auto_straighten: bool = Form(False, description="Enable auto-deskewing"),
-    include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
-    response_format: str = Form("json", description="'json' (default for Node.js / UI) or 'image_direct' for binary PNG stream"),
-    mode_hint: str | None = Form(None, description="Legacy mode hint"),
-    custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
-    presentation_mode: str = Form("mode_c_display_stand", description="Presentation mode: 'mode_a_product_only', 'mode_b_studio_presentation', 'mode_c_display_stand'"),
-    item_count_override: int | None = Form(None, description="Optional manual quantity override (e.g. 1 for 1 kada)"),
-) -> Any:
-    """Unified AI 3D Garment & Jewelry Studio API.
-
-    Single unified production workflow:
-    - Apparel: ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024.
-    - Jewelry: Supports 1 to 4 multi-angle photos (top, sides, perspective) -> Qwen GPU -> Specialized luxury catalog stand.
-
-    Supports both Node.js caller formats:
-    - JSON Response (default): { status: "success", garments: [{ url, category, stand_type, ... }] }
-    - Direct PNG stream: Set response_format='image_direct' or Accept: image/png
-    """
+async def _collect_uploaded_images(
+    file: UploadFile | None,
+    files: list[UploadFile] | None,
+    empty_detail: str,
+) -> tuple[bytes | list[bytes], list[UploadFile]]:
+    """Collect and validate up to 4 uploaded images, returning payload bytes and file handles."""
     upload_list: list[UploadFile] = []
     if file:
         upload_list.append(file)
     if files:
         upload_list.extend(files)
     if not upload_list:
-        raise HTTPException(status_code=400, detail="No image file provided. Please upload at least one image.")
+        raise HTTPException(status_code=400, detail=empty_detail)
 
     image_bytes_list: list[bytes] = []
     for f in upload_list[:4]:
-        b = await validate_and_read_image(f)
-        image_bytes_list.append(b)
+        image_bytes_list.append(await validate_and_read_image(f))
 
-    payload_bytes: bytes | list[bytes] = image_bytes_list[0] if len(image_bytes_list) == 1 else image_bytes_list
+    payload: bytes | list[bytes] = image_bytes_list[0] if len(image_bytes_list) == 1 else image_bytes_list
+    return payload, upload_list
 
-    actual_has_human: bool | None = None
-    if has_human is not None:
-        if isinstance(has_human, bool):
-            actual_has_human = has_human
-        elif str(has_human).strip().lower() in ("false", "0", "no"):
-            actual_has_human = False
-        elif str(has_human).strip().lower() in ("true", "1", "yes"):
-            actual_has_human = True
+
+def _resolve_base_url(request: Request) -> str:
+    base_url = str(request.base_url).rstrip("/")
+    if request.headers.get("x-forwarded-proto", "").lower() == "https" and base_url.startswith("http://"):
+        return base_url.replace("http://", "https://", 1)
+    return base_url
+
+
+def _format_garment_items(
+    result: dict[str, Any],
+    base_url: str,
+    include_base64: bool,
+    default_title: str = "Studio Garment",
+) -> list[dict[str, Any]]:
+    formatted: list[dict[str, Any]] = []
+    for g in result.get("garments", []):
+        raw_url = g.get("url") or g.get("output_png_url") or ""
+        full_url = f"{base_url}{raw_url}" if raw_url.startswith("/") else raw_url
+        title = g.get("title") or g.get("recognized_label") or default_title
+        formatted.append({
+            "category": g.get("category", "product"),
+            "title": title,
+            "url": full_url,
+            "resolution": g.get("resolution") or ("2048x2048" if g.get("stand_type") else "1024x1024"),
+            "output_png_url": full_url,
+            "recognized_label": title,
+            "garment_id": g.get("garment_id"),
+            "output_png_base64": g.get("output_png_base64") if include_base64 else None,
+            "stand_type": g.get("stand_type"),
+            "presentation_mode": g.get("presentation_mode", "ghost_mannequin"),
+            "detected_item_count": g.get("detected_item_count", 1),
+            "validation_metrics": g.get("validation_metrics"),
+            "engine": g.get("engine"),
+            "gpu_name": g.get("gpu_name"),
+            "views_analyzed": g.get("views_analyzed", 1),
+        })
+    return formatted
+
+
+@router.post(
+    "/generate-garment",
+    response_model=ProcessGarmentResponse,
+    response_model_exclude_none=True,
+    summary="Direct 1024x1024 Studio Garment & Jewelry Generator API",
+)
+async def generate_garment_endpoint(
+    request: Request,
+    file: UploadFile = File(None, description="Primary input image (apparel, model-worn, flat-lay, or jewelry)"),
+    files: list[UploadFile] = File(None, description="Optional multi-angle input images (up to 4 photos for jewelry)"),
+    target_garment: str = Form("all", description="Target filter: 'all', 'upper_clothes', 'pants', 'dress', 'saree', 'necklace', 'ring', 'earrings', 'bangles'"),
+    include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
+    response_format: str = Form("json", description="'json' (default for API / UI) or 'image_direct' for binary PNG stream"),
+    custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
+    item_count_override: int | None = Form(None, description="Optional manual quantity override (e.g. 1 for 1 kada)"),
+) -> Any:
+    """Direct AI Studio Product Generation API (`1024x1024` white-background PNG)."""
+    payload_bytes, upload_list = await _collect_uploaded_images(
+        file, files, "No image file provided. Please upload at least one image."
+    )
 
     try:
         async with get_semaphore():
             result = await run_in_threadpool(
                 process_garment_pipeline,
                 image_bytes=payload_bytes,
-                person_mode=person_mode,
-                has_human=actual_has_human,
-                mode_hint=mode_hint,
                 target_garment=target_garment,
-                auto_repair=auto_repair,
-                auto_straighten=auto_straighten,
                 include_base64=include_base64,
                 custom_prompt=custom_prompt,
-                presentation_mode=presentation_mode,
                 item_count_override=item_count_override,
             )
     except ValueError as exc:
@@ -150,7 +167,6 @@ async def background_removal_endpoint(
         for f in upload_list:
             await f.close()
 
-    # Check if client requested direct PNG image stream (Option 1)
     accept_hdr = request.headers.get("accept", "").lower()
     wants_image = (
         response_format.lower() in ("image_direct", "direct", "image", "stream", "png")
@@ -166,7 +182,7 @@ async def background_removal_endpoint(
                 media_type="image/png",
                 filename=png_path.name,
                 headers={
-                    "X-Flow-Mode": result.get("mode", "without_person"),
+                    "X-Flow-Mode": result.get("mode", "studio_generation"),
                     "X-Garment-Category": top_garment["category"],
                     "X-Garment-Label": top_garment["recognized_label"],
                     "X-Execution-Time-Ms": str(result["execution_time_ms"]),
@@ -174,39 +190,7 @@ async def background_removal_endpoint(
                 },
             )
 
-    # Format clean production JSON response for Node.js and UI
-    base_url = str(request.base_url).rstrip("/")
-    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
-    if forwarded_proto == "https" and base_url.startswith("http://"):
-        base_url = base_url.replace("http://", "https://", 1)
-
-    clean_garments = []
-    for g in result.get("garments", []):
-        raw_url = g.get("url") or g.get("output_png_url") or ""
-        if raw_url.startswith("/"):
-            full_url = f"{base_url}{raw_url}"
-        else:
-            full_url = raw_url
-
-        title = g.get("title") or g.get("recognized_label") or "Garment Cutout"
-        clean_garments.append({
-            "category": g.get("category", "product"),
-            "title": title,
-            "url": full_url,
-            "resolution": "1024x1024",
-            "output_png_url": full_url,
-            "recognized_label": title,
-            "garment_id": g.get("garment_id"),
-            "output_png_base64": g.get("output_png_base64") if include_base64 else None,
-            "stand_type": g.get("stand_type"),
-            "presentation_mode": g.get("presentation_mode", "ghost_mannequin"),
-            "detected_item_count": g.get("detected_item_count", 1),
-            "validation_metrics": g.get("validation_metrics"),
-            "engine": g.get("engine"),
-            "gpu_name": g.get("gpu_name"),
-            "views_analyzed": g.get("views_analyzed", 1),
-        })
-
+    clean_garments = _format_garment_items(result, _resolve_base_url(request), include_base64)
     total_time_sec = round(result.get("execution_time_ms", 0) / 1000.0, 1)
 
     return {
@@ -215,16 +199,13 @@ async def background_removal_endpoint(
         "garments": clean_garments,
         "processing_time_sec": total_time_sec,
         "execution_time_ms": result.get("execution_time_ms", int(total_time_sec * 1000)),
-        "mode": result.get("mode", "with_person"),
+        "mode": result.get("mode", "studio_generation"),
         "diagnostics": result.get("diagnostics", {}),
         "job_id": result.get("job_id"),
         "success": True,
     }
 
 
-# ==============================================================================
-# JEWELRY & PRECIOUS ORNAMENTS DEDICATED ENDPOINTS
-# ------------------------------------------------------------------------------
 @router.post(
     "/jewelry-studio",
     response_model=ProcessGarmentResponse,
@@ -234,43 +215,25 @@ async def background_removal_endpoint(
 async def jewelry_studio_endpoint(
     request: Request,
     file: UploadFile = File(None, description="Primary jewelry image"),
-    files: list[UploadFile] = File(None, description="Up to 4 multi-angle views of the jewelry piece (top, sides, angle)"),
+    files: list[UploadFile] = File(None, description="Up to 4 multi-angle views of the jewelry piece"),
     jewelry_type: str = Form("auto", description="Category: 'auto', 'necklace', 'ring', 'earrings', 'bangles'"),
     custom_prompt: str | None = Form(None, description="Optional custom prompt override"),
     include_base64: bool = Form(False, description="Include Base64 data URI in JSON"),
 ) -> Any:
-    """Dedicated 3D Luxury Jewelry Studio Endpoint.
-
-    Takes 1 to 4 multi-angle photographs of the same jewelry piece:
-    - Rings: Analyzes top crown AND side shank/filigree; generates 30-45 degree hero angle on slotted ring block.
-    - Necklaces: Drapes symmetrically around luxury white neck bust mannequin stand.
-    - Earrings: Symmetrical pair hanging on minimalist T-bar stand.
-    - Bangles: Mounted on horizontal cylindrical jewelry display bar.
-    """
-    upload_list: list[UploadFile] = []
-    if file:
-        upload_list.append(file)
-    if files:
-        upload_list.extend(files)
-    if not upload_list:
-        raise HTTPException(status_code=400, detail="No jewelry image provided. Please upload at least one image.")
-
-    image_bytes_list: list[bytes] = []
-    for f in upload_list[:4]:
-        b = await validate_and_read_image(f)
-        image_bytes_list.append(b)
-
-    payload_bytes: bytes | list[bytes] = image_bytes_list[0] if len(image_bytes_list) == 1 else image_bytes_list
+    """Dedicated 3D Luxury Jewelry Studio Endpoint."""
+    payload_bytes, upload_list = await _collect_uploaded_images(
+        file, files, "No jewelry image provided. Please upload at least one image."
+    )
 
     try:
         async with get_semaphore():
             result = await run_in_threadpool(
                 process_garment_pipeline,
                 image_bytes=payload_bytes,
-                person_mode="jewelry",
                 target_garment=jewelry_type,
                 include_base64=include_base64,
                 custom_prompt=custom_prompt,
+                force_jewelry=True,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -282,29 +245,9 @@ async def jewelry_studio_endpoint(
         for f in upload_list:
             await f.close()
 
-    base_url = str(request.base_url).rstrip("/")
-    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
-    if forwarded_proto == "https" and base_url.startswith("http://"):
-        base_url = base_url.replace("http://", "https://", 1)
-
-    clean_items = []
-    for g in result.get("garments", []):
-        raw_url = g.get("url") or g.get("output_png_url") or ""
-        full_url = f"{base_url}{raw_url}" if raw_url.startswith("/") else raw_url
-        title = g.get("title") or g.get("recognized_label") or "Luxury Jewelry Studio"
-        clean_items.append({
-            "category": g.get("category", "jewelry"),
-            "title": title,
-            "url": full_url,
-            "resolution": "1024x1024",
-            "output_png_url": full_url,
-            "recognized_label": title,
-            "garment_id": g.get("garment_id"),
-            "output_png_base64": g.get("output_png_base64") if include_base64 else None,
-            "stand_type": g.get("stand_type"),
-            "views_analyzed": g.get("views_analyzed", len(upload_list)),
-        })
-
+    clean_items = _format_garment_items(
+        result, _resolve_base_url(request), include_base64, default_title="Luxury Jewelry Studio"
+    )
     total_time_sec = round(result.get("execution_time_ms", 0) / 1000.0, 1)
 
     return {
@@ -319,47 +262,44 @@ async def jewelry_studio_endpoint(
 
 @router.get("/outputs/{filename}")
 async def get_output_image(filename: str) -> FileResponse:
-    """Download or view a processed 1024x1024 transparent garment PNG."""
+    """Download or view a generated studio PNG."""
     file_path = OUTPUT_DIR / filename
     if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Requested garment image does not exist.")
+        raise HTTPException(status_code=404, detail="Requested image does not exist.")
     return FileResponse(path=file_path, media_type="image/png", filename=filename)
 
 
 @router.get("/download-batch-zip/{job_id}")
 async def download_batch_zip(job_id: str) -> Response:
-    """Download all extracted 1024x1024 transparent garment PNGs for a given job in a single ZIP archive."""
+    """Download all generated studio PNGs for a given job in a single ZIP archive."""
     png_files = sorted(list(OUTPUT_DIR.glob(f"{job_id}_*.png")))
     if not png_files:
-        raise HTTPException(status_code=404, detail="No extracted garments found for this job ID.")
+        raise HTTPException(status_code=404, detail="No generated images found for this job ID.")
 
     zip_buf = BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in png_files:
             zf.write(p, arcname=p.name)
 
-    zip_bytes = zip_buf.getvalue()
     return Response(
-        content=zip_bytes,
+        content=zip_buf.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="arangtik_{job_id}_garments.zip"'},
+        headers={"Content-Disposition": f'attachment; filename="arangtik_{job_id}_studio.zip"'},
     )
 
 
 @router.post("/forward-downstream")
 async def forward_downstream_endpoint(
-    job_id: str = Form(..., description="Job ID of processed garments"),
+    job_id: str = Form(..., description="Job ID of generated images"),
     target_api_url: str = Form(..., description="Destination API URL"),
 ) -> Any:
-    """Forward all extracted garment PNGs in ONE single multipart request to a downstream API."""
+    """Forward all generated studio PNGs in one multipart request to a downstream API."""
     import httpx
     png_files = sorted(list(OUTPUT_DIR.glob(f"{job_id}_*.png")))
     if not png_files:
-        raise HTTPException(status_code=404, detail="No extracted garments found for this job.")
+        raise HTTPException(status_code=404, detail="No generated images found for this job.")
 
-    files_payload = []
-    for p in png_files:
-        files_payload.append(("files[]", (p.name, p.read_bytes(), "image/png")))
+    files_payload = [("files[]", (p.name, p.read_bytes(), "image/png")) for p in png_files]
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -399,7 +339,6 @@ async def set_gpu_url_endpoint(
         else:
             os.environ["QWEN_API_KEY"] = cleaned_key
 
-    # Persist updates into .env cleanly without duplicating lines
     env_file = Path(".env")
     updates: dict[str, str] = {"QWEN_REMOTE_URL": f'"{cleaned_url}"'}
     if api_key is not None and api_key.strip():

@@ -1,4 +1,4 @@
-"""FastAPI HTTP Microservice for Arangtik Flow B (Qwen/Qwen-Image-2.1-Turbo + BRIA RMBG-1.4).
+"""FastAPI HTTP Microservice for Arangtik Studio (Qwen/Qwen-Image-2.1-Turbo).
 
 Used for HTTP-based GPU servers (RunPod Pods, Vast.ai, Dedicated Multi-GPU Nodes, Modal ASGI).
 RunPod Serverless Queue mode (`rp_handler.py`) shares the exact same `engine.py` inference core.
@@ -8,7 +8,6 @@ Run:
 """
 from __future__ import annotations
 
-import io
 import logging
 import os
 import pathlib
@@ -35,11 +34,9 @@ from engine import (
     get_gpu_info,
     is_pipeline_loaded,
     is_pipeline_warming,
-    is_rmbg_loaded,
     preload_models,
     prepare_ref_image,
     run_inference_sync,
-    run_rmbg_sync,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -73,8 +70,6 @@ def _background_job_runner(
     seed: Optional[int],
     width: Optional[int] = None,
     height: Optional[int] = None,
-    transparent: bool = False,
-    pre_clean: bool = False,
 ) -> None:
     with _jobs_lock:
         if job_id in _jobs:
@@ -89,8 +84,6 @@ def _background_job_runner(
             seed=seed,
             width=width,
             height=height,
-            transparent=transparent,
-            pre_clean=pre_clean,
         )
         with _jobs_lock:
             if job_id in _jobs:
@@ -122,8 +115,6 @@ def health(x_api_key: Optional[str] = Header(default=None)):
         "precision": "full_bfloat16",
         "model_loaded": is_pipeline_loaded(),
         "model_warming": is_pipeline_warming(),
-        "rmbg_loaded": is_rmbg_loaded(),
-        "pre_clean_supported": True,
         "workers_total": int(os.getenv("GPU_WORKERS_TOTAL", "1")),
         "output_size": f"{OUTPUT_WIDTH}x{OUTPUT_HEIGHT}",
         **gpu,
@@ -139,8 +130,6 @@ async def submit_job(
     seed: Optional[int] = Form(None),
     width: Optional[int] = Form(None),
     height: Optional[int] = Form(None),
-    transparent: bool = Form(False),
-    pre_clean: bool = Form(False),
     x_api_key: Optional[str] = Header(default=None),
 ):
     """Submit an async Qwen-Image-2.1-Turbo generation job."""
@@ -169,7 +158,7 @@ async def submit_job(
 
     thread = threading.Thread(
         target=_background_job_runner,
-        args=(job_id, ref_img, prompt, steps, guidance_scale, seed, width, height, transparent, pre_clean),
+        args=(job_id, ref_img, prompt, steps, guidance_scale, seed, width, height),
         daemon=True,
     )
     thread.start()
@@ -211,15 +200,13 @@ def get_job_result(job_id: str, x_api_key: Optional[str] = Header(default=None))
 
 @app.post("/generate")
 async def generate_garment(
-    image: UploadFile = File(..., description="Original model-worn reference image."),
-    prompt: str = Form(..., description="Detailed garment extraction prompt from ChatGPT Vision + studio rules."),
+    image: UploadFile = File(..., description="Original reference image."),
+    prompt: str = Form(..., description="Detailed studio generation prompt from ChatGPT Vision."),
     steps: int = Form(8),
     guidance_scale: float = Form(1.0),
     seed: Optional[int] = Form(None),
     width: Optional[int] = Form(None),
     height: Optional[int] = Form(None),
-    transparent: bool = Form(False),
-    pre_clean: bool = Form(False),
     x_api_key: Optional[str] = Header(default=None),
 ):
     """Run synchronous Qwen-Image-2.1-Turbo generation in worker thread so /health stays responsive."""
@@ -245,42 +232,9 @@ async def generate_garment(
             seed=seed,
             width=width,
             height=height,
-            transparent=transparent,
-            pre_clean=pre_clean,
         )
     except Exception as exc:
         logger.exception("Qwen-Image-2.1-Turbo inference error: %s", exc)
         raise HTTPException(status_code=500, detail=f"GPU inference failed: {exc}") from exc
 
-    return Response(content=png_bytes, media_type="image/png", headers=headers)
-
-
-@app.post("/remove-background")
-async def remove_background_endpoint(
-    image: UploadFile = File(..., description="Image to remove background."),
-    x_api_key: Optional[str] = Header(default=None),
-):
-    """Fast standalone GPU background removal endpoint."""
-    _verify_api_key(x_api_key)
-    raw_bytes = await image.read()
-    await image.close()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Empty image uploaded.")
-
-    try:
-        img = Image.open(io.BytesIO(raw_bytes))
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
-
-    try:
-        png_bytes, elapsed = await run_in_threadpool(run_rmbg_sync, img)
-    except Exception as exc:
-        logger.exception("GPU background removal failed: %s", exc)
-        raise HTTPException(status_code=500, detail=f"GPU background removal failed: {exc}") from exc
-
-    gpu_info = get_gpu_info()
-    headers = {
-        "X-Inference-Time-Sec": str(elapsed),
-        "X-GPU-Name": str(gpu_info["gpu_name"]),
-    }
     return Response(content=png_bytes, media_type="image/png", headers=headers)

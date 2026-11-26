@@ -1,4 +1,4 @@
-"""Verification tests for RunPod Serverless, provider-agnostic GPU routing, and concurrency scaling."""
+"""Verification tests for RunPod Serverless, provider-agnostic GPU routing, and direct 1024x1024 studio flow."""
 from __future__ import annotations
 
 import base64
@@ -14,8 +14,8 @@ from unittest.mock import MagicMock, patch
 from PIL import Image
 
 
-def _make_png_bytes(color=(200, 40, 40, 255), size=(64, 64)) -> bytes:
-    img = Image.new("RGBA", size, color)
+def _make_png_bytes(color=(255, 255, 255), size=(64, 64)) -> bytes:
+    img = Image.new("RGB", size, color)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -50,7 +50,7 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
     def test_runpod_generate_completed_runsync(self):
         from app.core.flow_b import qwen_client
 
-        out_b64 = base64.b64encode(_make_png_bytes((20, 180, 40, 255), (128, 128))).decode("ascii")
+        out_b64 = base64.b64encode(_make_png_bytes((20, 180, 40), (128, 128))).decode("ascii")
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -63,7 +63,6 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
                     "gpu_name": "NVIDIA RTX A6000",
                     "vram_total_gb": 48.0,
                     "inference_time_sec": "7.65",
-                    "preclean_time_sec": "0.02",
                     "seed": "42",
                 },
             },
@@ -77,17 +76,23 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
             clear=False,
         ), patch("app.core.flow_b.qwen_client.httpx.Client", return_value=mock_client):
             ref = Image.new("RGB", (256, 256), (255, 255, 255))
-            img, meta = qwen_client.generate_garment_via_gpu(ref, "studio kurta prompt", pre_clean=True)
+            img, meta = qwen_client.generate_garment_via_gpu(ref, "studio kurta prompt", width=1024, height=1024)
 
         self.assertEqual(img.size, (128, 128))
-        self.assertEqual(img.mode, "RGBA")
+        self.assertEqual(img.mode, "RGB")
         self.assertEqual(meta["execution_mode"], "runpod_serverless")
         self.assertEqual(meta["gpu_name"], "NVIDIA RTX A6000")
+
+        sent_input = mock_client.__enter__.return_value.post.call_args.kwargs["json"]["input"]
+        self.assertNotIn("transparent", sent_input)
+        self.assertNotIn("pre_clean", sent_input)
+        self.assertEqual(sent_input["width"], 1024)
+        self.assertEqual(sent_input["height"], 1024)
 
     def test_runpod_in_queue_polls_same_job_id_without_duplicate_run(self):
         from app.core.flow_b import qwen_client
 
-        out_b64 = base64.b64encode(_make_png_bytes((30, 30, 200, 255))).decode("ascii")
+        out_b64 = base64.b64encode(_make_png_bytes((30, 30, 200))).decode("ascii")
         sync_resp = MagicMock(status_code=200)
         sync_resp.json.return_value = {"id": "rp-cold-77", "status": "IN_QUEUE"}
 
@@ -116,20 +121,19 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
         single_client.__enter__.return_value.get.assert_called_once()
         called_url = single_client.__enter__.return_value.get.call_args[0][0]
         self.assertTrue(called_url.endswith("/status/rp-cold-77"))
-        self.assertEqual(img.mode, "RGBA")
+        self.assertEqual(img.mode, "RGB")
         self.assertEqual(meta["gpu_name"], "NVIDIA A40")
 
     def test_multi_http_round_robin_failover(self):
         from app.core.flow_b import qwen_client
 
-        png_bytes = _make_png_bytes((90, 90, 90, 255))
+        png_bytes = _make_png_bytes((90, 90, 90))
         good_resp = MagicMock(
             status_code=200,
             headers={"content-type": "image/png", "X-GPU-Name": "Node-B", "X-Inference-Time-Sec": "6.5"},
             content=png_bytes,
         )
 
-        # First HTTP node fails, fails over seamlessly to second node
         call_urls = []
 
         def fake_post(url, **kwargs):
@@ -155,6 +159,7 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
         self.assertIn("http://node2:8001/generate", call_urls)
         self.assertEqual(meta["gpu_name"], "Node-B")
         self.assertEqual(img.size, (64, 64))
+        self.assertEqual(img.mode, "RGB")
 
     def test_concurrency_auto_scales_with_runpod_max_workers(self):
         from app.api import routes
@@ -171,7 +176,7 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
             self.assertEqual(routes._resolve_concurrency_limit(), 16)
 
 
-class TestGpuWorkerModules(unittest.TestCase):
+class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
     def test_runpod_cached_model_snapshot_resolution(self):
         worker_dir = str(Path(__file__).resolve().parent.parent / "gpu_worker")
         if worker_dir not in sys.path:
@@ -190,6 +195,8 @@ class TestGpuWorkerModules(unittest.TestCase):
 
             with patch.dict(sys.modules, {"torch": fake_torch}):
                 import engine
+                self.assertEqual(engine.OUTPUT_WIDTH, 1024)
+                self.assertEqual(engine.OUTPUT_HEIGHT, 1024)
                 with patch.object(engine, "_hub_cache_roots", return_value=[tmpdir]):
                     src, cached = engine.resolve_model_source("Qwen/Qwen-Image-2.1-Turbo", "model_index.json")
                     self.assertTrue(cached)
@@ -213,20 +220,22 @@ class TestGpuWorkerModules(unittest.TestCase):
 
             health_out = rp_handler.handler({"input": {"action": "health"}})
             self.assertEqual(health_out["status"], "ok")
+            self.assertEqual(health_out["output_size"], "1024x1024")
+            self.assertNotIn("rmbg_loaded", health_out)
 
-            in_b64 = base64.b64encode(_make_png_bytes((255, 255, 255, 255), (32, 32))).decode("ascii")
-            out_bytes = _make_png_bytes((10, 20, 30, 255), (64, 64))
-            fake_meta = {"model": "Qwen/Qwen-Image-2.1-Turbo", "gpu_name": "RTX A6000", "inference_time_sec": "7.6"}
+            in_b64 = base64.b64encode(_make_png_bytes((255, 255, 255), (32, 32))).decode("ascii")
+            out_bytes = _make_png_bytes((240, 240, 240), (1024, 1024))
+            fake_meta = {"model": "Qwen/Qwen-Image-2.1-Turbo", "gpu_name": "RTX A6000", "inference_time_sec": "12.5"}
 
             with patch.object(rp_handler, "run_inference_sync", return_value=(out_bytes, {}, fake_meta)):
                 res = rp_handler.handler(
-                    {"input": {"action": "generate", "image_base64": in_b64, "prompt": "kurta", "transparent": True}}
+                    {"input": {"action": "generate", "image_base64": in_b64, "prompt": "kurta"}}
                 )
 
             self.assertIn("image_base64", res)
             self.assertEqual(res["metadata"]["gpu_name"], "RTX A6000")
 
-    def test_http_worker_and_backend_routes_import_cleanly(self):
+    def test_http_worker_and_backend_routes_clean(self):
         worker_dir = str(Path(__file__).resolve().parent.parent / "gpu_worker")
         if worker_dir not in sys.path:
             sys.path.insert(0, worker_dir)
@@ -240,7 +249,8 @@ class TestGpuWorkerModules(unittest.TestCase):
         with patch.dict(sys.modules, {"torch": fake_torch}):
             import server
             route_paths = {r.path for r in server.app.routes}
-            self.assertTrue({"/health", "/generate", "/jobs", "/remove-background"}.issubset(route_paths))
+            self.assertTrue({"/health", "/generate", "/jobs"}.issubset(route_paths))
+            self.assertNotIn("/remove-background", route_paths)
 
         from app.main import app as main_app
         main_paths = {getattr(r, "path", None) for r in main_app.routes}
@@ -250,43 +260,58 @@ class TestGpuWorkerModules(unittest.TestCase):
         from app.api.reconstruction import reconstruction_router
         api_paths = {getattr(r, "path", None) for r in api_router.routes}
         recon_paths = {getattr(r, "path", None) for r in reconstruction_router.routes}
-        self.assertTrue({"/background-removal", "/jewelry-studio", "/set-gpu-url"}.issubset(api_paths))
+        self.assertTrue({"/generate-garment", "/jewelry-studio", "/forward-downstream", "/set-gpu-url"}.issubset(api_paths))
+        self.assertNotIn("/background-removal", api_paths)
         self.assertIn("/qwen-image", recon_paths)
 
-    def test_apparel_flow_b_direct_1024_skips_post_bg_removal(self):
+    def test_direct_1024_studio_endpoint_and_ui(self):
+        from fastapi.testclient import TestClient
         from app.core.pipeline import unified_pipeline
+        from app.main import app as main_app
 
         fake_plan = [{
             "category": "upper_clothes",
-            "recognized_label": "Studio Kurta",
-            "prompt": "Clean white studio kurta",
+            "recognized_label": "Studio Shirt",
+            "prompt": "Clean white studio shirt",
             "box_2d": None,
             "item_count": 1,
         }]
         fake_generated = Image.new("RGB", (1024, 1024), (255, 255, 255))
 
+        client = TestClient(main_app)
+
+        ui_resp = client.get("/")
+        self.assertEqual(ui_resp.status_code, 200)
+        self.assertIn("/api/generate-garment", ui_resp.text)
+        self.assertNotIn("/api/background-removal", ui_resp.text)
+        self.assertNotIn("checkerboard", ui_resp.text)
+
+        css_resp = client.get("/static/style.css?v=4.1")
+        self.assertEqual(css_resp.status_code, 200)
+        self.assertIn(".studio-output-bg", css_resp.text)
+
         with patch.object(unified_pipeline, "analyze_garment_and_build_prompts", return_value=fake_plan), patch.object(
             unified_pipeline,
             "generate_garment_via_gpu",
             return_value=(fake_generated, {"model": "Qwen/Qwen-Image-2.1-Turbo", "gpu_name": "RTX A6000"}),
-        ) as mock_gpu, patch.object(
-            unified_pipeline, "normalize_to_1024", side_effect=AssertionError("normalize_to_1024 should not be called")
-        ), patch.object(
-            unified_pipeline, "validate_garment_background", side_effect=AssertionError("validate_garment_background should not be called")
-        ):
-            src = Image.new("RGB", (512, 512), (240, 240, 240))
-            res = unified_pipeline.execute_flow_b_with_person(
-                image_rgb=src,
-                image_bytes=b"123",
-                job_id="testdirect1024",
+        ) as mock_gpu:
+            resp = client.post(
+                "/api/generate-garment",
+                files={"file": ("shirt.png", _make_png_bytes((220, 220, 220), (512, 512)), "image/png")},
+                data={"target_garment": "upper_clothes"},
             )
 
-        self.assertTrue(res["success"])
-        call_kwargs = mock_gpu.call_args.kwargs
-        self.assertEqual(call_kwargs["width"], 1024)
-        self.assertEqual(call_kwargs["height"], 1024)
-        self.assertFalse(call_kwargs["transparent"])
-        out_path = unified_pipeline.OUTPUT_DIR / res["garments"][0]["image"]
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "success")
+        self.assertEqual(body["total_garments"], 1)
+        self.assertEqual(body["garments"][0]["resolution"], "1024x1024")
+        self.assertNotIn("background_removal_status", body["garments"][0])
+        self.assertEqual(mock_gpu.call_args.kwargs["width"], 1024)
+        self.assertEqual(mock_gpu.call_args.kwargs["height"], 1024)
+
+        out_name = Path(body["garments"][0]["output_png_url"]).name
+        out_path = unified_pipeline.OUTPUT_DIR / out_name
         try:
             with Image.open(out_path) as saved:
                 self.assertEqual(saved.size, (1024, 1024))

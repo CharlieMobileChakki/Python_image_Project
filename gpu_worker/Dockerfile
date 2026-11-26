@@ -56,15 +56,11 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     torch torchvision torchaudio \
     --index-url ${TORCH_INDEX}
 
-# 3. Install GPU worker dependencies (including RunPod Serverless SDK + FastAPI)
+# 3. Install GPU worker dependencies (RunPod Serverless SDK + FastAPI + Diffusers)
 COPY gpu_worker/requirements-gpu.txt /app/requirements-gpu.txt
 RUN pip install --no-cache-dir -r /app/requirements-gpu.txt
 
-# 4. Pre-bake lightweight RMBG-1.4 (~170MB) so startup matting never stalls on download
-# Qwen-Image-2.1-Turbo (~30.2 GiB) is loaded dynamically from RunPod Cached Models or HF cache
-RUN python3.11 -c "import torch.nn as nn; nn.Module.all_tied_weights_keys = {}; from transformers import AutoModelForImageSegmentation; AutoModelForImageSegmentation.from_pretrained('briaai/RMBG-1.4', trust_remote_code=True)"
-
-# 5. Copy worker modules
+# 4. Copy pure Qwen-Image-2.1-Turbo worker modules
 COPY gpu_worker/engine.py /app/engine.py
 COPY gpu_worker/rp_handler.py /app/rp_handler.py
 COPY gpu_worker/server.py /app/server.py

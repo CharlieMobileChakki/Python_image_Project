@@ -1,4 +1,4 @@
-"""FastAPI router for Flow B: ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo Garment Generation."""
+"""FastAPI router for Direct Qwen-Image-2.1-Turbo Garment Generation."""
 from __future__ import annotations
 
 import io
@@ -18,7 +18,7 @@ from app.core.flow_b import (
 )
 
 logger = logging.getLogger(__name__)
-reconstruction_router = APIRouter(tags=["Flow B: Qwen GPU Garment Generation"])
+reconstruction_router = APIRouter(tags=["Qwen Studio Generation"])
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
@@ -50,7 +50,7 @@ def _run_qwen_pipeline_sync(
     guidance_scale: float,
     seed: Optional[int],
 ) -> tuple[bytes, dict]:
-    """Execute ChatGPT Vision -> Remote GPU Qwen -> BiRefNet Transparent 1024x1024 PNG."""
+    """Execute ChatGPT Vision -> Remote GPU Qwen -> Direct 1024x1024 White-BG PNG."""
     plans = analyze_garment_and_build_prompts(
         image_rgb=original_pil,
         target_garment=target_garment,
@@ -67,7 +67,6 @@ def _run_qwen_pipeline_sync(
         seed=seed,
         width=apparel_size,
         height=apparel_size,
-        transparent=False,
     )
 
     direct_img = generated_raw.convert("RGB")
@@ -83,32 +82,26 @@ def _run_qwen_pipeline_sync(
         "seed": str(gpu_meta.get("seed", "")),
         "prompt_source": primary.get("prompt_source", "default"),
         "category": primary.get("category", "dress"),
-        "recognized_label": primary.get("recognized_label", "Garment Cutout"),
+        "recognized_label": primary.get("recognized_label", "Studio Garment"),
     }
     return buf.getvalue(), meta
 
 
 @reconstruction_router.post(
     "/qwen-image",
-    summary="Flow B: ChatGPT Vision + Remote RTX 3090 Qwen-Image-Edit Garment Generation",
+    summary="Direct ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo Garment Generation",
     response_class=Response,
     responses={200: {"content": {"image/png": {}}}},
 )
 async def qwen_image_endpoint(
-    original_image: UploadFile = File(..., description="Original model-worn photograph."),
+    original_image: UploadFile = File(..., description="Original reference photograph."),
     target_garment: str = Form("all", description="Target garment filter: 'all', 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', 'lehenga'."),
     prompt: Optional[str] = Form(None, description="Optional custom prompt override (auto-generated via ChatGPT Vision if omitted)."),
-    steps: int = Form(10, description="Denoising inference steps on GPU (10 for Lightning LoRA)."),
-    guidance_scale: float = Form(1.0, description="Guidance scale (1.0 for Lightning LoRA)."),
+    steps: int = Form(8, description="Denoising inference steps on GPU."),
+    guidance_scale: float = Form(1.0, description="Guidance scale."),
     seed: Optional[int] = Form(None, description="Optional random seed."),
 ):
-    """Generate a clean 1024x1024 transparent garment PNG directly from a model-worn photo.
-
-    Pipeline:
-    1. ChatGPT Vision analyzes the worn garment and constructs an exact prompt + studio rules.
-    2. Remote AIC Cloud RTX 3090 GPU runs Qwen-Image-Edit using original photo + prompt.
-    3. BiRefNet Lite converts the generated studio garment into a crisp 1024x1024 transparent PNG.
-    """
+    """Generate a direct 1024x1024 studio white-background garment PNG from a photo."""
     configured, info = is_gpu_worker_configured()
     if not configured:
         raise HTTPException(status_code=503, detail=info)

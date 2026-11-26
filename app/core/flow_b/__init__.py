@@ -13,7 +13,6 @@ from app.core.flow_b.qwen_client import (
     generate_garment_via_gpu,
     get_worker_capacity,
     is_gpu_worker_configured,
-    remove_background_via_gpu,
 )
 
 __all__ = [
@@ -26,6 +25,5 @@ __all__ = [
     "get_worker_capacity",
     "is_gpu_worker_configured",
     "is_jewelry_domain",
-    "remove_background_via_gpu",
 ]
 

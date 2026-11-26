@@ -418,7 +418,7 @@ def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, str]]:
     }
     cat, label, desc = mapping.get(
         t,
-        ("dress", "Garment Cutout", "the primary garment worn by the person preserving exact original colors, textile weave, and print motifs"),
+        ("dress", "Studio Garment", "the primary garment worn by the person preserving exact original colors, textile weave, and print motifs"),
     )
     return [
         {
@@ -566,7 +566,7 @@ def analyze_garment_and_build_prompts(
         results: list[dict[str, Any]] = []
         for item in items[:3]:
             cat = str(item.get("category", "dress")).strip().lower()
-            label = str(item.get("recognized_label", "Garment Cutout")).strip()
+            label = str(item.get("recognized_label", "Studio Garment")).strip()
             desc = str(item.get("garment_description", "")).strip()
             metal = str(item.get("metal_type", "")).strip() or None
             gemstone = str(item.get("gemstone_type", "")).strip() or None
@@ -607,7 +607,7 @@ def analyze_garment_and_build_prompts(
         if not results and items:
             first = items[0]
             cat = str(first.get("category", "dress")).strip().lower()
-            label = str(first.get("recognized_label", "Garment Cutout")).strip()
+            label = str(first.get("recognized_label", "Studio Garment")).strip()
             desc = str(first.get("garment_description", "the primary garment")).strip()
             metal = str(first.get("metal_type", "")).strip() or None
             gemstone = str(first.get("gemstone_type", "")).strip() or None

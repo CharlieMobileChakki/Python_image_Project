@@ -6,32 +6,30 @@ from pydantic import BaseModel, Field
 
 
 class GarmentItem(BaseModel):
-    """Clean production metadata for a single extracted and normalized 2D garment."""
-    category: str = Field(default="product", description="Garment category (e.g. upper_clothes, pants, dress)")
-    title: str = Field(default="Garment Cutout", description="Human-friendly garment title/label")
-    url: str = Field(..., description="Direct URL to the 1024x1024 transparent PNG")
+    """Clean production metadata for a generated 2D studio product image."""
+    category: str = Field(default="product", description="Product category (e.g. upper_clothes, pants, dress, necklace)")
+    title: str = Field(default="Studio Garment", description="Human-friendly product title/label")
+    url: str = Field(..., description="Direct URL to the generated 1024x1024 white-background PNG")
     resolution: str = Field(default="1024x1024", description="Output canvas resolution")
-    # Optional aliases for backwards compatibility
     output_png_url: str | None = Field(default=None, description="Alias for url")
     recognized_label: str | None = Field(default=None, description="Alias for title")
     garment_id: str | None = Field(default=None, description="Garment identifier")
     output_png_base64: str | None = Field(default=None, description="Optional Base64 data URI")
-    stand_type: str | None = Field(default=None, description="Display stand type (e.g. white_neck_bust, slotted_ring_block, t_bar_earring_stand)")
-    presentation_mode: str | None = Field(default="mode_c_display_stand", description="Presentation mode: mode_a_product_only, mode_b_studio_presentation, mode_c_display_stand")
-    detected_item_count: int | None = Field(default=1, description="Number of physical product items detected and preserved")
-    validation_metrics: dict[str, Any] | None = Field(default=None, description="Real output validation metrics (color Delta-E, item count match, mask score)")
-    engine: str | None = Field(default=None, description="GPU Engine used for synthesis (e.g. NVIDIA RTX A6000 Turbo)")
+    stand_type: str | None = Field(default=None, description="Display stand type for jewelry outputs")
+    presentation_mode: str | None = Field(default="ghost_mannequin", description="Presentation style")
+    detected_item_count: int | None = Field(default=1, description="Number of physical product items verified")
+    validation_metrics: dict[str, Any] | None = Field(default=None, description="Output quality metrics (Delta-E, count match, sharpness)")
+    engine: str | None = Field(default=None, description="GPU Engine used for synthesis")
     gpu_name: str | None = Field(default=None, description="Name of the GPU used")
-    views_analyzed: int | None = Field(default=1, description="Number of multi-angle reference photos analyzed")
+    views_analyzed: int | None = Field(default=1, description="Number of reference photos analyzed")
 
 
 class ProcessGarmentResponse(BaseModel):
-    """Clean, lightweight production response schema for Node.js and client integration."""
+    """Clean production response schema for API callers and UI."""
     status: str = Field(default="success", description="Status string: 'success'")
-    total_garments: int = Field(default=1, description="Count of extracted clean garments")
-    garments: list[GarmentItem] = Field(default_factory=list, description="List of extracted garments")
+    total_garments: int = Field(default=1, description="Count of generated studio images")
+    garments: list[GarmentItem] = Field(default_factory=list, description="List of generated product images")
     processing_time_sec: float = Field(default=0.0, description="Total end-to-end processing time in seconds")
-    # Optional fields for backwards compatibility
     job_id: str | None = Field(default=None, description="Job identifier")
     success: bool | None = Field(default=True, description="Success flag")
     message: str | None = Field(default=None, description="Status message")
@@ -42,7 +40,7 @@ class ProcessGarmentResponse(BaseModel):
 
 
 class DownstreamPackageRequest(BaseModel):
-    """Request schema for packaging extracted garments for downstream forward."""
+    """Request schema for packaging generated items for downstream forward."""
     job_id: str | None = None
     garment_ids: list[str] = Field(default_factory=list)
     target_api_url: str | None = None
@@ -60,9 +58,9 @@ class HealthResponse(BaseModel):
     """Health check response schema."""
     status: str = Field(default="ok")
     service: str = Field(default="arangtik-garment-ai")
-    flow: str = Field(default="Unified Pipeline")
-    version: str = Field(default="1.0.0")
-    model: str = Field(default="birefnet-lite + segformer-b2 + lama-ffc")
+    flow: str = Field(default="Direct 1024x1024 Studio Pipeline")
+    version: str = Field(default="4.1.0")
+    model: str = Field(default="Qwen/Qwen-Image-2.1-Turbo")
     docs_url: str = Field(default="/docs")
     ui_url: str = Field(default="/ui")
     models_loaded: dict[str, bool] = Field(default_factory=dict)

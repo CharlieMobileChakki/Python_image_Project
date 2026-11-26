@@ -1,16 +1,16 @@
 # RunPod Serverless Deployment Guide
-## Qwen/Qwen-Image-2.1-Turbo + BRIA RMBG-1.4 (48 GB Auto-Scaling Worker)
+## Pure Qwen/Qwen-Image-2.1-Turbo (`1024×1024` Direct White-BG Studio Worker)
 
-This guide explains how to deploy `gpu_worker/` cleanly onto **RunPod Serverless** directly from GitHub—with zero Google Cloud dependencies, pay-per-second billing (`$0.00` when idle), and instant provider switching via `.env`.
+This guide explains how to deploy `gpu_worker/` cleanly onto **RunPod Serverless** directly from GitHub—with zero Google Cloud dependencies, zero background-removal model overhead, pay-per-second billing (`$0.00` when idle), and instant provider switching via `.env`.
 
 ---
 
 ## 1. Architecture Overview
 
-- **`gpu_worker/engine.py`**: Single shared inference core (`Qwen/Qwen-Image-2.1-Turbo` full `bfloat16` + `briaai/RMBG-1.4` matting + in-GPU reference pre-clean). Automatically finds weights cached by RunPod at `/runpod-volume/huggingface-cache/hub/...` or local HuggingFace cache.
-- **`gpu_worker/rp_handler.py`**: RunPod Serverless Queue worker (`runpod.serverless.start`). Handles `generate`, `remove_background`, and `health` jobs safely without cold-start connection drops (also supports `WORKER_MODE=http` fallback to Uvicorn).
-- **`gpu_worker/server.py`**: FastAPI HTTP server (`/generate`, `/jobs`, `/remove-background`, `/health`) sharing `engine.py` for dedicated HTTP Pods/nodes.
-- **`app/core/flow_b/qwen_client.py`**: Contabo backend client that auto-detects **RunPod Serverless** (`https://api.runpod.ai/v2/<ENDPOINT_ID>`) vs **HTTP GPU Server(s)** purely from `.env` with zero code changes.
+- **`gpu_worker/engine.py`**: Single shared inference core (`Qwen/Qwen-Image-2.1-Turbo` full `bfloat16`, direct `1024×1024` RGB studio PNG). Automatically detects weights cached by RunPod at `/runpod-volume/huggingface-cache/hub/...` or local HuggingFace cache.
+- **`gpu_worker/rp_handler.py`**: RunPod Serverless Queue worker (`runpod.serverless.start`). Handles `generate` and `health` jobs safely without cold-start connection drops (also supports `WORKER_MODE=http` fallback to Uvicorn).
+- **`gpu_worker/server.py`**: FastAPI HTTP server (`/generate`, `/jobs`, `/health`) sharing `engine.py` for dedicated HTTP Pods/nodes.
+- **`app/core/flow_b/qwen_client.py`**: Backend client that auto-detects **RunPod Serverless** (`https://api.runpod.ai/v2/<ENDPOINT_ID>`) vs **HTTP GPU Server(s)** purely from `.env` with zero code changes.
 
 ---
 
@@ -24,35 +24,34 @@ This guide explains how to deploy `gpu_worker/` cleanly onto **RunPod Serverless
    - **Dockerfile Path:** `gpu_worker/Dockerfile`
    - **Endpoint Type:** **`Queue`**
    - **GPU Configuration:**
-     - Select **`48 GB — A6000, A40`** (`$1.22/hr`, `$0.000339/s`, best cost-to-VRAM fit)
-     - *(Optional faster tier: **`48 GB — L40, L40S, 6000 Ada`** at `$1.89/hr`)*
-     - **Do NOT select 32 GB / 24 GB GPUs** (`Qwen-Image-2.1-Turbo` + `RMBG-1.4` requires `~33–34 GB` VRAM).
-- **Workers Scaling:**
-  - **Active Workers (Min):** `0` *(no idle cost)*
-  - **Max Workers:** `5` *(or `10` for 10x parallel bursts)*
-  - **Idle Timeout:** `10` seconds
-  - **Initialization / Execution Timeout:** `600` seconds
-  - **CUDA Version:** `Use minimum CUDA version = 12.4`
-  - **GPU Configuration:** Tick `Previous generation -> 48 GB ($1.22/hr)` and optionally `Latest generation -> 48 GB ($1.89/hr)` with `Worker priority: Cost`.
-   - **Container Disk:** `30 GB` minimum *(Qwen cached weights sit on `/runpod-volume/huggingface-cache`, and RMBG-1.4 is pre-baked in Docker)*.
-   - **Cached Models (Important!):** Add **`Qwen/Qwen-Image-2.1-Turbo`** in the **Model** field so RunPod caches the 30.2 GiB weights on host NVMe instead of billing you to download them every cold start.
-4. Click **Deploy Endpoint** and wait for the GitHub Docker build + worker cache warm-up.
+     - Select **`Previous generation -> 48 GB`** (`A6000 / A40`, `$1.22/hr`) and optionally **`Latest generation -> 48 GB`** (`L40S / 6000 Ada`) with `Worker priority: Cost`.
+     - **Do NOT select 32 GB / 24 GB GPUs** (`Qwen-Image-2.1-Turbo` in `bfloat16` requires `>32 GB` VRAM).
+   - **Workers Scaling:**
+     - **Active Workers (Min):** `0` *(no idle cost)*
+     - **Max Workers:** `1` (or scale up to `5–10` when needed)
+     - **Idle Timeout:** `10` seconds
+     - **Initialization / Execution Timeout:** `600` seconds
+     - **CUDA Version:** `Use minimum CUDA version = 12.4`
+   - **Container Disk:** `30 GB` minimum *(Qwen cached weights sit on `/runpod-volume/huggingface-cache`)*.
+   - **Cached Models (Important!):** Add **`Qwen/Qwen-Image-2.1-Turbo`** in the **Model** field so RunPod mounts the weights from host NVMe cache.
+4. Click **Deploy Endpoint** and wait for the build to complete.
 
 ---
 
-## 3. Connect Contabo VPS (`bg.arangtik.com`)
+## 3. Connect Backend Server (`bg.arangtik.com`)
 
-Copy your **Endpoint ID** from RunPod and your **RunPod API Key** (**Settings → API Keys**), then update `.env` on Contabo:
+Copy your **Endpoint ID** and **RunPod API Key** (**Settings → API Keys**) into `.env`:
 
 ```env
 MAX_CONCURRENT_JOBS=auto
 QWEN_REMOTE_URL="https://api.runpod.ai/v2/<YOUR_ENDPOINT_ID>"
 RUNPOD_API_KEY="rpa_xxxxxxxxxxxxxxxxxxxx"
 RUNPOD_MAX_WORKERS=1
+QWEN_APPAREL_SIZE=1024
 QWEN_TIMEOUT_SECONDS=600
 ```
 
-Restart Uvicorn on Contabo (`systemctl restart ...` or your process manager), then verify:
+Verify health after restart:
 ```bash
 curl -s http://127.0.0.1:8000/health
 ```
@@ -61,9 +60,7 @@ curl -s http://127.0.0.1:8000/health
 
 ## 4. Switching Providers Anytime (Zero Code Edits)
 
-Because `app/core/flow_b/qwen_client.py` auto-detects the backend from `QWEN_REMOTE_URL`, you can switch setups in seconds purely in `.env`:
-
-- **Back to Dedicated Pod / Single HTTP Server (`port 8001`):**
+- **Dedicated Pod / Single HTTP Server (`port 8001`):**
   ```env
   QWEN_REMOTE_URL="http://<SERVER_IP>:8001"
   QWEN_API_KEY="your-worker-key"

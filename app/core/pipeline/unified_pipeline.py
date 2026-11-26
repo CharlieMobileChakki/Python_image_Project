@@ -1,4 +1,4 @@
-"""Master Pipeline Orchestrator: Coordinates Flow A (Without Person) and Flow B (With Person)."""
+"""Master Pipeline Orchestrator: Direct 1024x1024 Studio Generation (Apparel & Jewelry)."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -10,12 +10,8 @@ import uuid
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
-from app.core.background_removal import (
-    extract_isolated_flow_a,
-    validate_garment_background,
-)
 from app.core.flow_b import (
     analyze_garment_and_build_prompts,
     analyze_jewelry_and_build_prompts,
@@ -24,235 +20,23 @@ from app.core.flow_b import (
     get_worker_capacity,
     is_jewelry_domain,
 )
-from app.core.garment_extraction import detect_multi_garment_layout
 from app.core.image_processing import (
     calibrate_product_colors,
-    create_mode_a_product_only,
-    create_mode_b_studio_presentation,
-    detect_rotation_angle,
     image_to_base64_data_uri,
     load_image_bytes,
-    normalize_to_1024,
-    straighten_garment,
     validate_product_output,
 )
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
-from app.core.pipeline.pipeline_router import resolve_execution_flow
 
 logger = logging.getLogger(__name__)
 
-
-def execute_flow_a_without_person(
-    image_rgb: Image.Image,
-    image_bytes: bytes,
-    job_id: str,
-    target_garment: str = "all",
-    auto_straighten: bool = True,
-    include_base64: bool = False,
-    t_start: float | None = None,
-) -> dict[str, Any]:
-    """Execute Flow A: Pure background removal for isolated garments (without person).
-
-    Designed for flat-lay, ghost mannequin, hanger, or catalog product photos where
-    no human is present. Completely bypasses person parsing and human detection overhead.
-
-    Workflow:
-    1. Direct background removal via BiRefNet Lite.
-    2. Check for multi-garment catalog grid vs single garment layout.
-    3. Auto-deskew angle correction if requested.
-    4. 1024x1024 transparent canvas normalization and background quality validation.
-    """
-    if t_start is None:
-        t_start = time.perf_counter()
-
-    orig_w, orig_h = image_rgb.size
-
-    # Background Removal with BiRefNet Lite
-    t_fg_start = time.perf_counter()
-    fg_cutout = extract_isolated_flow_a(image_rgb)
-    fg_alpha = np.array(fg_cutout.split()[3])
-    fg_time_ms = round((time.perf_counter() - t_fg_start) * 1000, 2)
-
-    # Check for multiple garments on flat-lay canvas (e.g. catalog collection grid)
-    is_multi, multi_comps = detect_multi_garment_layout(image_rgb, fg_alpha=fg_alpha)
-    processed_items: list[dict[str, Any]] = []
-
-    if is_multi and len(multi_comps) >= 2:
-        # Multi-Garment Extraction Flow
-        arr_rgb = np.array(image_rgb)
-        total_multi_area = max(1, sum(c["area"] for c in multi_comps))
-
-        for idx, comp in enumerate(multi_comps):
-            g_id = f"garment_{idx+1:03d}"
-            c_mask = comp["comp_mask"]
-            # Preserve BiRefNet Lite's exact anti-aliased alpha boundary
-            g_alpha = np.where(c_mask, fg_alpha, 0).astype(np.uint8)
-
-            x0, y0, x1, y1 = comp["bbox"]
-            pad = 8
-            cx0 = max(0, x0 - pad)
-            cy0 = max(0, y0 - pad)
-            cx1 = min(orig_w, x1 + pad)
-            cy1 = min(orig_h, y1 + pad)
-
-            sub_rgb = arr_rgb[cy0:cy1, cx0:cx1]
-            sub_a = g_alpha[cy0:cy1, cx0:cx1]
-            sub_rgba = Image.fromarray(np.dstack([sub_rgb, sub_a]), mode="RGBA")
-
-            angle_deg = 0.0
-            if auto_straighten:
-                angle_deg = detect_rotation_angle(sub_rgba)
-                if abs(angle_deg) > 0.5:
-                    sub_rgba = straighten_garment(sub_rgba, angle_deg)
-
-            normalized_1024 = normalize_to_1024(sub_rgba, target_size=1024, fill_ratio=0.82)
-            val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
-            final_cutout = val_res.get("refined_cutout", normalized_1024)
-
-            out_filename = f"{job_id}_{g_id}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", optimize=True)
-
-            b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
-            coverage_pct = round((comp["area"] / total_multi_area) * 100.0, 1)
-
-            processed_items.append({
-                "garment_id": g_id,
-                "category": comp["category"],
-                "recognized_label": comp["label_name"],
-                "image": out_filename,
-                "confidence": val_res["confidence"],
-                "coverage_percentage": coverage_pct,
-                "priority": "first_priority",
-                "is_fused": False,
-                "rotation_angle_deg": angle_deg,
-                "repaired": False,
-                "repair_method": None,
-                "width": 1024,
-                "height": 1024,
-                "image_dimensions": [1024, 1024],
-                "output_png_url": f"/api/outputs/{out_filename}",
-                "output_png_base64": b64_data,
-                "background_removal_status": val_res["status"],
-                "background_removal_confidence": val_res["confidence"],
-                "garment_preservation_status": val_res["preservation_status"],
-                "validation_errors": val_res["validation_errors"],
-            })
-
-        scene_type = "multi_garment"
-        outfit_mode = "mode_a_independent"
-        ensemble_type = "multi_garment_collection"
-
-    else:
-        # Single Product Flat-lay / Hanger background removal
-        cutout_rgba = fg_cutout
-
-        # Prune detached non-garment specks (such as stand feet, stray hanger artifacts)
-        cutout_arr = np.array(cutout_rgba)
-        alpha_channel = cutout_arr[:, :, 3]
-        bin_cutout = (alpha_channel > 40).astype(np.uint8)
-        num_l, lab, st, _ = cv2.connectedComponentsWithStats(bin_cutout)
-        if num_l > 2:
-            max_comp_area = max(st[i, cv2.CC_STAT_AREA] for i in range(1, num_l))
-            # Keep components that are at least 12% of the main garment area
-            keep_m = np.zeros_like(bin_cutout, dtype=bool)
-            for i in range(1, num_l):
-                if st[i, cv2.CC_STAT_AREA] >= 0.12 * max_comp_area:
-                    keep_m |= (lab == i)
-            cutout_arr[:, :, 3] = np.where(keep_m, alpha_channel, 0)
-            cutout_rgba = Image.fromarray(cutout_arr, mode="RGBA")
-
-        angle_deg = 0.0
-        if auto_straighten:
-            angle_deg = detect_rotation_angle(cutout_rgba)
-            if abs(angle_deg) > 0.5:
-                cutout_rgba = straighten_garment(cutout_rgba, angle_deg)
-
-        normalized_1024 = normalize_to_1024(cutout_rgba, target_size=1024, fill_ratio=0.82)
-        val_res = validate_garment_background(normalized_1024, original_rgb=image_rgb)
-        final_cutout = val_res.get("refined_cutout", normalized_1024)
-
-        w, h = cutout_rgba.size
-        aspect = h / max(1, w)
-        if target_garment and target_garment != "all":
-            cat_key = target_garment
-            cat_label = target_garment.replace("_", " ").title()
-        elif aspect > 1.35:
-            cat_key = "dress"
-            cat_label = "Dress / Gown / Full Outfit"
-        elif aspect > 1.10 and w > h * 0.75:
-            cat_key = "dress"
-            cat_label = "Dress / Kurta / Outfit"
-        elif aspect > 1.15:
-            cat_key = "pants"
-            cat_label = "Pants / Jeans"
-        else:
-            cat_key = "upper_clothes"
-            cat_label = "Top / Shirt / Garment"
-
-        out_filename = f"{job_id}_{cat_key}.png"
-        out_path = OUTPUT_DIR / out_filename
-        final_cutout.save(out_path, format="PNG", optimize=True)
-
-        b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
-
-        processed_items.append({
-            "garment_id": f"{cat_key}_0",
-            "category": cat_key,
-            "recognized_label": cat_label,
-            "image": out_filename,
-            "confidence": val_res["confidence"],
-            "coverage_percentage": 100.0,
-            "priority": "first_priority",
-            "is_fused": False,
-            "rotation_angle_deg": angle_deg,
-            "repaired": False,
-            "repair_method": None,
-            "width": 1024,
-            "height": 1024,
-            "image_dimensions": [1024, 1024],
-            "output_png_url": f"/api/outputs/{out_filename}",
-            "output_png_base64": b64_data,
-            "background_removal_status": val_res["status"],
-            "background_removal_confidence": val_res["confidence"],
-            "garment_preservation_status": val_res["preservation_status"],
-            "validation_errors": val_res["validation_errors"],
-        })
-
-        scene_type = "flat_lay"
-        outfit_mode = "mode_b_single_piece"
-        ensemble_type = "single_product"
-
-    total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
-    return {
-        "success": True,
-        "job_id": job_id,
-        "execution_time_ms": total_time_ms,
-        "total_garments": len(processed_items),
-        "garments": processed_items,
-        "status": "success",
-        "mode": "without_person",
-        "has_human": False,
-        "scene_type": scene_type,
-        "outfit_mode": outfit_mode,
-        "execution_time_ms": total_time_ms,
-        "total_detected": len(processed_items),
-        "total_extracted": len(processed_items),
-        "total_background_removed": sum(1 for g in processed_items if g.get("background_removal_status") == "success"),
-        "total_partial": sum(1 for g in processed_items if g.get("background_removal_status") == "partial"),
-        "total_failed": sum(1 for g in processed_items if g.get("background_removal_status") == "failed"),
-        "garments_found": len(processed_items),
-        "garments": processed_items,
-        "diagnostics": {
-            "original_width": orig_w,
-            "original_height": orig_h,
-            "scene_type": scene_type,
-            "outfit_mode": outfit_mode,
-            "ensemble_type": ensemble_type,
-            "segmentation_time_ms": 0.0,
-            "foreground_time_ms": fg_time_ms,
-        },
-    }
+_JEWELRY_STAND_MAP = {
+    "earrings": "beige_velvet_brass_t_bar_stand",
+    "jhumkas": "beige_velvet_brass_t_bar_stand",
+    "ring": "beige_velvet_brass_ring_block",
+    "bangles": "beige_velvet_brass_bangle_bar",
+    "kada": "beige_velvet_brass_bangle_bar",
+}
 
 
 def enhance_jewelry_micro_relief(image: Image.Image) -> Image.Image:
@@ -260,15 +44,26 @@ def enhance_jewelry_micro_relief(image: Image.Image) -> Image.Image:
     try:
         rgb = np.array(image.convert("RGB"))
         lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
-        l, a, b = cv2.split(lab)
+        l_ch, a_ch, b_ch = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-        cl = clahe.apply(l)
-        enhanced_lab = cv2.merge((cl, a, b))
-        enhanced_rgb = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB)
-        return Image.fromarray(enhanced_rgb)
+        enhanced_lab = cv2.merge((clahe.apply(l_ch), a_ch, b_ch))
+        return Image.fromarray(cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB))
     except Exception as exc:
         logger.warning("CLAHE micro-relief enhancement failed (%s); using original image.", exc)
         return image
+
+
+def _fit_square_white_canvas(crop_img: Image.Image, category: str, target_square: int = 1400) -> Image.Image:
+    """Scale image onto a centered square white canvas and apply CLAHE if jewelry."""
+    cw, ch = crop_img.size
+    scale = (target_square * 0.88) / float(max(cw, ch))
+    nw = max(1, int(cw * scale))
+    nh = max(1, int(ch * scale))
+    resized = crop_img.resize((nw, nh), Image.Resampling.LANCZOS)
+
+    square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
+    square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
+    return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
 
 
 def get_optimal_item_reference_crop(
@@ -277,110 +72,72 @@ def get_optimal_item_reference_crop(
     box_2d: list[int | float] | tuple[int | float, ...] | None = None,
     total_items: int = 1,
 ) -> Image.Image:
-    """Produce an ultra-high-resolution, square conditioned reference image for Qwen visual conditioning.
-
-    Features:
-    1. For earrings in jewelry sets, detects single-earring box and symmetrically expands horizontally to capture BOTH earrings.
-    2. Falls back to robust central crop if coordinates are missing or out of bounds.
-    3. Pastes the cropped piece centered on a square pure white canvas (1400x1400) to eliminate aspect-ratio distortion.
-    """
+    """Produce a square-conditioned reference image centered for Qwen visual conditioning."""
     try:
         w, h = image.size
         target_square = 1400
 
         if category in ("earrings", "jhumkas") and total_items > 1:
             use_heuristic = True
+            crop_l, crop_t, crop_r, crop_b = 0, 0, w, h
             if box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
                 ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
                 is_norm_1 = all(0.0 <= v <= 1.0 for v in (ymin, xmin, ymax, xmax))
                 sx = w if is_norm_1 else (w / 1000.0)
                 sy = h if is_norm_1 else (h / 1000.0)
-                left = int(xmin * sx)
-                top = int(ymin * sy)
-                right = int(xmax * sx)
-                bottom = int(ymax * sy)
+                left, top, right, bottom = int(xmin * sx), int(ymin * sy), int(xmax * sx), int(ymax * sy)
 
-                # Validate coordinates: must be in upper/middle region where earrings hang in sets
                 if (bottom - top) > 40 and top < h * 0.6 and bottom < h * 0.75:
                     box_w = right - left
                     box_h = bottom - top
-                    # If box is tall and narrow (single earring), symmetrically expand across centerline
                     if box_w < box_h * 0.65:
-                        sym_l = max(0, min(left, w - right))
-                        sym_r = min(w, max(right, w - left))
-                        left, right = sym_l, sym_r
+                        left = max(0, min(left, w - right))
+                        right = min(w, max(right, w - left))
                         box_w = right - left
 
-                    pad_x = int(box_w * 0.12)
-                    pad_y = int(box_h * 0.12)
-                    crop_l = max(0, left - pad_x)
-                    crop_t = max(0, top - pad_y)
-                    crop_r = min(w, right + pad_x)
-                    crop_b = min(h, bottom + pad_y)
+                    pad_x, pad_y = int(box_w * 0.12), int(box_h * 0.12)
+                    crop_l, crop_t = max(0, left - pad_x), max(0, top - pad_y)
+                    crop_r, crop_b = min(w, right + pad_x), min(h, bottom + pad_y)
                     use_heuristic = False
 
             if use_heuristic:
-                # Robust default crop spanning upper-central loop where earrings hang inside necklace
-                crop_l = max(0, int(w * 0.28))
-                crop_t = max(0, int(h * 0.04))
-                crop_r = min(w, int(w * 0.72))
-                crop_b = min(h, int(h * 0.56))
+                crop_l, crop_t = max(0, int(w * 0.28)), max(0, int(h * 0.04))
+                crop_r, crop_b = min(w, int(w * 0.72)), min(h, int(h * 0.56))
 
-            cropped = image.crop((crop_l, crop_t, crop_r, crop_b))
-            cw, ch = cropped.size
-            scale = (target_square * 0.88) / float(max(cw, ch))
-            nw = max(1, int(cw * scale))
-            nh = max(1, int(ch * scale))
-            resized = cropped.resize((nw, nh), Image.Resampling.LANCZOS)
+            return _fit_square_white_canvas(image.crop((crop_l, crop_t, crop_r, crop_b)), category, target_square)
 
-            square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
-            square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
-            logger.info("Conditioned earrings pair reference image: %dx%d on square white canvas", square_canvas.width, square_canvas.height)
-            return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
-
-        elif box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
+        if box_2d and isinstance(box_2d, (list, tuple)) and len(box_2d) == 4:
             ymin, xmin, ymax, xmax = [float(v) for v in box_2d]
             is_norm_1 = all(0.0 <= v <= 1.0 for v in (ymin, xmin, ymax, xmax))
             sx = w if is_norm_1 else (w / 1000.0)
             sy = h if is_norm_1 else (h / 1000.0)
-            left = int(xmin * sx)
-            top = int(ymin * sy)
-            right = int(xmax * sx)
-            bottom = int(ymax * sy)
-            box_w = right - left
-            box_h = bottom - top
+            left, top, right, bottom = int(xmin * sx), int(ymin * sy), int(xmax * sx), int(ymax * sy)
+            box_w, box_h = right - left, bottom - top
             if box_w >= 30 and box_h >= 30 and (box_w < w * 0.95 or box_h < h * 0.95):
-                pad_x = int(box_w * 0.10)
-                pad_y = int(box_h * 0.10)
-                crop_l = max(0, left - pad_x)
-                crop_t = max(0, top - pad_y)
-                crop_r = min(w, right + pad_x)
-                crop_b = min(h, bottom + pad_y)
-                cropped = image.crop((crop_l, crop_t, crop_r, crop_b))
-                cw, ch = cropped.size
-                scale = (target_square * 0.88) / float(max(cw, ch))
-                nw = max(1, int(cw * scale))
-                nh = max(1, int(ch * scale))
-                resized = cropped.resize((nw, nh), Image.Resampling.LANCZOS)
-                square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
-                square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
-                return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
+                pad_x, pad_y = int(box_w * 0.10), int(box_h * 0.10)
+                cropped = image.crop((max(0, left - pad_x), max(0, top - pad_y), min(w, right + pad_x), min(h, bottom + pad_y)))
+                return _fit_square_white_canvas(cropped, category, target_square)
 
-        # For any non-square image or if max dim < 1000, fit centered onto a square 1400x1400 white canvas
-        cw, ch = image.size
-        if abs(cw - ch) > 20 or max(cw, ch) < 1000:
-            scale = (target_square * 0.88) / float(max(cw, ch))
-            nw = max(1, int(cw * scale))
-            nh = max(1, int(ch * scale))
-            resized = image.resize((nw, nh), Image.Resampling.LANCZOS)
-            square_canvas = Image.new("RGB", (target_square, target_square), (255, 255, 255))
-            square_canvas.paste(resized, ((target_square - nw) // 2, (target_square - nh) // 2))
-            return enhance_jewelry_micro_relief(square_canvas) if is_jewelry_domain(category) else square_canvas
+        if abs(w - h) > 20 or max(w, h) < 1000:
+            return _fit_square_white_canvas(image, category, target_square)
 
         return image
     except Exception as exc:
-        logger.warning("Failed to crop item reference (%s); using full image.", exc)
+        logger.warning("Failed to condition item reference (%s); using full image.", exc)
         return image
+
+
+def _save_jewelry_output(
+    item_ref: Image.Image,
+    generated_raw: Image.Image,
+    out_filename: str,
+) -> Image.Image:
+    """Calibrate, sharpen, upscale to 2048x2048 RGB, and write PNG for jewelry outputs."""
+    calibrated = calibrate_product_colors(item_ref, generated_raw)
+    sharpened = calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
+    hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
+    hd_output.save(OUTPUT_DIR / out_filename, format="PNG", compress_level=1)
+    return hd_output
 
 
 def _process_single_planned_garment(
@@ -390,10 +147,9 @@ def _process_single_planned_garment(
     image_rgb: Image.Image,
     job_id: str,
     include_base64: bool,
-    presentation_mode: str,
     item_count_override: int | None,
-) -> tuple[dict[str, Any], float, float, float]:
-    """Process one planned garment or jewelry item cleanly."""
+) -> tuple[dict[str, Any], float, float]:
+    """Generate a single planned apparel or jewelry item directly on remote GPU."""
     cat_key = plan["category"]
     cat_label = plan["recognized_label"]
     qwen_prompt = plan["prompt"]
@@ -401,11 +157,6 @@ def _process_single_planned_garment(
     is_jewelry = is_jewelry_domain(cat_key)
     expected_cnt = item_count_override or plan.get("item_count", 1)
 
-    gpu_ms = 0.0
-    preclean_ms = 0.0
-    postprocess_ms = 0.0
-
-    # Macro zoom & square-conditioned reference image (1400x1400 preserved for apparel & jewelry detail)
     item_ref_image = get_optimal_item_reference_crop(
         image=image_rgb,
         category=cat_key,
@@ -413,96 +164,48 @@ def _process_single_planned_garment(
         total_items=total_planned,
     )
 
-    if is_jewelry and presentation_mode == "mode_a_product_only":
-        fg_cutout = extract_isolated_flow_a(item_ref_image)
-        final_cutout = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
-        out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-        out_path = OUTPUT_DIR / out_filename
-        final_cutout.save(out_path, format="PNG", compress_level=1)
-        stand = None
-        angle_deg = 0.0
-        val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-        val_conf = val_res.get("mask_quality", 0.98)
-        gpu_meta = {"model": "bi_refnet_identity_preserved", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+    gpu_steps = 26 if is_jewelry else 8
+    gpu_guidance = 2.5 if is_jewelry else 1.0
+    apparel_size = max(512, int(os.getenv("QWEN_APPAREL_SIZE", "1024")))
 
-    elif is_jewelry and presentation_mode == "mode_b_studio_presentation":
-        fg_cutout = extract_isolated_flow_a(item_ref_image)
-        final_cutout = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
-        out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-        out_path = OUTPUT_DIR / out_filename
-        final_cutout.save(out_path, format="PNG", compress_level=1)
-        stand = None
-        angle_deg = 0.0
-        val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-        val_conf = val_res.get("mask_quality", 0.98)
-        gpu_meta = {"model": "studio_composer_shadow_composite", "gpu_name": "CPU/Direct", "inference_time_sec": "0"}
+    t_gpu_start = time.perf_counter()
+    generated_raw, gpu_meta = generate_garment_via_gpu(
+        reference_image=item_ref_image,
+        prompt=qwen_prompt,
+        steps=gpu_steps,
+        guidance_scale=gpu_guidance,
+        width=1024 if is_jewelry else apparel_size,
+        height=1024 if is_jewelry else apparel_size,
+    )
+    gpu_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
+    t_post_start = time.perf_counter()
+    if is_jewelry:
+        out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
+        final_output = _save_jewelry_output(item_ref_image, generated_raw, out_filename)
+        stand = _JEWELRY_STAND_MAP.get(cat_key, "beige_velvet_brass_neck_bust")
+        val_res = validate_product_output(item_ref_image, final_output, expected_count=expected_cnt)
     else:
-        gpu_steps = 26 if is_jewelry else 8
-        gpu_guidance = 2.5 if is_jewelry else 1.0
-        apparel_size = max(512, int(os.getenv("QWEN_APPAREL_SIZE", "1024")))
-        use_preclean = (not is_jewelry) and (
-            os.getenv("QWEN_PRECLEAN_INPUT", "true").strip().lower() in ("1", "true", "yes")
-        )
+        direct_rgb = generated_raw.convert("RGB")
+        if direct_rgb.size != (1024, 1024):
+            direct_rgb = direct_rgb.resize((1024, 1024), Image.Resampling.LANCZOS)
+        final_output = direct_rgb
+        out_filename = f"{job_id}_{g_id}.png"
+        final_output.save(OUTPUT_DIR / out_filename, format="PNG", compress_level=1)
+        stand = None
+        val_res = validate_product_output(item_ref_image, final_output, expected_count=1)
+    postprocess_ms = round((time.perf_counter() - t_post_start) * 1000, 2)
 
-        t_gpu_start = time.perf_counter()
-        generated_raw, gpu_meta = generate_garment_via_gpu(
-            reference_image=item_ref_image,
-            prompt=qwen_prompt,
-            steps=gpu_steps,
-            guidance_scale=gpu_guidance,
-            width=1024 if is_jewelry else apparel_size,
-            height=1024 if is_jewelry else apparel_size,
-            transparent=False,
-            pre_clean=use_preclean,
-        )
-        gpu_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
-        try:
-            preclean_ms = round(float(gpu_meta.get("preclean_time_sec", 0) or 0) * 1000, 2)
-        except (TypeError, ValueError):
-            pass
+    val_conf = val_res.get("mask_quality", 0.98)
+    b64_data = image_to_base64_data_uri(final_output) if include_base64 else None
 
-        t_post_start = time.perf_counter()
-        if is_jewelry:
-            from PIL import ImageFilter
-            raw_calibrated = calibrate_product_colors(item_ref_image, generated_raw)
-            sharpened = raw_calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.5, percent=135, threshold=1))
-            final_cutout = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
-            out_filename = f"{job_id}_{g_id}_jewelry_{cat_key}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = (
-                "beige_velvet_brass_t_bar_stand" if cat_key in ("earrings", "jhumkas")
-                else ("beige_velvet_brass_ring_block" if cat_key == "ring"
-                else ("beige_velvet_brass_bangle_bar" if cat_key in ("bangles", "kada")
-                else "beige_velvet_brass_neck_bust"))
-            )
-            angle_deg = 0.0
-            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=expected_cnt)
-            val_conf = val_res.get("mask_quality", 0.98)
-        else:
-            # Direct 1024x1024 Qwen studio image (post-generation BG removal skipped)
-            direct_rgb = generated_raw.convert("RGB")
-            if direct_rgb.size != (1024, 1024):
-                direct_rgb = direct_rgb.resize((1024, 1024), Image.Resampling.LANCZOS)
-            final_cutout = direct_rgb
-            out_filename = f"{job_id}_{g_id}.png"
-            out_path = OUTPUT_DIR / out_filename
-            final_cutout.save(out_path, format="PNG", compress_level=1)
-            stand = None
-            angle_deg = 0.0
-            val_res = validate_product_output(item_ref_image, final_cutout, expected_count=1)
-            val_conf = val_res.get("mask_quality", 0.98)
-        postprocess_ms = round((time.perf_counter() - t_post_start) * 1000, 2)
-
-    b64_data = image_to_base64_data_uri(final_cutout) if include_base64 else None
     item_payload = {
         "garment_id": g_id,
         "category": cat_key,
         "recognized_label": cat_label,
         "title": cat_label,
         "stand_type": stand,
-        "presentation_mode": presentation_mode if is_jewelry else "ghost_mannequin",
+        "presentation_mode": "mode_c_display_stand" if is_jewelry else "ghost_mannequin",
         "detected_item_count": val_res.get("detected_count", expected_cnt),
         "validation_metrics": val_res,
         "image": out_filename,
@@ -512,7 +215,6 @@ def _process_single_planned_garment(
         "coverage_percentage": round(100.0 / max(1, total_planned), 1),
         "priority": "first_priority",
         "is_fused": False,
-        "rotation_angle_deg": angle_deg,
         "repaired": True,
         "repair_method": f"chatgpt_vision + {gpu_meta.get('model', 'qwen_gpu')}",
         "engine": f"{gpu_meta.get('gpu_name', 'NVIDIA GPU')} Turbo (bfloat16)",
@@ -521,40 +223,27 @@ def _process_single_planned_garment(
         "height": 2048 if is_jewelry else 1024,
         "image_dimensions": [2048, 2048] if is_jewelry else [1024, 1024],
         "output_png_base64": b64_data,
-        "background_removal_status": val_res.get("status", "success"),
-        "background_removal_confidence": val_conf,
         "garment_preservation_status": "preserved" if val_res.get("verified", True) else "modified",
         "validation_errors": [] if val_res.get("verified", True) else [val_res.get("count_status", "Check count")],
     }
-    return item_payload, gpu_ms, preclean_ms, postprocess_ms
+    return item_payload, gpu_ms, postprocess_ms
 
 
-def execute_flow_b_with_person(
+def execute_studio_generation(
     image_rgb: Image.Image,
-    image_bytes: bytes,
     job_id: str,
     target_garment: str = "all",
-    auto_repair: bool = True,
-    auto_straighten: bool = True,
     include_base64: bool = False,
     t_start: float | None = None,
     custom_prompt: str | None = None,
-    presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
 ) -> dict[str, Any]:
-    """Execute Flow B: ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo Garment Extraction.
-
-    Supports three presentation modes for product accuracy:
-    - Mode A: Original Product Only (100% original pixels, background removed, clean white/transparent).
-    - Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting).
-    - Mode C: Product Display Stand (Remote GPU Qwen generation with strict quantity & color locking).
-    """
+    """Execute Direct Studio Generation: ChatGPT Vision -> Remote GPU Qwen 2.1 -> 1024x1024 RGB PNG."""
     if t_start is None:
         t_start = time.perf_counter()
 
     orig_w, orig_h = image_rgb.size
 
-    # Step 1: ChatGPT Vision garment analysis & prompt generation
     t_prompt_start = time.perf_counter()
     planned_garments = analyze_garment_and_build_prompts(
         image_rgb=image_rgb,
@@ -578,7 +267,6 @@ def execute_flow_b_with_person(
                     image_rgb,
                     job_id,
                     include_base64,
-                    presentation_mode,
                     item_count_override,
                 )
                 for idx, plan in enumerate(planned_garments)
@@ -593,7 +281,6 @@ def execute_flow_b_with_person(
                 image_rgb,
                 job_id,
                 include_base64,
-                presentation_mode,
                 item_count_override,
             )
             for idx, plan in enumerate(planned_garments)
@@ -601,46 +288,31 @@ def execute_flow_b_with_person(
 
     processed_items = [r[0] for r in item_results]
     gpu_time_ms = round(sum(r[1] for r in item_results), 2)
-    preclean_time_ms = round(sum(r[2] for r in item_results), 2)
-    postprocess_time_ms = round(sum(r[3] for r in item_results), 2)
-
+    postprocess_time_ms = round(sum(r[2] for r in item_results), 2)
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
+
     return {
         "success": True,
         "status": "success",
-        "message": "Background removed successfully",
+        "message": "Studio image generated successfully",
         "job_id": job_id,
-        "mode": "with_person",
-        "has_human": True,
-        "scene_type": "person",
-        "outfit_mode": "flow_b_chatgpt_qwen_gpu",
+        "mode": "studio_generation",
+        "scene_type": "studio",
         "execution_time_ms": total_time_ms,
         "total_garments": len(processed_items),
         "total_detected": len(processed_items),
         "total_extracted": len(processed_items),
-        "total_background_removed": sum(1 for g in processed_items if g.get("background_removal_status") == "success"),
-        "total_partial": sum(1 for g in processed_items if g.get("background_removal_status") == "partial"),
-        "total_failed": sum(1 for g in processed_items if g.get("background_removal_status") == "failed"),
         "garments_found": len(processed_items),
         "garments": processed_items,
         "diagnostics": {
             "original_width": orig_w,
             "original_height": orig_h,
-            "scene_type": "person",
             "prompt_time_ms": prompt_time_ms,
-            "gpu_generation_time_ms": round(gpu_time_ms, 2),
-            "preclean_time_ms": round(preclean_time_ms, 2),
-            "postprocess_time_ms": round(postprocess_time_ms, 2),
+            "gpu_generation_time_ms": gpu_time_ms,
+            "postprocess_time_ms": postprocess_time_ms,
         },
     }
 
-
-# ==============================================================================
-# JEWELRY & PRECIOUS ORNAMENTS 3D STUDIO PIPELINE (MULTI-ANGLE EXECUTION)
-# ------------------------------------------------------------------------------
-# Specialized execution pipeline for Necklaces, Rings, Earrings, and Bangles.
-# Fuses 1 to 4 multi-angle views and mounts on appropriate luxury display stands.
-# ==============================================================================
 
 def execute_jewelry_studio_pipeline(
     images_rgb: list[Image.Image] | Image.Image,
@@ -649,23 +321,14 @@ def execute_jewelry_studio_pipeline(
     custom_prompt: str | None = None,
     include_base64: bool = False,
     t_start: float | None = None,
-    presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
 ) -> dict[str, Any]:
-    """Execute 3D Luxury Jewelry Studio Pipeline supporting 3 configurable presentation modes:
-    - Mode A: Original Product Only (100% original pixels, background removed, clean white/transparent).
-    - Mode B: Professional Studio Presentation (100% original pixels, realistic ground shadow & lighting, zero stand).
-    - Mode C: Product Display Stand (Mounted on specialized boutique stand with strict piece-count & color calibration).
-    """
+    """Execute 3D Luxury Jewelry Studio Pipeline via direct Qwen 2.1 GPU generation."""
     if t_start is None:
         t_start = time.perf_counter()
 
-    if isinstance(images_rgb, Image.Image):
-        img_list = [images_rgb]
-    else:
-        img_list = list(images_rgb) if images_rgb else []
+    img_list = [images_rgb] if isinstance(images_rgb, Image.Image) else (list(images_rgb) if images_rgb else [])
 
-    # 1. Multi-angle vision analysis and prompt construction
     t_prompt_start = time.perf_counter()
     jewelry_plan = analyze_jewelry_and_build_prompts(
         images=img_list,
@@ -678,52 +341,25 @@ def execute_jewelry_studio_pipeline(
     label = jewelry_plan.get("recognized_label", "Fine Gold Jewelry")
     prompt = jewelry_plan.get("prompt", "")
     expected_cnt = item_count_override or jewelry_plan.get("item_count", 1)
+    stand = jewelry_plan.get("stand_type", _JEWELRY_STAND_MAP.get(cat, "beige_velvet_brass_neck_bust"))
 
-    if presentation_mode == "mode_a_product_only":
-        # Mode A: Original Product Only (100% original pixels, clean white background, zero stand, zero redesign)
-        fg_cutout = extract_isolated_flow_a(img_list[0])
-        hd_output = create_mode_a_product_only(fg_cutout, canvas_size=2048, background_color=(255, 255, 255))
-        out_filename = f"{job_id}_jewelry_{cat}.png"
-        out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
-        stand = None
-        gpu_time_ms = 0.0
-        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
+    composite_ref = enhance_jewelry_micro_relief(create_multi_angle_composite(img_list, target_size=1024))
+    t_gpu_start = time.perf_counter()
+    generated_raw, gpu_meta = generate_garment_via_gpu(
+        reference_image=composite_ref,
+        prompt=prompt,
+        steps=26,
+        guidance_scale=2.5,
+        width=1024,
+        height=1024,
+    )
+    gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
 
-    elif presentation_mode == "mode_b_studio_presentation":
-        # Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting, zero stand)
-        fg_cutout = extract_isolated_flow_a(img_list[0])
-        hd_output = create_mode_b_studio_presentation(fg_cutout, canvas_size=2048)
-        out_filename = f"{job_id}_jewelry_{cat}.png"
-        out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
-        stand = None
-        gpu_time_ms = 0.0
-        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
-
-    else:
-        # Mode C: Product Display Stand (Mounted on luxury boutique stand with guaranteed quantity locking & color calibration)
-        stand = jewelry_plan.get("stand_type", "beige_velvet_brass_neck_bust")
-        composite_ref = create_multi_angle_composite(img_list, target_size=1024)
-        composite_ref = enhance_jewelry_micro_relief(composite_ref)
-        t_gpu_start = time.perf_counter()
-        generated_raw, gpu_meta = generate_garment_via_gpu(
-            reference_image=composite_ref,
-            prompt=prompt,
-            steps=26,
-            guidance_scale=2.5,
-        )
-        gpu_time_ms = round((time.perf_counter() - t_gpu_start) * 1000, 2)
-
-        # Calibrate generated colors to match exact source metal & gemstones
-        calibrated = calibrate_product_colors(composite_ref, generated_raw)
-        from PIL import ImageFilter
-        sharpened = calibrated.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=1))
-        hd_output = sharpened.resize((2048, 2048), Image.Resampling.LANCZOS)
-        out_filename = f"{job_id}_jewelry_{cat}.png"
-        out_path = OUTPUT_DIR / out_filename
-        hd_output.save(out_path, format="PNG", compress_level=1)
-        val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
+    t_post_start = time.perf_counter()
+    out_filename = f"{job_id}_jewelry_{cat}.png"
+    hd_output = _save_jewelry_output(composite_ref, generated_raw, out_filename)
+    val_metrics = validate_product_output(img_list[0], hd_output, expected_count=expected_cnt)
+    postprocess_ms = round((time.perf_counter() - t_post_start) * 1000, 2)
 
     b64_data = image_to_base64_data_uri(hd_output) if include_base64 else None
     total_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
@@ -739,13 +375,13 @@ def execute_jewelry_studio_pipeline(
         "output_png_url": f"/api/outputs/{out_filename}",
         "resolution": "2048x2048",
         "stand_type": stand,
-        "presentation_mode": presentation_mode,
+        "presentation_mode": "mode_c_display_stand",
         "detected_item_count": val_metrics.get("detected_count", expected_cnt),
         "validation_metrics": val_metrics,
+        "engine": f"{gpu_meta.get('gpu_name', 'NVIDIA GPU')} Turbo (bfloat16)",
+        "gpu_name": gpu_meta.get("gpu_name", "NVIDIA GPU"),
         "views_analyzed": len(img_list),
         "output_png_base64": b64_data,
-        "background_removal_status": "success",
-        "background_removal_confidence": val_metrics.get("mask_quality", 0.98),
         "confidence": val_metrics.get("mask_quality", 0.98),
         "garment_preservation_status": "preserved" if val_metrics.get("verified", True) else "modified",
         "validation_errors": [] if val_metrics.get("verified", True) else [val_metrics.get("count_status", "Check count")],
@@ -754,31 +390,26 @@ def execute_jewelry_studio_pipeline(
     return {
         "status": "success",
         "success": True,
-        "message": f"Jewelry presentation generated successfully ({presentation_mode})",
+        "message": "Jewelry presentation generated successfully",
         "job_id": job_id,
         "mode": "jewelry_studio",
-        "has_human": False,
         "scene_type": "jewelry",
-        "outfit_mode": presentation_mode,
         "total_garments": 1,
         "garments": [item_payload],
         "processing_time_sec": total_time_sec,
         "execution_time_ms": total_time_ms,
         "total_detected": 1,
         "total_extracted": 1,
-        "total_background_removed": 1,
-        "total_partial": 0,
-        "total_failed": 0,
         "garments_found": 1,
         "diagnostics": {
             "category": cat,
             "stand_type": stand,
-            "presentation_mode": presentation_mode,
             "detected_item_count": val_metrics.get("detected_count", expected_cnt),
             "expected_count": expected_cnt,
             "views_analyzed": len(img_list),
             "prompt_time_ms": prompt_time_ms,
             "gpu_generation_time_ms": gpu_time_ms,
+            "postprocess_time_ms": postprocess_ms,
             "validation": val_metrics,
         },
     }
@@ -786,30 +417,16 @@ def execute_jewelry_studio_pipeline(
 
 def process_garment_pipeline(
     image_bytes: bytes | list[bytes],
-    person_mode: str = "with_person",
-    has_human: bool | None = None,
-    mode_hint: str | None = None,
     target_garment: str = "all",
-    auto_repair: bool = True,
-    auto_straighten: bool = True,
     include_base64: bool = False,
     custom_prompt: str | None = None,
-    presentation_mode: str = "mode_c_display_stand",
     item_count_override: int | None = None,
+    force_jewelry: bool = False,
 ) -> dict[str, Any]:
-    """Execute the Unified 3D Garment & Jewelry Studio Pipeline.
-
-    Single unified production workflow:
-    - Apparel / Garments: ChatGPT Vision -> Qwen GPU -> BiRefNet Lite 1024x1024.
-    - Jewelry: Supports 3 presentation modes:
-      * Mode A: Original Product Only (100% original pixels, clean white/transparent).
-      * Mode B: Professional Studio Presentation (100% original pixels, realistic contact shadow & ambient lighting).
-      * Mode C: Product Display Stand (Mounted on luxury boutique stand with guaranteed quantity locking & color calibration).
-    """
+    """Execute the Direct 1024x1024 Studio Generation Pipeline (Apparel & Jewelry)."""
     t_start = time.perf_counter()
     job_id = uuid.uuid4().hex[:10]
 
-    # Handle multi-image input or single image
     if isinstance(image_bytes, list):
         images_rgb = [load_image_bytes(b) for b in image_bytes if b]
     else:
@@ -818,15 +435,7 @@ def process_garment_pipeline(
     if not images_rgb:
         raise ValueError("No valid image data provided to pipeline.")
 
-    # 1. Check if input is multi-angle jewelry OR explicitly requested jewelry domain
-    is_multi_angle = len(images_rgb) > 1
-    is_explicit_jewelry = (
-        person_mode.strip().lower() in ("jewelry", "jewelry_studio", "gold", "ornament")
-        or is_jewelry_domain(target_garment)
-        or is_jewelry_domain(mode_hint)
-    )
-
-    if is_multi_angle or is_explicit_jewelry:
+    if len(images_rgb) > 1 or force_jewelry or is_jewelry_domain(target_garment):
         return execute_jewelry_studio_pipeline(
             images_rgb=images_rgb,
             job_id=job_id,
@@ -834,37 +443,15 @@ def process_garment_pipeline(
             custom_prompt=custom_prompt,
             include_base64=include_base64,
             t_start=t_start,
-            presentation_mode=presentation_mode,
             item_count_override=item_count_override,
         )
 
-    # 2. Standard Apparel / Garment Single-Image Flows (100% UNTOUCHED)
-    primary_image_rgb = images_rgb[0]
-    single_image_bytes = image_bytes if isinstance(image_bytes, bytes) else image_bytes[0]
-
-    # Legacy raw-cutout-only fallback (if explicitly requested)
-    if person_mode == "flow_a_legacy_raw" or mode_hint == "raw_cutout_only":
-        return execute_flow_a_without_person(
-            image_rgb=primary_image_rgb,
-            image_bytes=single_image_bytes,
-            job_id=job_id,
-            target_garment=target_garment,
-            auto_straighten=auto_straighten,
-            include_base64=include_base64,
-            t_start=t_start,
-        )
-
-    # Master Unified 3D Garment Flow (ChatGPT Vision + Qwen GPU + BiRefNet Lite 1024x1024)
-    return execute_flow_b_with_person(
-        image_rgb=primary_image_rgb,
-        image_bytes=single_image_bytes,
+    return execute_studio_generation(
+        image_rgb=images_rgb[0],
         job_id=job_id,
         target_garment=target_garment,
-        auto_repair=auto_repair,
-        auto_straighten=auto_straighten,
         include_base64=include_base64,
         t_start=t_start,
         custom_prompt=custom_prompt,
-        presentation_mode=presentation_mode,
         item_count_override=item_count_override,
     )

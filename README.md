@@ -1,69 +1,33 @@
-# Arangtik Garment Extraction API — prototype
+# Arangtik Garment AI — Direct 1024×1024 Studio Generator
 
-This is a **Flow A** starter only: upload one clothing photo, remove its background with a pretrained model, crop/center the extracted foreground on a transparent 1024x1024 PNG, and return that PNG to the browser.
-
-It does **not** yet implement Flow B (garments worn by a person), SDXL inpainting, user accounts, S3, MongoDB, or a job queue.
+Lightweight FastAPI orchestrator and web UI that pairs **ChatGPT Vision** with a remote **Qwen/Qwen-Image-2.1-Turbo** GPU worker (RunPod Serverless or HTTP GPU servers) to generate clean **`1024×1024` white-background PNG** catalog photos for apparel and jewelry.
 
 ## Stack
 
-- Python 3.11–3.13
-- FastAPI + Uvicorn
-- `rembg` as the inference/wrapper library
-- Pretrained ONNX weights selected with `REMBG_MODEL`
-- Pillow for input validation, crop/resize, alpha handling, and PNG output
+- **API & Web UI:** Python 3.12 + FastAPI + Uvicorn + HTTPX + OpenCV/Pillow
+- **Prompt Generation:** OpenAI Vision (`gpt-4o-mini` / `gpt-4o`)
+- **GPU Synthesis:** `Qwen/Qwen-Image-2.1-Turbo` (`bfloat16`) via RunPod Serverless Queue or FastAPI HTTP worker (`gpu_worker/`)
 
-## Windows PowerShell setup
+## Quick Setup (Windows / Linux)
 
-Open PowerShell in this folder (`arangtik-garment-backend`):
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+```bash
 pip install -r requirements.txt
-Copy-Item .env.example .env
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+cp .env.example .env
+# Set OPENAI_API_KEY, QWEN_REMOTE_URL, RUNPOD_API_KEY in .env
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-If PowerShell blocks activation, run the venv Python directly instead:
+Open `http://127.0.0.1:8000/` for the Studio UI or `http://127.0.0.1:8000/docs` for Swagger API docs.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
+## Core Endpoints
 
-On first startup, `rembg` downloads the selected model weights. This requires internet and extra disk space; let startup finish before testing. Keep one Uvicorn worker during local testing so the model is not loaded multiple times in memory.
+- `POST /api/generate-garment` — Primary studio generator (`json` response with `url`, or `response_format=image_direct` binary PNG)
+- `POST /api/qwen-image` — Direct single-image PNG response endpoint
+- `POST /api/jewelry-studio` — Single or multi-angle (up to 4 images) jewelry boutique stand generator (`2048×2048`)
+- `POST /api/forward-downstream` — Forward generated job PNGs in a single multipart request to an external API
+- `GET /api/outputs/{filename}` — Retrieve generated studio PNG
+- `GET /health` — Backend and remote GPU cluster health telemetry
 
-## Connect the existing HTML test UI
+## GPU Worker Deployment
 
-Open `arangtik-garment-lab.html` in your browser and leave the endpoint as:
-
-`http://127.0.0.1:8000/api/v1/extract-garment`
-
-Use **Check API**, upload one JPG/PNG/WEBP image, then click **Extract garment**. The upload field is `file`. This endpoint returns `image/png` directly, which matches the HTML test UI.
-
-## Endpoints
-
-- `GET /health` — status and configured model name
-- `GET /docs` — interactive Swagger UI
-- `POST /api/v1/extract-garment` — multipart upload (`file`), returns a transparent PNG
-
-## Comparing models
-
-Change `REMBG_MODEL` in `.env`, stop Uvicorn with `Ctrl+C`, then restart it. Test the **same set of images** with one model at a time. Supported candidate names include `birefnet-general-lite`, `birefnet-general`, `isnet-general-use`, and `u2net` in current `rembg` releases. The selected model weights are downloaded separately on first use. Larger models may require more RAM and take longer.
-
-Do not compare models from just one image. Use at least 30–50 test images covering plain backgrounds, busy backgrounds, dark clothes, patterned fabric, long sleeves, thin straps, and wrinkles. Record which images lose fabric or retain background. This is a benchmark harness, not a guarantee of a particular accuracy level.
-
-## Important limitations
-
-1. This general background-removal pipeline is a baseline for a single garment photographed on its own. It can accidentally keep a hanger/background object or remove thin garment edges.
-2. `u2net_cloth_seg` is described by `rembg` as clothing parsing for human portraits (upper/lower/full body); it is not automatically the best option for an isolated flat-lay garment.
-3. No inpainting is enabled. This is intentional: generated sleeves/collars can change the original item design. Keep the original image and inspect output.
-4. Model weights have their own licenses, separate from the `rembg` Python package license. Review each selected model and its training-data terms before using it commercially. In particular, `bria-rmbg` in `rembg` is documented as requiring a paid agreement for commercial use.
-5. CORS currently allows any origin for local testing. Before deployment, set `allow_origins` to the exact web app origin(s), add authentication/rate limits, and validate resource limits.
-6. Images are processed in memory and are not saved to disk, S3, or MongoDB.
-
-## Next engineering phase
-
-After Flow A is benchmarked, add Flow B as a separate pipeline using a human-clothes parsing model such as SegFormer B2 Clothes or SCHP. Then compare garment masks on your own images. Add SAM 2 only where prompt/refinement is useful. Consider SDXL inpainting later, only behind an explicit reconstruction option.
+See [RUNPOD_SERVERLESS_DEPLOYMENT.md](RUNPOD_SERVERLESS_DEPLOYMENT.md) for RunPod Serverless GitHub deployment and HTTP GPU worker setup.

@@ -1,4 +1,4 @@
-"""Provider-Agnostic Remote GPU Client for Arangtik Flow B (Qwen-Image-2.1-Turbo + RMBG-1.4).
+"""Provider-Agnostic Remote GPU Client for Arangtik Studio (Qwen-Image-2.1-Turbo).
 
 Supports seamless zero-code switching via `.env`:
 1. RunPod Serverless Queue (`QWEN_REMOTE_URL=https://api.runpod.ai/v2/<ENDPOINT_ID>`
@@ -351,14 +351,13 @@ def _call_http_worker_generate(
                 data=form_data,
             )
             if gen_resp.status_code == 200 and gen_resp.headers.get("content-type", "").startswith("image/"):
-                out_img = Image.open(io.BytesIO(gen_resp.content)).convert("RGBA")
+                out_img = Image.open(io.BytesIO(gen_resp.content)).convert("RGB")
                 gpu_time = gen_resp.headers.get("X-Inference-Time-Sec", str(round(time.perf_counter() - t_start, 2)))
                 meta = {
                     "model": gen_resp.headers.get("X-Model-Name", "Qwen/Qwen-Image-2.1-Turbo"),
                     "gpu_name": gen_resp.headers.get("X-GPU-Name", "NVIDIA GPU"),
                     "vram_gb": gen_resp.headers.get("X-VRAM-GB", ""),
                     "inference_time_sec": str(gpu_time),
-                    "preclean_time_sec": gen_resp.headers.get("X-Preclean-Time-Sec", "0"),
                     "seed": gen_resp.headers.get("X-Seed", str(seed or "")),
                     "execution_mode": "http_direct_sync",
                 }
@@ -439,11 +438,10 @@ def _call_http_worker_generate(
         if result_resp.status_code != 200:
             raise RuntimeError(f"GPU Worker result fetch failed ({result_resp.status_code}): {result_resp.text[:200]}")
 
-    generated_img = Image.open(io.BytesIO(result_resp.content)).convert("RGBA")
+    generated_img = Image.open(io.BytesIO(result_resp.content)).convert("RGB")
     metadata = {
         "model": result_resp.headers.get("X-Model-Name", "Qwen/Qwen-Image-2.1-Turbo"),
         "inference_time_sec": result_resp.headers.get("X-Inference-Time-Sec", "0"),
-        "preclean_time_sec": result_resp.headers.get("X-Preclean-Time-Sec", "0"),
         "gpu_name": result_resp.headers.get("X-GPU-Name", "NVIDIA GPU"),
         "vram_gb": result_resp.headers.get("X-VRAM-GB", "48.0"),
         "seed": result_resp.headers.get("X-Seed", str(seed or "")),
@@ -460,8 +458,6 @@ def generate_garment_via_gpu(
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
-    transparent: bool = False,
-    pre_clean: bool = False,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """Generate studio product PNG via configured GPU backend (RunPod Serverless or HTTP cluster)."""
     configured, msg = is_gpu_worker_configured()
@@ -482,8 +478,6 @@ def generate_garment_via_gpu(
                     "prompt": prompt,
                     "steps": int(steps),
                     "guidance_scale": float(guidance_scale),
-                    "transparent": bool(transparent),
-                    "pre_clean": bool(pre_clean),
                 }
                 if seed is not None:
                     payload["seed"] = int(seed)
@@ -496,14 +490,13 @@ def generate_garment_via_gpu(
                 b64_out = output.get("image_base64")
                 if not b64_out:
                     raise RuntimeError("RunPod completed without 'image_base64' in output.")
-                out_img = Image.open(io.BytesIO(base64.b64decode(b64_out))).convert("RGBA")
+                out_img = Image.open(io.BytesIO(base64.b64decode(b64_out))).convert("RGB")
                 raw_meta = output.get("metadata") or {}
                 meta = {
                     "model": raw_meta.get("model", "Qwen/Qwen-Image-2.1-Turbo"),
                     "gpu_name": raw_meta.get("gpu_name", "RunPod Serverless GPU"),
                     "vram_gb": str(raw_meta.get("vram_total_gb", "48.0")),
                     "inference_time_sec": str(raw_meta.get("inference_time_sec", "0")),
-                    "preclean_time_sec": str(raw_meta.get("preclean_time_sec", "0")),
                     "seed": str(raw_meta.get("seed", seed or "")),
                     "execution_mode": "runpod_serverless",
                 }
@@ -513,8 +506,6 @@ def generate_garment_via_gpu(
                 "prompt": prompt,
                 "steps": str(steps),
                 "guidance_scale": str(guidance_scale),
-                "transparent": "true" if transparent else "false",
-                "pre_clean": "true" if pre_clean else "false",
             }
             if seed is not None:
                 form_data["seed"] = str(seed)
@@ -533,39 +524,3 @@ def generate_garment_via_gpu(
             raise
 
     raise RuntimeError(f"All configured GPU workers failed: {last_exc}")
-
-
-def remove_background_via_gpu(image: Image.Image) -> Image.Image:
-    """Remove background on remote GPU (RunPod or HTTP worker) with automatic local CPU fallback."""
-    configured, _ = is_gpu_worker_configured()
-    if configured:
-        img_bytes = _encode_image_bytes(image, max_dim=1600, quality=95)
-        for url in _ordered_urls_for_request():
-            try:
-                if _is_runpod_url(url):
-                    output = _call_runpod_endpoint(
-                        url,
-                        {
-                            "action": "remove_background",
-                            "image_base64": base64.b64encode(img_bytes).decode("ascii"),
-                        },
-                        timeout_sec=90.0,
-                    )
-                    b64_out = output.get("image_base64")
-                    if b64_out:
-                        return Image.open(io.BytesIO(base64.b64decode(b64_out))).convert("RGBA")
-                else:
-                    with httpx.Client(timeout=45.0) as client:
-                        resp = client.post(
-                            f"{url}/remove-background",
-                            headers=_http_headers(),
-                            files={"image": ("input.jpg", img_bytes, "image/jpeg")},
-                        )
-                        if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image/"):
-                            return Image.open(io.BytesIO(resp.content)).convert("RGBA")
-            except Exception as exc:
-                logger.warning("Remote GPU background removal via %s failed (%s); trying next/fallback.", url, exc)
-
-    from app.core.background_removal import extract_isolated_flow_a
-
-    return extract_isolated_flow_a(image.convert("RGB"))
