@@ -1,6 +1,7 @@
 """RunPod Serverless Queue Worker for Arangtik Flow B (Qwen-Image-2.1-Turbo + RMBG-1.4).
 
 Entry point for RunPod Serverless queue endpoints (`run` / `runsync`).
+When launched outside RunPod (or with `WORKER_MODE=http`), serves `server:app` via Uvicorn.
 Shares all inference logic cleanly with `engine.py` (zero duplicated code).
 """
 from __future__ import annotations
@@ -10,6 +11,7 @@ import io
 import logging
 import os
 import pathlib
+import subprocess
 import sys
 from typing import Any
 
@@ -129,7 +131,13 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Warm VRAM models synchronously on worker startup unless explicitly deferred
+    mode = os.getenv("WORKER_MODE", "auto").strip().lower()
+    if mode == "http":
+        port = os.getenv("PORT", "8001").strip() or "8001"
+        raise SystemExit(
+            subprocess.call([sys.executable, "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", port])
+        )
+
     if os.getenv("RUNPOD_SKIP_STARTUP_PRELOAD", "false").strip().lower() not in ("1", "true", "yes"):
         logger.info("Preloading RMBG-1.4 and Qwen-Image-2.1-Turbo before accepting RunPod jobs...")
         preload_models(background_qwen=False)

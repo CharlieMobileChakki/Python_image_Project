@@ -8,9 +8,8 @@ This guide explains how to deploy `gpu_worker/` cleanly onto **RunPod Serverless
 ## 1. Architecture Overview
 
 - **`gpu_worker/engine.py`**: Single shared inference core (`Qwen/Qwen-Image-2.1-Turbo` full `bfloat16` + `briaai/RMBG-1.4` matting + in-GPU reference pre-clean). Automatically finds weights cached by RunPod at `/runpod-volume/huggingface-cache/hub/...` or local HuggingFace cache.
-- **`gpu_worker/rp_handler.py`**: RunPod Serverless Queue worker (`runpod.serverless.start`). Handles `generate`, `remove_background`, and `health` jobs safely without cold-start connection drops.
+- **`gpu_worker/rp_handler.py`**: RunPod Serverless Queue worker (`runpod.serverless.start`). Handles `generate`, `remove_background`, and `health` jobs safely without cold-start connection drops (also supports `WORKER_MODE=http` fallback to Uvicorn).
 - **`gpu_worker/server.py`**: FastAPI HTTP server (`/generate`, `/jobs`, `/remove-background`, `/health`) sharing `engine.py` for dedicated HTTP Pods/nodes.
-- **`gpu_worker/start.py`**: Auto-detects `RUNPOD_ENDPOINT_ID` and runs `rp_handler.py` on RunPod Serverless, or Uvicorn HTTP server otherwise.
 - **`app/core/flow_b/qwen_client.py`**: Contabo backend client that auto-detects **RunPod Serverless** (`https://api.runpod.ai/v2/<ENDPOINT_ID>`) vs **HTTP GPU Server(s)** purely from `.env` with zero code changes.
 
 ---

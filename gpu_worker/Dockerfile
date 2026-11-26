@@ -68,9 +68,8 @@ RUN python3.11 -c "import torch.nn as nn; nn.Module.all_tied_weights_keys = {}; 
 COPY gpu_worker/engine.py /app/engine.py
 COPY gpu_worker/rp_handler.py /app/rp_handler.py
 COPY gpu_worker/server.py /app/server.py
-COPY gpu_worker/start.py /app/start.py
 
 EXPOSE 8001
 
-# Auto-detects RunPod Serverless (`RUNPOD_ENDPOINT_ID`) vs HTTP server mode
-CMD ["python3.11", "-u", "/app/start.py"]
+# RunPod Serverless Queue handler (set WORKER_MODE=http for standalone FastAPI server)
+CMD ["python3.11", "-u", "/app/rp_handler.py"]
