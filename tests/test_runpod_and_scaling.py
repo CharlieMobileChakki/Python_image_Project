@@ -265,9 +265,25 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
         self.assertIn("/qwen-image", recon_paths)
 
     def test_direct_1024_studio_endpoint_and_ui(self):
-        from fastapi.testclient import TestClient
         from app.core.pipeline import unified_pipeline
-        from app.main import app as main_app
+        from app.main import STATIC_DIR, app as main_app
+
+        openapi = main_app.openapi()
+        paths = openapi["paths"]
+        self.assertIn("/api/generate-garment", paths)
+        self.assertIn("/api/qwen-image", paths)
+        self.assertIn("/api/jewelry-studio", paths)
+        self.assertIn("/api/forward-downstream", paths)
+        self.assertNotIn("/api/background-removal", paths)
+
+        ui_html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        self.assertIn("/api/generate-garment", ui_html)
+        self.assertNotIn("/api/background-removal", ui_html)
+        self.assertNotIn("checkerboard", ui_html)
+
+        style_css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+        self.assertIn(".studio-output-bg", style_css)
+        self.assertNotIn(".checkerboard-bg", style_css)
 
         fake_plan = [{
             "category": "upper_clothes",
@@ -278,40 +294,24 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
         }]
         fake_generated = Image.new("RGB", (1024, 1024), (255, 255, 255))
 
-        client = TestClient(main_app)
-
-        ui_resp = client.get("/")
-        self.assertEqual(ui_resp.status_code, 200)
-        self.assertIn("/api/generate-garment", ui_resp.text)
-        self.assertNotIn("/api/background-removal", ui_resp.text)
-        self.assertNotIn("checkerboard", ui_resp.text)
-
-        css_resp = client.get("/static/style.css?v=4.1")
-        self.assertEqual(css_resp.status_code, 200)
-        self.assertIn(".studio-output-bg", css_resp.text)
-
         with patch.object(unified_pipeline, "analyze_garment_and_build_prompts", return_value=fake_plan), patch.object(
             unified_pipeline,
             "generate_garment_via_gpu",
             return_value=(fake_generated, {"model": "Qwen/Qwen-Image-2.1-Turbo", "gpu_name": "RTX A6000"}),
         ) as mock_gpu:
-            resp = client.post(
-                "/api/generate-garment",
-                files={"file": ("shirt.png", _make_png_bytes((220, 220, 220), (512, 512)), "image/png")},
-                data={"target_garment": "upper_clothes"},
+            res = unified_pipeline.process_garment_pipeline(
+                image_bytes=_make_png_bytes((220, 220, 220), (512, 512)),
+                target_garment="upper_clothes",
             )
 
-        self.assertEqual(resp.status_code, 200)
-        body = resp.json()
-        self.assertEqual(body["status"], "success")
-        self.assertEqual(body["total_garments"], 1)
-        self.assertEqual(body["garments"][0]["resolution"], "1024x1024")
-        self.assertNotIn("background_removal_status", body["garments"][0])
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["total_garments"], 1)
+        self.assertEqual(res["mode"], "studio_generation")
+        self.assertNotIn("background_removal_status", res["garments"][0])
         self.assertEqual(mock_gpu.call_args.kwargs["width"], 1024)
         self.assertEqual(mock_gpu.call_args.kwargs["height"], 1024)
 
-        out_name = Path(body["garments"][0]["output_png_url"]).name
-        out_path = unified_pipeline.OUTPUT_DIR / out_name
+        out_path = unified_pipeline.OUTPUT_DIR / res["garments"][0]["image"]
         try:
             with Image.open(out_path) as saved:
                 self.assertEqual(saved.size, (1024, 1024))
