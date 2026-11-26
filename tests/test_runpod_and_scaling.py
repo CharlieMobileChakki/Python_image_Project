@@ -98,24 +98,23 @@ class TestProviderAgnosticQwenClient(unittest.TestCase):
             "output": {"image_base64": out_b64, "metadata": {"gpu_name": "NVIDIA A40"}},
         }
 
-        sync_client = MagicMock()
-        sync_client.__enter__.return_value.post.return_value = sync_resp
-        poll_client = MagicMock()
-        poll_client.__enter__.return_value.get.return_value = status_resp
+        single_client = MagicMock()
+        single_client.__enter__.return_value.post.return_value = sync_resp
+        single_client.__enter__.return_value.get.return_value = status_resp
 
         with patch.dict(
             os.environ,
             {"QWEN_REMOTE_URL": "https://api.runpod.ai/v2/ep_test", "RUNPOD_API_KEY": "rpa_test"},
             clear=False,
-        ), patch("app.core.flow_b.qwen_client.httpx.Client", side_effect=[sync_client, poll_client]), patch(
+        ), patch("app.core.flow_b.qwen_client.httpx.Client", return_value=single_client), patch(
             "app.core.flow_b.qwen_client.time.sleep"
         ):
             ref = Image.new("RGB", (128, 128), (255, 255, 255))
             img, meta = qwen_client.generate_garment_via_gpu(ref, "studio saree prompt")
 
-        poll_client.__enter__.return_value.post.assert_not_called()
-        poll_client.__enter__.return_value.get.assert_called_once()
-        called_url = poll_client.__enter__.return_value.get.call_args[0][0]
+        single_client.__enter__.return_value.post.assert_called_once()
+        single_client.__enter__.return_value.get.assert_called_once()
+        called_url = single_client.__enter__.return_value.get.call_args[0][0]
         self.assertTrue(called_url.endswith("/status/rp-cold-77"))
         self.assertEqual(img.mode, "RGBA")
         self.assertEqual(meta["gpu_name"], "NVIDIA A40")

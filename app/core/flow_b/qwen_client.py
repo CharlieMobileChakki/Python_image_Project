@@ -248,73 +248,52 @@ def _call_runpod_endpoint(
     input_payload: dict[str, Any],
     timeout_sec: float,
 ) -> dict[str, Any]:
-    """Execute a job via RunPod Serverless `/runsync` with seamless async `/status/{id}` polling."""
+    """Execute a job via RunPod Serverless `/run` + fast `/status/{id}` polling (zero duplicate jobs)."""
     headers = _runpod_headers()
     t_start = time.perf_counter()
-    job_id: str | None = None
-
-    with httpx.Client(timeout=min(timeout_sec, 95.0)) as sync_client:
-        try:
-            resp = sync_client.post(
-                f"{base_url}/runsync",
-                headers=headers,
-                json={"input": input_payload},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                status = str(data.get("status") or "").upper()
-                if status == "COMPLETED":
-                    output = data.get("output") or {}
-                    if isinstance(output, dict) and output.get("error"):
-                        raise RuntimeError(f"RunPod worker error: {output['error']}")
-                    return output
-                if status in ("FAILED", "CANCELLED"):
-                    raise RuntimeError(f"RunPod job {status}: {data.get('error') or data}")
-                if data.get("id"):
-                    job_id = str(data["id"])
-                    logger.info("RunPod /runsync handed off active job %s (status=%s); polling...", job_id, status)
-        except (httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
-            logger.info("RunPod /runsync exceeded fast window (%s); falling back to /run...", exc)
-        except RuntimeError:
-            raise
-        except httpx.RequestError as exc:
-            logger.warning("RunPod /runsync connection error (%s); attempting /run...", exc)
 
     with httpx.Client(timeout=45.0) as client:
-        if not job_id:
-            submit_resp = None
-            for attempt in range(1, 4):
-                try:
-                    submit_resp = client.post(
-                        f"{base_url}/run",
-                        headers=headers,
-                        json={"input": input_payload},
-                    )
-                    if submit_resp.status_code == 200:
-                        break
-                    if submit_resp.status_code in _TRANSIENT_HTTP_CODES and attempt < 3:
-                        time.sleep(2.5)
-                        continue
-                except (httpx.RequestError, httpx.TimeoutException) as exc:
-                    if attempt < 3:
-                        time.sleep(2.5)
-                        continue
-                    raise RuntimeError(f"Cannot connect to RunPod endpoint {base_url}: {exc}") from exc
+        submit_resp = None
+        for attempt in range(1, 4):
+            try:
+                submit_resp = client.post(
+                    f"{base_url}/run",
+                    headers=headers,
+                    json={"input": input_payload},
+                )
+                if submit_resp.status_code == 200:
+                    break
+                if submit_resp.status_code in _TRANSIENT_HTTP_CODES and attempt < 3:
+                    time.sleep(2.5)
+                    continue
+            except (httpx.RequestError, httpx.TimeoutException) as exc:
+                if attempt < 3:
+                    time.sleep(2.5)
+                    continue
+                raise RuntimeError(f"Cannot connect to RunPod endpoint {base_url}: {exc}") from exc
 
-            if submit_resp is None or submit_resp.status_code != 200:
-                err_txt = submit_resp.text[:300] if submit_resp is not None else "No response"
-                code = submit_resp.status_code if submit_resp is not None else "None"
-                raise RuntimeError(f"RunPod /run returned HTTP {code}: {err_txt}")
+        if submit_resp is None or submit_resp.status_code != 200:
+            err_txt = submit_resp.text[:300] if submit_resp is not None else "No response"
+            code = submit_resp.status_code if submit_resp is not None else "None"
+            raise RuntimeError(f"RunPod /run returned HTTP {code}: {err_txt}")
 
-            job_id = str(submit_resp.json()["id"])
-            logger.info("RunPod async job %s queued; polling status...", job_id)
+        data = submit_resp.json()
+        if str(data.get("status") or "").upper() == "COMPLETED" and "output" in data:
+            output = data.get("output") or {}
+            if isinstance(output, dict) and output.get("error"):
+                raise RuntimeError(f"RunPod worker error: {output['error']}")
+            return output
+
+        job_id = str(data["id"])
+        logger.info("RunPod job %s queued; polling status...", job_id)
 
         consecutive_errors = 0
         while True:
-            if time.perf_counter() - t_start > timeout_sec:
+            elapsed = time.perf_counter() - t_start
+            if elapsed > timeout_sec:
                 raise RuntimeError(f"RunPod job {job_id} timed out after {timeout_sec:.0f}s.")
 
-            time.sleep(1.0)
+            time.sleep(0.5 if elapsed < 25.0 else 1.0)
             try:
                 status_resp = client.get(f"{base_url}/status/{job_id}", headers=headers)
             except (httpx.RequestError, httpx.TimeoutException) as poll_exc:
