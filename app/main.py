@@ -12,6 +12,7 @@ Provides:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 import os
 from pathlib import Path
 
@@ -37,6 +38,20 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 OUTPUTS_DIR = Path("outputs")
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _configure_app_logging() -> None:
+    """Ensure app.* INFO/WARNING logs emit to stderr under Uvicorn without duplicate propagation."""
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = False
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+        app_logger.addHandler(handler)
+
+
+_configure_app_logging()
 
 
 @asynccontextmanager

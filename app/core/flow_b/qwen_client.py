@@ -243,6 +243,15 @@ def get_worker_capacity(force_refresh: bool = False) -> int:
     return max(1, int(health.get("workers_total") or len(urls)))
 
 
+def _cancel_runpod_job(client: httpx.Client, base_url: str, job_id: str, headers: dict[str, str]) -> None:
+    """Best-effort cancel on timeout/failure so stale jobs do not pile up in RunPod queue."""
+    try:
+        client.post(f"{base_url}/cancel/{job_id}", headers=headers, timeout=5.0)
+        logger.info("Cancelled timed-out RunPod job %s.", job_id)
+    except Exception:
+        pass
+
+
 def _call_runpod_endpoint(
     base_url: str,
     input_payload: dict[str, Any],
@@ -291,6 +300,7 @@ def _call_runpod_endpoint(
         while True:
             elapsed = time.perf_counter() - t_start
             if elapsed > timeout_sec:
+                _cancel_runpod_job(client, base_url, job_id, headers)
                 raise RuntimeError(f"RunPod job {job_id} timed out after {timeout_sec:.0f}s.")
 
             time.sleep(0.5 if elapsed < 25.0 else 1.0)
@@ -299,12 +309,14 @@ def _call_runpod_endpoint(
             except (httpx.RequestError, httpx.TimeoutException) as poll_exc:
                 consecutive_errors += 1
                 if consecutive_errors > 8:
+                    _cancel_runpod_job(client, base_url, job_id, headers)
                     raise RuntimeError(f"RunPod status polling failed after retries: {poll_exc}") from poll_exc
                 continue
 
             if status_resp.status_code in _TRANSIENT_HTTP_CODES:
                 consecutive_errors += 1
                 if consecutive_errors > 8:
+                    _cancel_runpod_job(client, base_url, job_id, headers)
                     raise RuntimeError(
                         f"RunPod status polling failed ({status_resp.status_code}): {status_resp.text[:200]}"
                     )
@@ -320,6 +332,7 @@ def _call_runpod_endpoint(
             state = status_resp.json()
             status = str(state.get("status") or "").upper()
             if status == "COMPLETED":
+                logger.info("RunPod job %s completed in %.2fs.", job_id, time.perf_counter() - t_start)
                 output = state.get("output") or {}
                 if isinstance(output, dict) and output.get("error"):
                     raise RuntimeError(f"RunPod worker error: {output['error']}")

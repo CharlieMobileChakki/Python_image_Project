@@ -291,8 +291,11 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
         reqs_gpu_text = (root_dir / "gpu_worker" / "requirements-gpu.txt").read_text(encoding="utf-8")
         self.assertIn("cuda12.4-cudnn9-runtime", dockerfile_text)
         self.assertIn("ENTRYPOINT []", dockerfile_text)
+        self.assertIn("3, 1, 6", dockerfile_text)
         self.assertNotIn("torchaudio", dockerfile_text)
         self.assertNotIn("RMBG", dockerfile_text)
+        self.assertIn("jinja2>=3.1.6", reqs_gpu_text)
+        self.assertIn("runpod>=1.11.0", reqs_gpu_text)
         self.assertNotIn("scikit-image", reqs_gpu_text)
 
         fake_plan = [{

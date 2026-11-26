@@ -33,6 +33,7 @@ COPY gpu_worker/requirements-gpu.txt /app/requirements-gpu.txt
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -c 'import importlib.metadata as m; open("/tmp/c.txt", "w").write("\n".join(p + "==" + m.version(p) for p in ("torch", "torchvision")) + "\n")' && \
     python -m pip install --no-cache-dir -c /tmp/c.txt -r /app/requirements-gpu.txt && \
+    python -c 'import jinja2; assert tuple(int(x) for x in jinja2.__version__.split(".")[:3]) >= (3, 1, 6), jinja2.__version__' && \
     rm -f /tmp/c.txt
 
 # 3. Copy pure Qwen-Image-2.1-Turbo worker modules last for fast layer caching

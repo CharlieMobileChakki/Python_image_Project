@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 from io import BytesIO
+import logging
 import os
 from pathlib import Path
+import time
 from typing import Any
 import zipfile
 
@@ -15,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.pipeline import OUTPUT_DIR, process_garment_pipeline
 from app.schemas import ProcessGarmentResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -153,6 +156,17 @@ async def generate_garment_endpoint(
     payload_bytes, upload_list = await _collect_uploaded_images(
         file, files, "No image file provided. Please upload at least one image."
     )
+    payload_size = sum(len(b) for b in payload_bytes) if isinstance(payload_bytes, list) else len(payload_bytes)
+    client_host = request.client.host if request.client else "unknown"
+    t_req = time.perf_counter()
+    logger.info(
+        "Incoming %s request | client=%s bytes=%d target=%s format=%s",
+        request.url.path,
+        client_host,
+        payload_size,
+        target_garment,
+        response_format,
+    )
 
     try:
         async with get_semaphore():
@@ -165,14 +179,25 @@ async def generate_garment_endpoint(
                 item_count_override=item_count_override,
             )
     except ValueError as exc:
+        logger.warning("Validation error on %s (%s): %s", request.url.path, client_host, exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
+        logger.error("GPU/Service error on %s (%s): %s", request.url.path, client_host, exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        logger.exception("Unhandled error on %s (%s): %s", request.url.path, client_host, exc)
         raise HTTPException(status_code=500, detail=f"Pipeline processing error: {exc}") from exc
     finally:
         for f in upload_list:
             await f.close()
+
+    logger.info(
+        "Completed %s in %.2fs | job_id=%s items=%d",
+        request.url.path,
+        time.perf_counter() - t_req,
+        result.get("job_id"),
+        len(result.get("garments", [])),
+    )
 
     accept_hdr = request.headers.get("accept", "").lower()
     wants_image = (
