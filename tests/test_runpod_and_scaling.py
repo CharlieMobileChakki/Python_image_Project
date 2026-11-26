@@ -260,8 +260,7 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
         from app.api.reconstruction import reconstruction_router
         api_paths = {getattr(r, "path", None) for r in api_router.routes}
         recon_paths = {getattr(r, "path", None) for r in reconstruction_router.routes}
-        self.assertTrue({"/generate-garment", "/jewelry-studio", "/forward-downstream", "/set-gpu-url"}.issubset(api_paths))
-        self.assertNotIn("/background-removal", api_paths)
+        self.assertTrue({"/background-removal", "/generate-garment", "/jewelry-studio", "/forward-downstream", "/set-gpu-url"}.issubset(api_paths))
         self.assertIn("/qwen-image", recon_paths)
 
     def test_direct_1024_studio_endpoint_and_ui(self):
@@ -270,17 +269,17 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
 
         openapi = main_app.openapi()
         paths = openapi["paths"]
-        self.assertIn("/api/generate-garment", paths)
+        self.assertIn("/api/background-removal", paths)
+        self.assertNotIn("/api/generate-garment", paths)
         self.assertIn("/api/qwen-image", paths)
         self.assertIn("/api/jewelry-studio", paths)
         self.assertIn("/api/forward-downstream", paths)
-        self.assertNotIn("/api/background-removal", paths)
 
         ui_html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-        self.assertIn("/api/generate-garment", ui_html)
+        self.assertIn("/api/background-removal", ui_html)
         self.assertIn("trackerStep2", ui_html)
         self.assertNotIn("trackerStep3", ui_html)
-        self.assertNotIn("/api/background-removal", ui_html)
+        self.assertNotIn("/api/generate-garment", ui_html)
         self.assertNotIn("checkerboard", ui_html)
 
         style_css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")

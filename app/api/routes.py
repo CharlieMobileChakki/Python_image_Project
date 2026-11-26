@@ -127,10 +127,17 @@ def _format_garment_items(
 
 
 @router.post(
-    "/generate-garment",
+    "/background-removal",
     response_model=ProcessGarmentResponse,
     response_model_exclude_none=True,
     summary="Direct 1024x1024 Studio Garment & Jewelry Generator API",
+)
+@router.post(
+    "/generate-garment",
+    response_model=ProcessGarmentResponse,
+    response_model_exclude_none=True,
+    summary="Direct 1024x1024 Studio Garment & Jewelry Generator API (Alias)",
+    include_in_schema=False,
 )
 async def generate_garment_endpoint(
     request: Request,

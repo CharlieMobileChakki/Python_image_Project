@@ -3,7 +3,7 @@
 Provides:
 - Browser Studio UI (served at / and /ui).
 - Production APIs:
-  - POST /api/generate-garment (ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo -> 1024x1024 Studio PNG)
+  - POST /api/background-removal (ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo -> 1024x1024 Studio PNG; alias: /api/generate-garment)
   - POST /api/qwen-image (Direct single-image Qwen 2.1 PNG endpoint)
   - POST /api/jewelry-studio (Multi-angle luxury jewelry generator)
   - POST /api/forward-downstream (Forward generated PNGs to external API)
