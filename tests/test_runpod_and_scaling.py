@@ -278,6 +278,8 @@ class TestGpuWorkerAndStudioPipeline(unittest.TestCase):
 
         ui_html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
         self.assertIn("/api/generate-garment", ui_html)
+        self.assertIn("trackerStep2", ui_html)
+        self.assertNotIn("trackerStep3", ui_html)
         self.assertNotIn("/api/background-removal", ui_html)
         self.assertNotIn("checkerboard", ui_html)
 

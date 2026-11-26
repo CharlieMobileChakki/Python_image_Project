@@ -196,11 +196,7 @@
               </div>
               <div class="tracker-item" id="trackerStep2">
                 <span id="trackerDot2">○</span>
-                <span>2. Direct 1024×1024 Studio Generation (Qwen-2.1 GPU)</span>
-              </div>
-              <div class="tracker-item" id="trackerStep3">
-                <span id="trackerDot3">○</span>
-                <span>3. Quality Check &amp; Ready for API Forward (1024×1024 PNG)</span>
+                <span>2. Direct 1024×1024 Studio Generation (Qwen-2.1 GPU ➔ Final PNG)</span>
               </div>
             </div>
             <span id="elapsedTimer" style="display: inline-block; margin-top: 12px; font-size: 11px; font-family: monospace; color: var(--accent-primary);">Time: 0.0s</span>
@@ -217,8 +213,22 @@
     let activeGarmentIndex = 0;
     let isProcessing = false;
     let timerInterval = null;
+    let statusPollInterval = null;
     let batchConcurrency = 1;
     let currentGpuUrl = '';
+
+    function formatRunpodStateText(rpHealth) {
+      if (!rpHealth) return '';
+      const w = rpHealth.workers || {};
+      const j = rpHealth.jobs || {};
+      const q = Number(j.inQueue || 0);
+      if (Number(w.running || 0) > 0) return `⚡ GPU Running Qwen-2.1 (Generating 1024×1024 PNG...)`;
+      if (Number(w.initializing || 0) > 0) return `⏳ Cold Start: Booting RunPod GPU worker (Queue: ${q})...`;
+      if (Number(w.throttled || 0) > 0) return `⚠️ RunPod GPU Throttled — waiting for free 48GB GPU (Queue: ${q})`;
+      if (q > 0) return `🕒 Waiting in RunPod queue (${q} pending)...`;
+      if (Number(w.idle || 0) > 0 || Number(w.ready || 0) > 0) return `⚡ Warm RunPod GPU ready (~9.5s generation)`;
+      return '';
+    }
 
     async function checkHardware() {
       const gpuDot = document.getElementById('gpuDot');
@@ -232,14 +242,19 @@
         currentGpuUrl = hw.gpu_worker_url || '';
         const workersTotal = Math.max(1, Number(hw.workers_total || 1));
         batchConcurrency = Math.max(1, Math.min(10, Number(hw.batch_concurrency || 1)));
+        const rp = hw.runpod_health || null;
+        const rpWorkers = (rp && rp.workers) || {};
 
         const gpuName = hw.gpu_name || 'RunPod Serverless GPU';
         const vramText = hw.vram_gb ? `${hw.vram_gb}GB VRAM` : '48GB VRAM';
         const scaleTag = workersTotal > 1 ? ` • ${workersTotal}x Auto-Scale` : '';
 
         if (gpuOnline) {
-          gpuDot.className = 'pulse-dot';
-          gpuText.textContent = `${gpuName} • ${vramText}${scaleTag} (Connected)`;
+          const isThrottled = Number(rpWorkers.throttled || 0) > 0 && Number(hw.workers_live || 0) === 0;
+          const isInit = Number(rpWorkers.initializing || 0) > 0 && Number(rpWorkers.running || 0) === 0;
+          gpuDot.className = isThrottled ? 'pulse-dot amber' : 'pulse-dot';
+          const stateLabel = isThrottled ? 'Throttled - Busy' : (isInit ? 'Initializing' : 'Connected');
+          gpuText.textContent = `${gpuName} • ${vramText}${scaleTag} (${stateLabel})`;
           const bannerPill = document.getElementById('bannerGpuPill');
           if (bannerPill) bannerPill.textContent = workersTotal > 1 ? `${gpuName} (${workersTotal}x Parallel)` : `${gpuName} Active`;
           document.getElementById('gpuPill').title = `Connected to ${currentGpuUrl} (Click to change)`;
@@ -475,44 +490,51 @@
       document.getElementById('downloadCurrentBtn').style.display = 'none';
 
       const subtitleEl = document.getElementById('progressSubtitle');
-      if (subtitleEl) subtitleEl.textContent = 'Sending directly to Remote GPU Worker';
+      if (subtitleEl) subtitleEl.textContent = 'Analyzing image via ChatGPT Vision...';
       const dot1 = document.getElementById('trackerDot1');
       const dot2 = document.getElementById('trackerDot2');
-      const dot3 = document.getElementById('trackerDot3');
       dot1.textContent = '⟳';
       dot1.parentElement.className = 'tracker-item active';
       dot2.textContent = '○';
       dot2.parentElement.className = 'tracker-item';
-      dot3.textContent = '○';
-      dot3.parentElement.className = 'tracker-item';
 
       const startTime = Date.now();
+      if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         const secNum = (Date.now() - startTime) / 1000;
         document.getElementById('elapsedTimer').textContent = `Time: ${secNum.toFixed(1)}s`;
 
-        if (secNum > 3.5 && dot2.textContent === '○') {
+        if (secNum > 4.5 && dot2.textContent === '○') {
           dot1.textContent = '✓';
           dot1.parentElement.className = 'tracker-item done';
           dot2.textContent = '⟳';
           dot2.parentElement.className = 'tracker-item active';
-        }
-        if (secNum > 11.0 && dot3.textContent === '○') {
-          dot2.textContent = '✓';
-          dot2.parentElement.className = 'tracker-item done';
-          dot3.textContent = '⟳';
-          dot3.parentElement.className = 'tracker-item active';
-        }
-        if (secNum > 18.0 && subtitleEl) {
-          subtitleEl.textContent = 'Warming up GPU worker on cold start (~40s cold, ~13s warm)...';
+          if (subtitleEl && subtitleEl.textContent.startsWith('Analyzing')) {
+            subtitleEl.textContent = 'Generating 1024×1024 Studio PNG on Remote GPU...';
+          }
         }
       }, 100);
+
+      if (statusPollInterval) clearInterval(statusPollInterval);
+      statusPollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/health');
+          if (!res.ok) return;
+          const data = await res.json();
+          const msg = formatRunpodStateText(data.hardware && data.hardware.runpod_health);
+          if (msg && subtitleEl && dot2.textContent === '⟳') {
+            subtitleEl.textContent = msg;
+          }
+        } catch (_) {}
+      }, 3000);
     }
 
     function stopScanning() {
       document.getElementById('scanOverlay').classList.remove('active');
       document.getElementById('progressContainer').style.display = 'none';
       if (timerInterval) clearInterval(timerInterval);
+      if (statusPollInterval) clearInterval(statusPollInterval);
+      checkHardware();
     }
 
     async function processItem(item) {

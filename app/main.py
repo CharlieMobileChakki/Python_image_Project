@@ -139,7 +139,9 @@ async def health_check() -> HealthResponse:
             "cuda_available": remote_gpu_online,
             "gpu_name": gpu_name,
             "vram_gb": gpu_health.get("vram_total_gb", 48.0 if remote_gpu_online else 0.0),
+            "workers_live": int(gpu_health.get("workers_live") or 0),
             "workers_total": workers_total,
             "batch_concurrency": batch_concurrency,
+            "runpod_health": gpu_health.get("runpod_health"),
         },
     )
