@@ -30,4 +30,4 @@ Open `http://127.0.0.1:8000/` for the Studio UI or `http://127.0.0.1:8000/docs` 
 
 ## GPU Worker Deployment
 
-See [RUNPOD_SERVERLESS_DEPLOYMENT.md](RUNPOD_SERVERLESS_DEPLOYMENT.md) for RunPod Serverless GitHub deployment and HTTP GPU worker setup.
+See [docs/runpod_deployment.md](docs/runpod_deployment.md) for RunPod Serverless GitHub deployment and HTTP GPU worker setup.
