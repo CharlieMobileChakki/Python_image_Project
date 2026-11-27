@@ -27,36 +27,30 @@ from app.core.flow_b.tryon_stylist import (
     build_qwen_tryon_prompt,
 )
 from app.core.image_processing import image_to_base64_data_uri, load_image_bytes
+from app.core.image_processing.face_analyzer import detect_face_and_landmarks
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
+from app.core.pipeline.tryon_validator import enforce_quality_and_refine
 
 TRYON_OUTPUT_WIDTH = 832
 TRYON_OUTPUT_HEIGHT = 1152
 
 
 def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | None:
-    """Detect primary frontal face ``(x1, y1, x2, y2)`` via OpenCV Haar cascade when available."""
+    """Detect primary face bbox ``(x1, y1, x2, y2)`` via YuNet deep landmark detector."""
     try:
-        import cv2
-        import numpy as np
-
-        gray = cv2.cvtColor(np.array(avatar_rgb), cv2.COLOR_RGB2GRAY)
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        if cascade.empty():
-            return None
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
-        if len(faces) == 0:
-            return None
-        x, y, fw, fh = max(faces, key=lambda b: int(b[2]) * int(b[3]))
-        w, h = avatar_rgb.size
-        return (
-            max(0, int(x - 0.35 * fw)),
-            max(0, int(y - 0.45 * fh)),
-            min(w, int(x + 1.35 * fw)),
-            min(h, int(y + 1.18 * fh)),
-        )
+        info = detect_face_and_landmarks(avatar_rgb)
+        if info and "bbox" in info:
+            x, y, fw, fh = info["bbox"]
+            w, h = avatar_rgb.size
+            return (
+                max(0, int(x - 0.20 * fw)),
+                max(0, int(y - 0.25 * fh)),
+                min(w, int(x + 1.20 * fw)),
+                min(h, int(y + 1.15 * fh)),
+            )
     except Exception as exc:
-        logger.debug("OpenCV face detection skipped: %s", exc)
-        return None
+        logger.debug("Deep face detection skipped: %s", exc)
+    return None
 
 
 def prepare_face_identity_ref(
@@ -217,6 +211,7 @@ def process_virtual_tryon_pipeline(
             forensic_face_details=plan.get("forensic_face_details", ""),
             photography_style=photography_style,
             pose_preference=pose_preference,
+            combo_index=combo_idx,
         )
         condition_images: list[Image.Image] = (
             [identity_avatar_img]
@@ -233,17 +228,63 @@ def process_virtual_tryon_pipeline(
             height=TRYON_OUTPUT_HEIGHT,
         )
 
+        # Automated Quality Validation & Biometric Face Harmonization
+        validated_img, val_report = enforce_quality_and_refine(
+            generated_img=out_img,
+            avatar_img=avatar_rgb,
+            selected_garments=selected_g_meta,
+            selected_accessories=selected_a_meta,
+            avatar_gender=plan.get("avatar_gender", "unknown"),
+        )
+
+        # Bounded Retry on Critical Defect if SLA Time Budget Permits (< 45s)
+        time_elapsed = time.perf_counter() - t_start
+        if not val_report.get("passed", True) and time_elapsed < 45.0:
+            retry_seed = (combo_seed or 42) + 101
+            retry_prompt = prompt_text
+            coverage = val_report.get("clothing_coverage", {})
+            if not coverage.get("torso_covered", True):
+                retry_prompt += " CRITICAL CORRECTION: MANDATORY FULL TORSO COVERAGE. The model MUST be fully clothed with a complete opaque upper shirt covering chest and stomach, NEVER bare-chested."
+            if not coverage.get("legs_covered", True):
+                retry_prompt += " CRITICAL CORRECTION: MANDATORY FULL LOWER COVERAGE. The model MUST wear complete opaque trousers or pants covering waist to ankles."
+            if val_report.get("face_similarity", 1.0) < 0.35:
+                retry_prompt += " CRITICAL CORRECTION: IDENTICAL FACE BIOMETRIC LOCK. Reproduce the exact facial structure, eye shape, nose, and jawline from <image1>."
+
+            logger.info("Quality validation failed (%s); attempting bounded retry with seed %s", val_report.get("defects"), retry_seed)
+            try:
+                retry_img, retry_meta = generate_garment_via_gpu(
+                    reference_image=condition_images,
+                    prompt=retry_prompt,
+                    seed=retry_seed,
+                    width=TRYON_OUTPUT_WIDTH,
+                    height=TRYON_OUTPUT_HEIGHT,
+                )
+                retry_val_img, retry_report = enforce_quality_and_refine(
+                    generated_img=retry_img,
+                    avatar_img=avatar_rgb,
+                    selected_garments=selected_g_meta,
+                    selected_accessories=selected_a_meta,
+                    avatar_gender=plan.get("avatar_gender", "unknown"),
+                )
+                if retry_report.get("passed", False) or retry_report.get("face_similarity", 0.0) >= val_report.get("face_similarity", 0.0):
+                    validated_img = retry_val_img
+                    val_report = retry_report
+                    gpu_meta = retry_meta
+                    val_report["retried"] = True
+            except Exception as retry_exc:
+                logger.warning("Bounded retry failed: %s", retry_exc)
+
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_filename = f"{job_id}_look_{combo_idx + 1:03d}.png"
         out_path = OUTPUT_DIR / out_filename
-        out_img.save(out_path, format="PNG")
+        validated_img.save(out_path, format="PNG")
 
         clean_base = base_url.rstrip("/")
         rel_url = f"/api/outputs/{out_filename}"
         public_url = f"{clean_base}{rel_url}" if clean_base else rel_url
 
-        res_str = f"{out_img.width}x{out_img.height}"
-        b64_uri = image_to_base64_data_uri(out_img) if include_base64 else None
+        res_str = f"{validated_img.width}x{validated_img.height}"
+        b64_uri = image_to_base64_data_uri(validated_img) if include_base64 else None
 
         garment_details = [
             {
@@ -309,6 +350,7 @@ def process_virtual_tryon_pipeline(
             "gpu_name": gpu_meta.get("gpu_name", "Remote GPU"),
             "photography_style": photography_style,
             "pose_preference": pose_preference,
+            "validation_metrics": val_report,
         }
 
     workers = max(1, min(len(combos), get_worker_capacity()))
@@ -320,6 +362,13 @@ def process_virtual_tryon_pipeline(
         generated_looks = [_synthesize_combo(idx, c) for idx, c in enumerate(combos)]
 
     total_ms = round((time.perf_counter() - t_start) * 1000, 1)
+    sims = [
+        look.get("validation_metrics", {}).get("face_similarity", 0.0)
+        for look in generated_looks
+        if look.get("validation_metrics")
+    ]
+    avg_sim = round(float(np.mean(sims)), 3) if sims else 0.0
+
     return {
         "status": "success",
         "success": True,
@@ -342,6 +391,15 @@ def process_virtual_tryon_pipeline(
             "garments_uploaded": len(garments),
             "accessories_uploaded": len(accessories),
             "combinations_requested": max_combinations,
+            "validation_summary": {
+                "all_looks_passed": all(
+                    look.get("validation_metrics", {}).get("passed", True) for look in generated_looks
+                ),
+                "grades": [
+                    look.get("validation_metrics", {}).get("validation_grade", "A") for look in generated_looks
+                ],
+                "average_face_similarity": avg_sim,
+            },
             "combinations_generated": len(generated_looks),
             "output_resolution": f"{TRYON_OUTPUT_WIDTH}x{TRYON_OUTPUT_HEIGHT}",
         },

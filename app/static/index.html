@@ -1262,10 +1262,19 @@
       const poseBadge = poseVal && poseVal !== 'auto'
         ? `<div class="telemetry-badge">Pose: <strong>${escapeHtml(poseVal)}</strong></div>`
         : '';
+      const val = active.validation_metrics || {};
+      const faceSimBadge = val.face_similarity !== undefined
+        ? `<div class="telemetry-badge" style="background:rgba(16, 185, 129, 0.15); border-color:rgba(16, 185, 129, 0.4); color:#6ee7b7;">Face Match: <strong>${Math.round(val.face_similarity * 100)}% (${escapeHtml(val.validation_grade || 'A')})</strong></div>`
+        : '';
+      const coverageBadge = (val.clothing_coverage && val.clothing_coverage.passed)
+        ? `<div class="telemetry-badge" style="background:rgba(16, 185, 129, 0.15); border-color:rgba(16, 185, 129, 0.4); color:#6ee7b7;">Coverage: <strong>Modest Verified</strong></div>`
+        : '';
       document.getElementById('tryonTelemetryRow').innerHTML = `
         <div class="telemetry-badge">Resolution: <strong>${escapeHtml(active.resolution || '768x1024')}</strong></div>
         <div class="telemetry-badge">Occasion: <strong>${escapeHtml(active.occasion || 'smart_casual')}</strong></div>
         ${genderBadge}
+        ${faceSimBadge}
+        ${coverageBadge}
         ${styleBadge}
         ${poseBadge}
         <div class="telemetry-badge">GPU: <strong>${escapeHtml(active.gpu_name || 'Remote GPU')}</strong></div>

@@ -291,54 +291,84 @@ def _dynamic_missing_garment(
     selected_garments: list[dict[str, Any]],
     avatar_gender: str,
     occasion: str,
+    original_worn_clothes: str = "",
 ) -> tuple[str, str]:
-    """Dynamically choose modest upper or lower complement matching uploaded clothes, gender, and occasion."""
+    """Dynamically choose harmonious upper or lower complement matching uploaded clothes, gender, occasion, and avatar style."""
     ctx = " ".join(
         f"{g.get('title', '')} {g.get('colors', '')} {g.get('patterns_and_design', '')}"
         for g in selected_garments
     ).lower()
     occ = (occasion or "smart_casual").lower()
+    worn_ctx = (original_worn_clothes or "").lower()
 
     if role_needed == "bottom":
-        if any(k in ctx for k in ("kurta", "sherwani", "ethnic", "nehru", "festive")):
+        is_ethnic = any(k in ctx for k in ("kurta", "sherwani", "ethnic", "nehru", "festive", "saree")) or occ in ("festive", "party")
+        is_formal = any(k in ctx for k in ("formal", "blazer", "oxford", "suit", "button-down", "tuxedo")) or occ == "formal"
+        is_light_top = any(k in ctx for k in ("white", "cream", "ivory", "beige", "yellow", "light blue", "pink"))
+
+        if is_ethnic:
+            if avatar_gender == "female":
+                return (
+                    "Complementary Silk-Blend Straight Ethnic Trousers / Churidar",
+                    "tailored slim silk-blend straight-leg ethnic trousers with natural ankle pleats harmonizing with the upper outfit",
+                )
+            bottom_color = "rich cream-ivory" if not is_light_top else "tailored deep charcoal"
             return (
-                "Tailored Solid Jet-Black Ethnic Straight Trousers",
-                "crisp solid jet-black straight-leg ethnic trousers tailored neatly to the ankles, zero logos or prints",
+                f"Tailored {bottom_color.title()} Ethnic Straight Trousers",
+                f"{bottom_color} tailored slim straight-leg ethnic trousers with clean ankle drape, complementing the kurta silhouette",
             )
-        if any(k in ctx for k in ("formal", "blazer", "oxford", "suit", "button-down")) or occ == "formal":
+
+        if is_formal:
+            bottom_color = "tailored charcoal grey" if is_light_top else "tailored slate-navy"
             return (
-                "Tailored Solid Jet-Black Formal Trousers",
-                "crisp solid jet-black tailored slim formal trousers extending neatly to the ankles with sharp crease and zero patterns",
+                f"Tailored Slim {bottom_color.title()} Formal Trousers",
+                f"crisp {bottom_color} tailored slim formal trousers extending neatly to the shoes with a sharp front crease and zero patterns",
+            )
+
+        # Casual / Streetwear: Check if avatar already wore denim or chinos
+        if "chino" in worn_ctx:
+            return (
+                "Warm Sand Slim-Fit Cotton Chinos",
+                "clean warm sand-beige tailored slim cotton chinos extending naturally to the ankles with a modern tapered cut",
+            )
+        if is_light_top:
+            return (
+                "Washed Indigo Slim-Fit Denim Jeans",
+                "authentic washed medium-indigo tailored slim denim jeans with natural thigh fading and contrast golden topstitching",
             )
         return (
-            "Solid Jet-Black Slim-Fit Trousers / Denim Jeans",
-            "clean solid jet-black tailored slim trousers/denim jeans extending naturally to the ankles without logos or prints",
+            "Tailored Slim Raw Indigo Denim Jeans / Trousers",
+            "clean dark raw-indigo tailored slim denim jeans extending naturally to the shoes with authentic twill texture",
         )
 
     # role_needed == "top": NEVER leave torso shirtless when user uploads only pants/jeans!
-    is_denim_or_casual = any(k in ctx for k in ("jean", "denim", "cargo", "jogger", "short")) or occ in ("casual", "streetwear")
-    is_black_bottom = any(k in ctx for k in ("black", "charcoal", "dark grey"))
+    is_denim = any(k in ctx for k in ("jean", "denim", "indigo"))
+    is_formal_bottom = any(k in ctx for k in ("formal", "trouser", "suit", "crease", "pleat")) or occ == "formal"
+    is_dark_bottom = any(k in ctx for k in ("black", "dark", "charcoal", "navy", "deep"))
+
     if avatar_gender == "female":
-        if is_denim_or_casual:
-            top_color = "crisp optic white" if is_black_bottom else "clean soft ivory white"
+        if is_formal_bottom:
             return (
-                "Modest Solid Fitted Short-Sleeve Crew-Neck Top",
-                f"{top_color} modest fitted cotton crew-neck short-sleeve top covering the full torso down to the waistband, plain unbranded fabric",
+                "Modest Tailored Silk-Blend Collared Blouse",
+                "crisp ivory-white or soft blush-tinted modest tailored full-coverage shirt tucked neatly into the waistband",
             )
+        top_color = "soft heather grey" if is_dark_bottom else "clean crisp white"
         return (
-            "Modest Solid Tailored Collared Shirt / Blouse",
-            "crisp solid ivory-white tailored modest full-coverage shirt tucked neatly into the waistband so visual focus stays on the uploaded bottom garment",
+            f"Modest Solid Fitted Short-Sleeve Crew-Neck Top",
+            f"{top_color} modest fitted cotton crew-neck short-sleeve T-shirt covering the full torso down to the waistband, unbranded pure fabric",
         )
 
-    if is_denim_or_casual:
-        top_color = "clean solid crisp optic white" if is_black_bottom else "clean solid soft off-white"
+    if is_formal_bottom:
+        shirt_color = "crisp pale mist-blue" if is_dark_bottom else "crisp optic white"
         return (
-            "Modest Solid Matte Crew-Neck Cotton T-Shirt",
-            f"{top_color} modest crew-neck short-sleeve cotton T-shirt covering the entire chest, shoulders, and torso down to the waistband",
+            f"Modest Solid {shirt_color.title()} Oxford Shirt",
+            f"{shirt_color} tailored full-coverage cotton collared Oxford shirt tucked neatly into the waistband so visual focus stays on the trousers",
         )
+
+    top_color = "soft heather-grey" if is_dark_bottom else "clean solid crisp optic white"
     return (
-        "Modest Solid Crisp Classic Collared Shirt",
-        "crisp solid white or pale mist-blue tailored full-coverage cotton shirt worn neatly over the waistband so visual focus stays on the uploaded trousers",
+        f"Modest Solid Matte Crew-Neck Cotton T-Shirt",
+        f"{top_color} modest crew-neck short-sleeve cotton T-shirt covering the entire chest, shoulders, and torso down to the waistband",
     )
 
 
@@ -348,6 +378,7 @@ def _resolve_combo_complements(
     occasion: str,
     raw_comp_top: str = "",
     raw_comp_bottom: str = "",
+    original_worn_clothes: str = "",
 ) -> tuple[str, str, str]:
     """Ensure every incomplete combo gets dynamic complementary top or bottom (never bare skin)."""
     has_top = any(g["role"] in ("top", "outerwear", "full_outfit") for g in sel_meta)
@@ -358,12 +389,12 @@ def _resolve_combo_complements(
     note = ""
 
     if not has_top and not comp_top:
-        t_title, comp_top = _dynamic_missing_garment("top", sel_meta, avatar_gender, occasion)
+        t_title, comp_top = _dynamic_missing_garment("top", sel_meta, avatar_gender, occasion, original_worn_clothes)
         note = f" styled modestly with {t_title.lower()}"
     elif not has_top:
         note = f" styled modestly with {comp_top}"
     elif not has_bottom and not comp_bottom:
-        b_title, comp_bottom = _dynamic_missing_garment("bottom", sel_meta, avatar_gender, occasion)
+        b_title, comp_bottom = _dynamic_missing_garment("bottom", sel_meta, avatar_gender, occasion, original_worn_clothes)
         note = f" paired with {b_title.lower()}"
     elif not has_bottom:
         note = f" paired with {comp_bottom}"
@@ -377,6 +408,7 @@ def _build_deterministic_combinations(
     max_combinations: int,
     occasion: str,
     avatar_gender: str = "unknown",
+    original_worn_clothes: str = "",
 ) -> list[dict[str, Any]]:
     raw_combos = _generate_diverse_garment_pairs(eligible_garments, max_combinations)
     garment_by_idx = {g["garment_index"]: g for g in eligible_garments}
@@ -386,7 +418,9 @@ def _build_deterministic_combinations(
         g_sorted = sorted(g_indices, key=lambda idx: (_ROLE_SORT_ORDER.get(garment_by_idx[idx]["role"], 2), idx))
         sel_meta = [garment_by_idx[i] for i in g_sorted]
         titles = [g["title"] for g in sel_meta]
-        comp_top, comp_bottom, note = _resolve_combo_complements(sel_meta, avatar_gender, occasion)
+        comp_top, comp_bottom, note = _resolve_combo_complements(
+            sel_meta, avatar_gender, occasion, original_worn_clothes=original_worn_clothes
+        )
         max_acc = max(0, MAX_TRYON_CONDITION_IMAGES - 1 - len(g_sorted))
         acc_sel = all_acc_indices[:max_acc]
         acc_note = f" + {len(acc_sel)} matching accessory/ies" if acc_sel else ""
@@ -594,6 +628,7 @@ def _sanitize_combinations(
     max_combinations: int,
     occasion: str,
     avatar_gender: str = "unknown",
+    original_worn_clothes: str = "",
 ) -> list[dict[str, Any]]:
     """Validate stylist combination indices, enforce top->bottom ordering, and ensure full modest coverage."""
     garment_by_idx = {g["garment_index"]: g for g in eligible_garments}
@@ -652,6 +687,7 @@ def _sanitize_combinations(
             str(raw_c.get("occasion") or occasion or "smart_casual").strip(),
             raw_comp_top=str(raw_c.get("complement_top") or ""),
             raw_comp_bottom=str(raw_c.get("complement_bottom") or ""),
+            original_worn_clothes=original_worn_clothes,
         )
 
         cleaned.append({
@@ -667,7 +703,12 @@ def _sanitize_combinations(
             break
 
     return cleaned or _build_deterministic_combinations(
-        eligible_garments, eligible_accessories, max_combinations, occasion, avatar_gender
+        eligible_garments,
+        eligible_accessories,
+        max_combinations,
+        occasion,
+        avatar_gender,
+        original_worn_clothes=original_worn_clothes,
     )
 
 
@@ -761,15 +802,26 @@ def analyze_wardrobe_and_plan_tryon(
                 max_combinations,
                 occasion,
                 avatar_gender=avatar_gender,
+                original_worn_clothes=avatar_info.get("original_worn_clothes", ""),
             )
         except Exception as exc:
             logger.warning("Combo curation text call failed (%s); using deterministic stylist pairing.", exc)
             combinations = _build_deterministic_combinations(
-                eligible_g, eligible_a, max_combinations, occasion, avatar_gender
+                eligible_g,
+                eligible_a,
+                max_combinations,
+                occasion,
+                avatar_gender,
+                original_worn_clothes=avatar_info.get("original_worn_clothes", ""),
             )
     else:
         combinations = _build_deterministic_combinations(
-            eligible_g, eligible_a, max_combinations, occasion, avatar_gender
+            eligible_g,
+            eligible_a,
+            max_combinations,
+            occasion,
+            avatar_gender,
+            original_worn_clothes=avatar_info.get("original_worn_clothes", ""),
         )
 
     return {
@@ -801,14 +853,16 @@ def _determine_dynamic_pose(
     selected_garments: list[dict[str, Any]],
     selected_accessories: list[dict[str, Any]],
     pose_preference: str = "auto",
+    combo_index: int = 0,
 ) -> str:
     """Generate dynamic, natural, relaxed human fashion photography poses instead of stiff mannequins."""
     pref = (pose_preference or "auto").strip().lower()
     occ = (occasion or "smart_casual").strip().lower()
 
     has_watch = any("watch" in f"{a.get('accessory_type', '')} {a.get('title', '')}".lower() for a in selected_accessories)
-    is_traditional = any(
-        any(k in f"{g.get('title', '')} {g.get('patterns_and_design', '')}".lower() for k in ("kurta", "sherwani", "saree", "lehenga", "ethnic", "nehru"))
+    is_saree = any("saree" in f"{g.get('title', '')} {g.get('patterns_and_design', '')}".lower() for g in selected_garments)
+    is_traditional = is_saree or any(
+        any(k in f"{g.get('title', '')} {g.get('patterns_and_design', '')}".lower() for k in ("kurta", "sherwani", "lehenga", "ethnic", "nehru"))
         for g in selected_garments
     ) or occ in ("festive", "party")
     is_formal = any(
@@ -822,7 +876,23 @@ def _determine_dynamic_pose(
         else ""
     )
 
+    if is_saree:
+        return (
+            "Graceful traditional saree posture: body turned at an elegant three-quarter angle to showcase the blouse embroidery and shoulder pleats, "
+            "one hand gently holding or guiding the pallu drape near the waist with delicate fingertips, soft fluid pleats flowing naturally to the floor over elegant footwear, "
+            "poised expressive head angle looking warmly at camera."
+            + watch_clause
+        )
+
     if pref in ("relaxed_casual", "casual") or (pref == "auto" and not is_traditional and not is_formal):
+        if combo_index % 2 == 1:
+            return (
+                "Contemporary relaxed open stance: balanced footing, upright yet fluid shoulders, "
+                "one arm naturally bent at waist height with hand resting easily near the belt or wrist, "
+                "the other arm resting comfortably at the side with a soft natural elbow bend and relaxed fingers, "
+                "natural candid poise with direct engaging eye contact."
+                + watch_clause
+            )
         return (
             "Natural relaxed contrapposto human stance with body weight comfortably shifted onto one leg, "
             "subtle 10-15 degree three-quarter angle to the camera creating natural depth and relaxed silhouette. "
@@ -833,6 +903,13 @@ def _determine_dynamic_pose(
         )
 
     if pref in ("confident_executive", "formal") or (pref == "auto" and is_formal):
+        if combo_index % 2 == 1:
+            return (
+                "Sharp modern editorial fashion stance: natural upright posture, balanced footing with subtle asymmetry, "
+                "arms resting comfortably with slight asymmetric bends at elbows, subtle cuff adjustment gesture with one hand, "
+                "calm commanding gaze looking directly into the camera lens."
+                + watch_clause
+            )
         return (
             "Confident modern executive lookbook stance: poised posture with weight subtly on the back leg, "
             "shoulders naturally relaxed and level without military stiffness. "
@@ -875,10 +952,15 @@ def _determine_dynamic_pose(
 def _determine_photography_style(
     photography_style: str = "auto",
     occasion: str = "smart_casual",
+    custom_prompt: str | None = None,
 ) -> tuple[str, str]:
     """Resolve high-end fashion photography lighting, backdrop, and camera direction."""
     style = (photography_style or "auto").strip().lower()
     occ = (occasion or "smart_casual").strip().lower()
+    custom_text = (custom_prompt or "").lower()
+
+    # Check for explicit custom background requests
+    has_custom_bg = any(k in custom_text for k in ("outdoor", "street", "cafe", "loft", "concrete", "terrace", "interior", "garden", "urban", "grey background", "dark background"))
 
     if style == "auto":
         if occ in ("formal", "office"):
@@ -890,13 +972,21 @@ def _determine_photography_style(
         else:
             style = "premium_studio"
 
+    if has_custom_bg:
+        return (
+            "Custom Environment Fashion Photography",
+            "Professional fashion editorial photography shot with an 85mm portrait prime lens at f/3.2. "
+            "Soft directional ambient lighting matching the requested setting, natural grounding contact shadows under both shoes, "
+            "crisp edge-to-edge optical clarity, and authentic environmental depth."
+        )
+
     if style in ("editorial_lookbook", "editorial"):
         return (
             "High-End Fashion Editorial",
             "Editorial studio photography shot on Hasselblad H6D-100c with 85mm portrait prime lens at f/3.2. "
             "Sculptural three-point lighting: large diffused key octabox from high 45-degree angle creating flattering facial bone structure definition, "
             "gentle ambient fill light, subtle rim light separating hair from background, and natural soft grounding floor shadows beneath both shoes "
-            "against a clean, seamless warm alabaster studio backdrop (#F4F1EC)."
+            "against an architectural warm bone studio cyclorama backdrop."
         )
 
     if style in ("streetwear_lifestyle", "lifestyle"):
@@ -904,7 +994,7 @@ def _determine_photography_style(
             "Modern Streetwear Lookbook",
             "Contemporary lookbook photography with crisp, punchy fashion lighting: wide diffused beauty dish key light "
             "rendering rich contrast, authentic fabric weave textures, vivid colors, and soft natural ambient floor shadows "
-            "against a clean warm alabaster studio wall (#F4F1EC)."
+            "against a contemporary minimalist studio wall with subtle architectural texture."
         )
 
     if style in ("traditional_royal", "royal", "festive"):
@@ -912,7 +1002,7 @@ def _determine_photography_style(
             "Luxury Ethnic Studio Portrait",
             "Luminous luxury studio portraiture with warm golden-hour key light accentuating rich fabric luster, "
             "intricate embroidery reflections, gold zari sheen, and jewelry sparkle, with gentle flattering fill "
-            "on face and hair against a clean seamless warm alabaster studio backdrop (#F4F1EC)."
+            "on face and hair against an elegant warm neutral backdrop."
         )
 
     return (
@@ -937,6 +1027,7 @@ def build_qwen_tryon_prompt(
     forensic_face_details: str = "",
     photography_style: str = "auto",
     pose_preference: str = "auto",
+    combo_index: int = 0,
 ) -> tuple[str, int]:
     """Build crisp, identity-anchored `<image1>`, `<image2>`, ... multi-image Qwen-2.1 prompt."""
     garment_clauses: list[str] = []
@@ -1019,9 +1110,9 @@ def build_qwen_tryon_prompt(
             "EYEWEAR: No eyeglasses worn on the eyes in <image1>; do not add unprompted spectacles or sunglasses."
         )
 
-    style_label, photo_direction = _determine_photography_style(photography_style, occasion)
+    style_label, photo_direction = _determine_photography_style(photography_style, occasion, custom_prompt)
     dynamic_pose_desc = _determine_dynamic_pose(
-        avatar_gender, occasion, selected_garments, selected_accessories, pose_preference
+        avatar_gender, occasion, selected_garments, selected_accessories, pose_preference, combo_index=combo_index
     )
 
     sections = [
