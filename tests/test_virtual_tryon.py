@@ -225,7 +225,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("NO SHIRTLESS TORSO", bottom_only_prompt)
         self.assertIn("T-shirt", bottom_only_prompt)
 
-        # When NO bottom pant is uploaded with a top, dynamic complementary trousers/jeans must be applied
+        # When NO bottom pant is uploaded with a top, default black tailored trousers/jeans must be applied
         top_only_prompt, top_only_refs = build_qwen_tryon_prompt(
             plan["avatar_summary"],
             [plan["garments"][0]],
@@ -234,7 +234,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             avatar_gender="male",
         )
         self.assertEqual(top_only_refs, 2)
-        self.assertIn("DEFAULT LOWER GARMENT (NO BOTTOM UPLOADED)", top_only_prompt)
+        self.assertIn("jet-black tailored slim", top_only_prompt)
         self.assertIn("adult male fashion model", top_only_prompt)
 
     def test_stylist_isolated_parallel_vision_and_gender_accessory_filtering(self):
@@ -341,13 +341,6 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             virtual_tryon, "is_gpu_worker_configured", return_value=(True, "https://api.runpod.ai/v2/ep_ok")
         ), patch.object(
             virtual_tryon, "generate_garment_via_gpu", side_effect=fake_gpu
-        ), patch.object(
-            virtual_tryon,
-            "enforce_quality_and_refine",
-            return_value=(
-                Image.new("RGB", (832, 1152), (230, 232, 238)),
-                {"passed": True, "face_similarity": 0.82, "validation_grade": "A+", "clothing_coverage": {"passed": True}},
-            ),
         ), patch.dict(
             os.environ, {"OPENAI_API_KEY": ""}, clear=False
         ):
@@ -379,7 +372,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
                 saved_name = look["url"].rsplit("/", 1)[-1]
                 self.assertTrue((Path(tmpdir) / saved_name).exists())
 
-            # Top-only upload without pants dynamically applies complementary trousers/jeans
+            # Top-only upload without pants dynamically applies solid jet-black trousers/jeans
             top_only_res = virtual_tryon.process_virtual_tryon_pipeline(
                 avatar_bytes=_make_image_bytes((210, 180, 160), (256, 384)),
                 garment_entries=[
@@ -387,8 +380,8 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
                 ],
                 max_combinations=1,
             )
-            self.assertTrue(top_only_res["combinations"][0]["garment_details"][-1]["is_complementary"])
-            self.assertIn("DEFAULT LOWER GARMENT (NO BOTTOM UPLOADED)", top_only_res["combinations"][0]["prompt_used"])
+            self.assertIn("Jet-Black", top_only_res["combinations"][0]["garment_details"][-1]["label"])
+            self.assertIn("jet-black tailored slim", top_only_res["combinations"][0]["prompt_used"])
 
             # Bottom-only (jeans ONLY, no shirt) automatically adds modest upper top (never shirtless)
             jeans_only_res = virtual_tryon.process_virtual_tryon_pipeline(
@@ -468,120 +461,6 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("MANDATORY EYEWEAR LOCK", prompt)
         self.assertIn("contrapposto", prompt.lower())
         self.assertNotIn("0-degree direct front-facing studio lookbook photograph", prompt)
-
-    def test_face_analyzer_yunet_and_sface_embeddings(self):
-        import numpy as np
-        from app.core.image_processing.face_analyzer import (
-            detect_face_and_landmarks,
-            extract_face_embedding,
-            compute_face_similarity,
-            refine_face_identity,
-        )
-        # Test synthetic image
-        img = Image.new("RGB", (256, 256), (120, 120, 120))
-        info = detect_face_and_landmarks(img)
-        # Synthetic flat image has no face
-        self.assertIsNone(info)
-
-        # Test dummy embedding cosine similarity math
-        f1 = np.ones(128, dtype=np.float32)
-        f2 = np.ones(128, dtype=np.float32)
-        sim = compute_face_similarity(f1, f2)
-        self.assertAlmostEqual(sim, 1.0, places=2)
-
-        # Orthogonal embeddings
-        f3 = np.zeros(128, dtype=np.float32)
-        f3[0] = 1.0
-        f4 = np.zeros(128, dtype=np.float32)
-        f4[1] = 1.0
-        sim_ortho = compute_face_similarity(f3, f4)
-        self.assertTrue(0.0 <= sim_ortho <= 0.5)
-
-    def test_tryon_validator_coverage_and_delta_e(self):
-        from app.core.pipeline.tryon_validator import (
-            validate_clothing_coverage,
-            compute_garment_color_drift_delta_e,
-            validate_virtual_tryon_output,
-        )
-        # Fully clothed grey model
-        img_clothed = Image.new("RGB", (832, 1152), (80, 80, 80))
-        cov_clothed = validate_clothing_coverage(img_clothed)
-        self.assertTrue(cov_clothed["passed"])
-        self.assertTrue(cov_clothed["torso_covered"])
-        self.assertTrue(cov_clothed["legs_covered"])
-
-        # Nude-toned / skin-colored torso simulation
-        img_skin = Image.new("RGB", (832, 1152), (210, 160, 130))
-        cov_skin = validate_clothing_coverage(img_skin)
-        self.assertFalse(cov_skin["passed"])
-
-        # Color fidelity delta-E
-        g_meta = [{"role": "top", "title": "Dark Navy Shirt", "colors": "navy blue"}]
-        delta_e = compute_garment_color_drift_delta_e(img_clothed, g_meta)
-        self.assertIsInstance(delta_e, float)
-
-    def test_bounded_retry_triggered_on_validation_failure(self):
-        from app.core.pipeline import virtual_tryon
-
-        captured_calls = []
-
-        def fake_gpu(reference_image, prompt, width=None, height=None, seed=None, **kwargs):
-            captured_calls.append(seed)
-            return Image.new("RGB", (width or 832, height or 1152), (200, 200, 200)), {
-                "model": "Qwen/Qwen-Image-2.1-Turbo",
-                "gpu_name": "NVIDIA A40",
-            }
-
-        call_count = [0]
-
-        def fake_enforce(generated_img, avatar_img, selected_garments, selected_accessories, avatar_gender):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                # First run fails quality validation (e.g. torso uncovered)
-                return generated_img, {
-                    "passed": False,
-                    "face_similarity": 0.25,
-                    "validation_grade": "F",
-                    "defects": ["uncovered_torso"],
-                    "clothing_coverage": {"passed": False, "torso_covered": False, "legs_covered": True},
-                }
-            # Second run (retry) passes
-            return generated_img, {
-                "passed": True,
-                "face_similarity": 0.85,
-                "validation_grade": "A+",
-                "defects": [],
-                "clothing_coverage": {"passed": True, "torso_covered": True, "legs_covered": True},
-            }
-
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            virtual_tryon, "OUTPUT_DIR", Path(tmpdir)
-        ), patch.object(
-            virtual_tryon, "is_gpu_worker_configured", return_value=(True, "https://api.runpod.ai/v2/ep_ok")
-        ), patch.object(
-            virtual_tryon, "generate_garment_via_gpu", side_effect=fake_gpu
-        ), patch.object(
-            virtual_tryon, "enforce_quality_and_refine", side_effect=fake_enforce
-        ), patch.dict(
-            os.environ, {"OPENAI_API_KEY": ""}, clear=False
-        ):
-            res = virtual_tryon.process_virtual_tryon_pipeline(
-                avatar_bytes=_make_image_bytes((210, 180, 160), (256, 384)),
-                garment_entries=[
-                    {"bytes": _make_image_bytes((240, 240, 255)), "role_hint": "top", "filename": "shirt.jpg"},
-                    {"bytes": _make_image_bytes((40, 40, 50)), "role_hint": "bottom", "filename": "pant.jpg"},
-                ],
-                max_combinations=1,
-                seed=42,
-            )
-            # Both initial and retry calls occurred
-            self.assertEqual(len(captured_calls), 2)
-            # The second call used seed increment + 101
-            self.assertEqual(captured_calls[1], captured_calls[0] + 101)
-            # Final look report reflects passing retry
-            look = res["combinations"][0]
-            self.assertTrue(look["validation_metrics"]["retried"])
-            self.assertEqual(look["validation_metrics"]["validation_grade"], "A+")
 
 
 if __name__ == "__main__":

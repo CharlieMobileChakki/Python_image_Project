@@ -97,10 +97,6 @@ class TryOnCombination(BaseModel):
     gpu_name: str | None = None
     photography_style: str | None = None
     pose_preference: str | None = None
-    validation_metrics: dict[str, Any] | None = Field(
-        default=None,
-        description="Biometric face similarity, clothing coverage, and quality validation report",
-    )
 
 
 class VirtualTryOnResponse(BaseModel):
