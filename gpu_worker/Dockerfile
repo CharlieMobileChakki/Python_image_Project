@@ -19,7 +19,6 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PORT=8001
 ENV CUDA_MODULE_LOADING="LAZY"
-ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 WORKDIR /app
 
@@ -37,7 +36,10 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -c 'import jinja2; assert tuple(int(x) for x in jinja2.__version__.split(".")[:3]) >= (3, 1, 6), jinja2.__version__' && \
     rm -f /tmp/c.txt
 
-# 3. Copy pure Qwen-Image-2.1-Turbo worker modules last for fast layer caching
+# 3. Configure runtime allocator after dependency layers to preserve pip layer cache
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# 4. Copy pure Qwen-Image-2.1-Turbo worker modules last for fast layer caching
 COPY gpu_worker/engine.py /app/engine.py
 COPY gpu_worker/rp_handler.py /app/rp_handler.py
 COPY gpu_worker/server.py /app/server.py
