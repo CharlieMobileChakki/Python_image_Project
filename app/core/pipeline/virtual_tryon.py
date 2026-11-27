@@ -86,9 +86,9 @@ def prepare_face_identity_ref(
         return avatar_rgb
 
     head_crop = avatar_rgb.crop(crop_coords)
-    # Place head portrait centered on neutral alabaster studio card so <image1> carries zero pose/clothing prior
+    # Tightly fill 86% of a clean neutral studio card (~440px face) for maximum facial pixel fidelity & zero collar leak
     canvas = Image.new("RGB", (canvas_size, canvas_size), (244, 241, 236))
-    max_head_dim = int(canvas_size * 0.62)
+    max_head_dim = int(canvas_size * 0.86)
     head_crop.thumbnail((max_head_dim, max_head_dim), Image.Resampling.LANCZOS)
     px = (canvas_size - head_crop.width) // 2
     py = (canvas_size - head_crop.height) // 2
@@ -165,6 +165,7 @@ def process_virtual_tryon_pipeline(
             selected_accessories=selected_a_meta,
             occasion=combo.get("occasion") or occasion,
             custom_prompt=custom_prompt,
+            original_worn_clothes=plan.get("original_worn_clothes", ""),
         )
         condition_images: list[Image.Image] = (
             [identity_avatar_img]
