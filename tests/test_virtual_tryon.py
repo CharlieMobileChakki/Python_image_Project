@@ -207,13 +207,16 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertEqual(total_refs, 5)
         for tag in ("<image1>", "<image2>", "<image3>", "<image4>", "<image5>"):
             self.assertIn(tag, prompt)
-        self.assertIn("IDENTITY & FACE LOCK", prompt)
+        self.assertIn("HEAD & IDENTITY RE-GENERATION", prompt)
+        self.assertIn("COMPLETE GARMENT REPLACEMENT", prompt)
 
     def test_stylist_vision_normalizes_and_retains_missed_accessories(self):
         from app.core.flow_b.tryon_stylist import analyze_wardrobe_and_plan_tryon
+        from app.core.pipeline.virtual_tryon import prepare_face_identity_ref
 
         vision_json = {
             "avatar_summary": "South Asian young man with medium warm skin tone, short black side-parted hair, trim beard",
+            "avatar_face_box_2d": [100, 350, 380, 650],
             "garments": [
                 {"garment_index": 0, "role": "top", "title": "Indigo Block-Print Cotton Shirt", "colors": "deep indigo & off-white", "patterns_and_design": "hand-stamped floral block motifs, mandarin collar, wooden buttons"},
                 {"garment_index": 1, "role": "bottom", "title": "Sand Cotton Twill Chinos", "colors": "warm sand beige", "patterns_and_design": "slim tapered fit, slant pockets, matte twill weave"},
@@ -227,7 +230,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
                     "title": "Artisanal Indigo & Sand",
                     "occasion": "smart_casual",
                     "style_reason": "Indigo block print pops cleanly over warm sand chinos.",
-                    "selected_garment_indices": [0, 1, 99],
+                    "selected_garment_indices": [1, 0, 99],
                     "selected_accessory_indices": [0],
                 }
             ],
@@ -238,7 +241,12 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         mock_client = MagicMock()
         mock_client.__enter__.return_value.post.return_value = mock_resp
 
-        avatar = Image.new("RGB", (200, 300), (200, 170, 150))
+        # Upper head warm skin (100..380), lower torso black shirt (500..999)
+        avatar = Image.new("RGB", (400, 600), (15, 15, 18))
+        for x in range(140, 260):
+            for y in range(60, 228):
+                avatar.putpixel((x, y), (205, 170, 145))
+
         garments = [
             {"index": 0, "image": Image.new("RGB", (150, 150), (30, 40, 100)), "role_hint": "top", "filename": "shirt.jpg"},
             {"index": 1, "image": Image.new("RGB", (150, 150), (200, 190, 160)), "role_hint": "bottom", "filename": "pants.jpg"},
@@ -254,9 +262,17 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             plan = analyze_wardrobe_and_plan_tryon(avatar, garments, accessories, max_combinations=2)
 
         combo = plan["combinations"][0]
+        # Top (0) must always be sorted ahead of Bottom (1) so T-shirt/shirt gets primary <image2>
         self.assertEqual(combo["selected_garment_indices"], [0, 1])
         self.assertEqual(sorted(combo["selected_accessory_indices"]), [0, 1])
+        self.assertEqual(plan["avatar_face_box_2d"], [100, 350, 380, 650])
         self.assertIn("hand-stamped floral block motifs", plan["garments"][0]["patterns_and_design"])
+
+        # Face identity crop strips lower black torso and pads on neutral studio background
+        id_ref = prepare_face_identity_ref(avatar, plan["avatar_face_box_2d"], canvas_size=512)
+        self.assertEqual(id_ref.size, (512, 512))
+        self.assertEqual(id_ref.getpixel((10, 10)), (244, 241, 236))
+        self.assertGreater(id_ref.getpixel((256, 256))[0], 150)
 
     def test_full_virtual_tryon_pipeline_saves_pngs_and_preserves_routes_and_ui(self):
         from app.core.pipeline import virtual_tryon

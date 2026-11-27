@@ -30,12 +30,12 @@ You will inspect labeled images:
 - [ACCESSORY_0], [ACCESSORY_1], ... (optional): Accessories such as watches, sneakers, dress shoes, heels, sunglasses, necklaces, earrings, belts, handbags, or hats.
 
 YOUR TASKS:
-1. AVATAR IDENTITY PROFILE: Concisely describe the person in [AVATAR] (face shape, skin tone, hair style/color, facial hair if any, natural build) so the generator preserves the exact same human identity.
-2. FORENSIC GARMENT ANALYSIS: Inspect EVERY [GARMENT_i] closely. Identify:
+1. AVATAR IDENTITY PROFILE & HEAD BOX: Concisely describe the person in [AVATAR] (face shape, skin tone, hair style/color, eyeglasses if worn, facial hair if any, gender presentation, natural slim/average/athletic build) so a freshly posed model matches the exact same person. ALSO provide `"avatar_face_box_2d": [ymin, xmin, ymax, xmax]` (integers 0..1000) tightly framing ONLY the person's head (top of hair down to chin/jawline, excluding their original torso shirt below the neck).
+2. FORENSIC GARMENT ANALYSIS: Inspect EVERY [GARMENT_i] closely. Carefully distinguish T-shirts (crew-neck / round-neck / V-neck / graphic pullover, zero buttons) vs polo shirts vs button-down shirts vs kurtas vs jackets vs trousers/chinos/jeans. Identify:
    - role: "top" | "bottom" | "full_outfit" | "outerwear"
-   - title: specific human-friendly title (e.g., "Navy Linen Floral Mandarin Shirt")
+   - title: specific human-friendly title (e.g., "Navy Crew-Neck Graphic Cotton T-Shirt", "Olive Printed Mandarin Collar Shirt")
    - colors: exact shade names & undertones (avoid vague generic colors)
-   - patterns_and_design: forensic description of every print motif, floral/geometric/stripe/check scale and placement, embroidery, logos, collar/neckline cut, button placket, cuffs, pockets, hem, denim wash/whiskers, pleats, and fabric weave texture.
+   - patterns_and_design: forensic description of garment silhouette, neckline/collar type, sleeve length, every print motif, floral/geometric/stripe/check scale and placement, chest artwork/logo, pocket, hem, denim wash/whiskers, pleats, and fabric weave texture.
 3. FORENSIC ACCESSORY ANALYSIS: Inspect EVERY [ACCESSORY_j] closely. Identify:
    - accessory_type: e.g., "wristwatch", "sneakers", "leather_shoes", "sunglasses", "necklace", "earrings", "handbag", "belt", "bracelet", "cap"
    - body_placement: exact body location where worn (e.g., "left wrist", "both feet", "on face/eyes", "around neck", "both ears", "around waist", "held in hand")
@@ -48,7 +48,8 @@ YOUR TASKS:
 
 Return STRICTLY valid JSON:
 {
-  "avatar_summary": "Detailed visual identity summary of the person in [AVATAR] (face, skin tone, hair, facial structure, build)",
+  "avatar_summary": "Detailed visual identity summary of the person in [AVATAR] (gender, build, face, skin tone, hair, eyeglasses/facial hair)",
+  "avatar_face_box_2d": [80, 320, 420, 660],
   "garments": [
     {
       "garment_index": 0,
@@ -180,12 +181,33 @@ def _build_fallback_catalog_and_combos(
         })
 
     return {
-        "avatar_summary": "Exact person from avatar photo with identical facial features, skin tone, hairstyle, and natural build",
+        "avatar_summary": "Person from avatar photo with matching facial features, skin tone, hairstyle, eyewear/facial hair, and natural build",
+        "avatar_face_box_2d": None,
         "garments": garment_catalog,
         "accessories": accessory_catalog,
         "combinations": combinations,
         "prompt_source": "deterministic_fallback",
     }
+
+
+def _validate_face_box_2d(raw_box: Any) -> list[int] | None:
+    """Validate optional 0..1000 normalized ``[ymin, xmin, ymax, xmax]`` face box."""
+    if not isinstance(raw_box, (list, tuple)) or len(raw_box) != 4:
+        return None
+    try:
+        ymin, xmin, ymax, xmax = (int(round(float(v))) for v in raw_box)
+    except (TypeError, ValueError):
+        return None
+    ymin = max(0, min(950, ymin))
+    xmin = max(0, min(950, xmin))
+    ymax = max(ymin + 40, min(1000, ymax))
+    xmax = max(xmin + 40, min(1000, xmax))
+    if ymax - ymin < 40 or xmax - xmin < 40:
+        return None
+    return [ymin, xmin, ymax, xmax]
+
+
+_ROLE_SORT_ORDER = {"full_outfit": 0, "top": 1, "outerwear": 2, "bottom": 3}
 
 
 def _generate_diverse_garment_pairs(garment_catalog: list[dict[str, Any]], max_combinations: int) -> list[list[int]]:
@@ -282,6 +304,9 @@ def _normalize_vision_plan(
         if not g_sel:
             continue
 
+        # Ensure upper / full_outfit items are always ordered first (<image2>) before bottoms (<image3>)
+        g_sel.sort(key=lambda idx: (_ROLE_SORT_ORDER.get(garment_by_idx[idx]["role"], 2), idx))
+
         a_sel: list[int] = []
         for idx in (raw_c.get("selected_accessory_indices") or []):
             try:
@@ -334,6 +359,7 @@ def _normalize_vision_plan(
 
     return {
         "avatar_summary": str(parsed.get("avatar_summary") or fallback["avatar_summary"]).strip(),
+        "avatar_face_box_2d": _validate_face_box_2d(parsed.get("avatar_face_box_2d")),
         "garments": garment_catalog,
         "accessories": accessory_catalog,
         "combinations": cleaned_combos[:max_combinations],
@@ -434,9 +460,9 @@ def build_qwen_tryon_prompt(
 ) -> tuple[str, int]:
     """Build positional `<image1>`, `<image2>`, ... multi-image Qwen-2.1 virtual try-on prompt.
 
-    Image index mapping matches `[avatar_img, *garment_imgs, *accessory_imgs]`:
-      - `<image1>`: User avatar (identity, face, skin tone, hair strictly locked)
-      - `<image2>..`: Selected garments from `selected_garments`
+    Image index mapping matches `[face_identity_ref, *garment_imgs, *accessory_imgs]`:
+      - `<image1>`: Clean head/face identity reference (strictly no torso clothing or background pose copied)
+      - `<image2>..`: Selected garments from `selected_garments` (top/full outfit first, bottom next)
       - `<imageK>..`: Selected accessories from `selected_accessories`
     """
     garment_clauses: list[str] = []
@@ -445,9 +471,9 @@ def build_qwen_tryon_prompt(
         tag = f"<image{next_tag_idx}>"
         next_tag_idx += 1
         garment_clauses.append(
-            f"For the {g['role']} garment, dress the person in the EXACT {g['title']} from {tag}: "
+            f"For the {g['role']} garment, dress the model EXCLUSIVELY in the EXACT {g['title']} shown in {tag}: "
             f"colors {g['colors']}; {g['patterns_and_design']}. "
-            f"Faithfully replicate every authentic print pattern, stripe, motif, embroidery, neckline/collar cut, pocket, and fabric drape from {tag}"
+            f"Faithfully transfer every authentic print pattern, graphic, stripe, neckline/collar cut, sleeve length, pocket, and fabric drape directly from {tag}"
         )
 
     accessory_clauses: list[str] = []
@@ -473,22 +499,31 @@ def build_qwen_tryon_prompt(
     extra_footwear_hint = (
         "Complete the look with clean understated neutral footwear matching the outfit."
         if not has_shoes
-        else "Keep the exact footwear from its reference accessory image fully visible on the feet resting naturally on the studio floor."
+        else "Keep the exact footwear from its reference accessory image fully visible on both feet planted naturally on the studio floor."
     )
     tuck_note = (
-        "Tailor the top naturally over or neatly styled with the waistband of the bottom trousers with crisp natural folds."
+        "Fit the upper garment cleanly and naturally over the waistband of the lower trousers with realistic fabric drape."
         if has_top_and_bottom
         else ""
     )
 
     sections = [
         (
-            "Photorealistic full-body studio fashion portrait of the EXACT same person from <image1>. "
-            "CRITICAL IDENTITY & FACE LOCK: Strictly preserve the exact identical face, eyes, eyebrows, nose, lips, jawline, expression, skin tone, hairstyle, hair color, and body proportions of the person in <image1> "
-            f"({avatar_summary}). ZERO face alteration, ZERO age change, ZERO beauty-filter distortion."
+            "STUDIO E-COMMERCE FASHION CATALOG PHOTOGRAPH (MYNTRA / ZARA / AJIO LOOKBOOK POSE): "
+            "Generate a completely fresh, full-length standing fashion model photograph facing 0-degree straight forward toward the camera "
+            "with level horizontal shoulders, upright spine, relaxed arms hanging naturally along both sides, and balanced head-to-toe framing. "
+            "Place the model in a clean, spotless, completely uniform warm alabaster-ivory studio backdrop (#F4F1EC) with soft natural studio shadows on the floor and ZERO background lines, poles, or streaks."
         ),
         (
-            "WARDROBE TRY-ON REPLACEMENT: Completely replace the clothing worn in <image1> with this curated outfit: "
+            "HEAD & IDENTITY RE-GENERATION (NO CUTOUT PASTE, FRESH STRAIGHT FACE MATCH): "
+            f"Match ONLY the facial identity of the person in <image1> ({avatar_summary}) — matching their eyes, eyeglasses, nose, lips, jawline, mustache/beard, hair style, and warm skin tone — "
+            "while FRESHLY re-generating their head facing straight forward upright at 0-degree level eye alignment looking naturally at the camera! "
+            "DO NOT paste <image1> as a raw cutout, DO NOT copy any crooked head tilt, leaning posture, neck shadow, or dim night lighting from <image1>. "
+            "Light the face, neck, and jawline smoothly with clean even daylight-balanced studio key light so the head looks naturally part of the standing studio model."
+        ),
+        (
+            "COMPLETE GARMENT REPLACEMENT (ZERO ORIGINAL CLOTHING CARRYOVER): "
+            "Discard 100% of any clothing originally worn in the reference photo and dress the freshly generated model in this exact curated outfit: "
             + " ".join(garment_clauses)
             + (" " + tuck_note if tuck_note else "")
         ),
@@ -497,11 +532,12 @@ def build_qwen_tryon_prompt(
         sections.append(
             "ACCESSORY STYLING (WEAR ALL SPECIFIED ACCESSORIES): "
             + "; ".join(accessory_clauses)
-            + ". Place each accessory cleanly and naturally at the exact proportions without duplicating items."
+            + ". Place each accessory cleanly and naturally at authentic scale without duplicating items."
         )
     sections.append(
-        f"FULL-LENGTH COMPOSITION & REALISM: Full head-to-toe vertical portrait framed with breathing room above the head and below both feet on a clean, softly lit neutral architectural fashion lookbook studio backdrop ({occasion} aesthetic). "
-        f"{extra_footwear_hint} Crisp 8K photographic texture, natural shadows, lifelike fabric weight and fit, anatomically accurate hands and fingers."
+        f"FULL-LENGTH QUALITY & REALISM ({occasion} lookbook): "
+        f"{extra_footwear_hint} Ensure ample headroom above the hair and full floor visibility under both shoes. "
+        "8K crisp photographic texture, natural skin tones, authentic textile grain, and anatomically accurate hands and fingers."
     )
     if custom_prompt and custom_prompt.strip():
         sections.append(f"Additional user styling instruction: {custom_prompt.strip()}")

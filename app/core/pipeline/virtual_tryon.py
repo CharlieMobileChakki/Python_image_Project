@@ -6,11 +6,14 @@ with multi-image Qwen-Image-2.1-Turbo synthesis on the remote GPU worker.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import logging
 import time
 from typing import Any
 import uuid
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 from app.core.flow_b import (
     generate_garment_via_gpu,
@@ -26,6 +29,71 @@ from app.core.pipeline.pipeline_config import OUTPUT_DIR
 
 TRYON_OUTPUT_WIDTH = 768
 TRYON_OUTPUT_HEIGHT = 1024
+
+
+def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | None:
+    """Detect primary frontal face ``(x1, y1, x2, y2)`` via OpenCV Haar cascade when available."""
+    try:
+        import cv2
+        import numpy as np
+
+        gray = cv2.cvtColor(np.array(avatar_rgb), cv2.COLOR_RGB2GRAY)
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        if cascade.empty():
+            return None
+        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
+        if len(faces) == 0:
+            return None
+        x, y, fw, fh = max(faces, key=lambda b: int(b[2]) * int(b[3]))
+        w, h = avatar_rgb.size
+        return (
+            max(0, int(x - 0.35 * fw)),
+            max(0, int(y - 0.45 * fh)),
+            min(w, int(x + 1.35 * fw)),
+            min(h, int(y + 1.18 * fh)),
+        )
+    except Exception as exc:
+        logger.debug("OpenCV face detection skipped: %s", exc)
+        return None
+
+
+def prepare_face_identity_ref(
+    avatar_rgb: Image.Image,
+    face_box_2d: list[int] | None = None,
+    canvas_size: int = 512,
+) -> Image.Image:
+    """Extract a clean neutral-padded head/face identity reference excluding old torso clothes and background pose."""
+    w, h = avatar_rgb.size
+    if w < 128 or h < 128:
+        return avatar_rgb
+
+    crop_coords: tuple[int, int, int, int] | None = None
+    if face_box_2d and len(face_box_2d) == 4:
+        ymin, xmin, ymax, xmax = face_box_2d
+        bw = max(1.0, (xmax - xmin) * w / 1000.0)
+        bh = max(1.0, (ymax - ymin) * h / 1000.0)
+        x1 = max(0, int(xmin * w / 1000.0 - 0.14 * bw))
+        y1 = max(0, int(ymin * h / 1000.0 - 0.12 * bh))
+        x2 = min(w, int(xmax * w / 1000.0 + 0.14 * bw))
+        y2 = min(h, int(ymax * h / 1000.0 + 0.04 * bh))
+        if x2 - x1 >= 48 and y2 - y1 >= 48:
+            crop_coords = (x1, y1, x2, y2)
+
+    if crop_coords is None:
+        crop_coords = _detect_face_box_cv(avatar_rgb)
+
+    if crop_coords is None:
+        return avatar_rgb
+
+    head_crop = avatar_rgb.crop(crop_coords)
+    # Place head portrait centered on neutral alabaster studio card so <image1> carries zero pose/clothing prior
+    canvas = Image.new("RGB", (canvas_size, canvas_size), (244, 241, 236))
+    max_head_dim = int(canvas_size * 0.62)
+    head_crop.thumbnail((max_head_dim, max_head_dim), Image.Resampling.LANCZOS)
+    px = (canvas_size - head_crop.width) // 2
+    py = (canvas_size - head_crop.height) // 2
+    canvas.paste(head_crop, (px, py))
+    return canvas
 
 
 def _decode_group_entries(
@@ -83,6 +151,7 @@ def process_virtual_tryon_pipeline(
     garment_by_idx = {g["garment_index"]: g for g in plan["garments"]}
     acc_by_idx = {a["accessory_index"]: a for a in plan["accessories"]}
     combos = plan["combinations"]
+    identity_avatar_img = prepare_face_identity_ref(avatar_rgb, plan.get("avatar_face_box_2d"))
 
     def _synthesize_combo(combo_idx: int, combo: dict[str, Any]) -> dict[str, Any]:
         g_indices = combo["selected_garment_indices"]
@@ -98,7 +167,7 @@ def process_virtual_tryon_pipeline(
             custom_prompt=custom_prompt,
         )
         condition_images: list[Image.Image] = (
-            [avatar_rgb]
+            [identity_avatar_img]
             + [garments[i]["image"] for i in g_indices]
             + [accessories[i]["image"] for i in a_indices]
         )[:total_refs]
