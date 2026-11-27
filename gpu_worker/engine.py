@@ -18,9 +18,9 @@ import threading
 import time
 from typing import Any, Optional
 
-# Lazy CUDA module loading speeds up cold start; avoid expandable_segments:True which can stall large .to("cuda") transfers
+# Lazy CUDA module loading speeds up cold start; expandable_segments reduces multi-image fragmentation on 44-48GB GPUs
 os.environ.setdefault("CUDA_MODULE_LOADING", "LAZY")
-os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from dotenv import load_dotenv
 from PIL import Image, ImageOps
@@ -248,21 +248,66 @@ def preload_models(background_qwen: bool = False) -> None:
         threading.Thread(target=_bg, daemon=True, name="qwen-warmup").start()
 
 
+def _cap_pil_edge(img: Image.Image, max_in: int) -> Image.Image:
+    """Resize RGB image cleanly with LANCZOS if its longest edge exceeds ``max_in``."""
+    w, h = img.size
+    if max(w, h) > max_in:
+        scale = max_in / float(max(w, h))
+        return img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
+    return img
+
+
 def prepare_ref_image(raw_bytes: bytes, max_in: int = 896) -> Image.Image:
     """Decode EXIF-corrected RGB reference image capped cleanly to ``max_in`` max edge."""
     ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGB")
-    w, h = ref_img.size
-    if max(w, h) > max_in:
-        scale = max_in / float(max(w, h))
-        ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
-    return ref_img
+    return _cap_pil_edge(ref_img, max_in)
 
 
-def prepare_ref_images(raw_bytes_list: list[bytes], max_in: int = 768) -> list[Image.Image]:
-    """Decode up to 10 EXIF-corrected RGB condition images for Qwen-Image-2.1 multi-image inference."""
+def _adaptive_multi_edge(idx: int, total_refs: int) -> int:
+    """Choose VRAM-safe reference image resolution budget by batch reference count."""
+    if total_refs <= 1:
+        return 896
+    if total_refs <= 3:
+        return 512
+    if total_refs <= 5:
+        return 512 if idx == 0 else 448
+    return 448 if idx == 0 else 384
+
+
+def prepare_ref_images(raw_bytes_list: list[bytes], max_in: int | None = None) -> list[Image.Image]:
+    """Decode up to 10 EXIF-corrected RGB condition images with adaptive VRAM-safe resolution scaling."""
     if not raw_bytes_list:
         raise ValueError("At least one reference image is required.")
-    return [prepare_ref_image(raw, max_in=max_in) for raw in raw_bytes_list[:10]]
+    capped = raw_bytes_list[:10]
+    total = len(capped)
+    return [
+        prepare_ref_image(raw, max_in=max_in if max_in is not None else _adaptive_multi_edge(idx, total))
+        for idx, raw in enumerate(capped)
+    ]
+
+
+def _set_low_vram_mode(pipe: Any, enabled: bool, slice_attention: bool = False) -> None:
+    """Toggle reversible VAE slicing/tiling and optional attention slicing without penalizing fast single-image mode."""
+    if hasattr(pipe, "vae"):
+        if enabled:
+            if hasattr(pipe.vae, "enable_tiling"):
+                pipe.vae.enable_tiling()
+            if hasattr(pipe.vae, "enable_slicing"):
+                pipe.vae.enable_slicing()
+        else:
+            if hasattr(pipe.vae, "disable_tiling"):
+                pipe.vae.disable_tiling()
+            if hasattr(pipe.vae, "disable_slicing"):
+                pipe.vae.disable_slicing()
+    if slice_attention and hasattr(pipe, "enable_attention_slicing"):
+        pipe.enable_attention_slicing("max")
+    elif not enabled and hasattr(pipe, "disable_attention_slicing"):
+        pipe.disable_attention_slicing()
+
+
+def _is_cuda_oom(exc: BaseException) -> bool:
+    """Detect PyTorch CUDA OutOfMemoryError safely across mock/real environments."""
+    return "out of memory" in str(exc).lower()
 
 
 def run_inference_sync(
@@ -282,6 +327,10 @@ def run_inference_sync(
     ref_list = [ref_img] if isinstance(ref_img, Image.Image) else list(ref_img)[:10]
     if not ref_list:
         raise ValueError("No reference images provided for Qwen-Image-2.1-Turbo inference.")
+
+    is_multi = len(ref_list) > 1
+    if is_multi:
+        ref_list = [_cap_pil_edge(img, _adaptive_multi_edge(idx, len(ref_list))) for idx, img in enumerate(ref_list)]
     pipe_image: Image.Image | list[Image.Image] = ref_list[0] if len(ref_list) == 1 else ref_list
 
     target_w = int(width) if width and int(width) > 0 else OUTPUT_WIDTH
@@ -303,17 +352,20 @@ def run_inference_sync(
         props = torch.cuda.get_device_properties(0)
         total_vram_gb = props.total_memory / (1024 ** 3)
         mem_gb = torch.cuda.memory_allocated(0) / (1024 ** 3)
-        if mem_gb > max(20.0, total_vram_gb * 0.85):
+        if is_multi or mem_gb > max(20.0, total_vram_gb * 0.85):
             gc.collect()
             torch.cuda.empty_cache()
 
     with _pipe_lock, torch.inference_mode():
+        if is_multi:
+            _set_low_vram_mode(pipe, enabled=True, slice_attention=False)
+
         pipe_kwargs: dict[str, Any] = {
             "prompt": prompt,
             "image": pipe_image,
             "width": target_w,
             "height": target_h,
-            "use_kv_cache": True,
+            "use_kv_cache": len(ref_list) <= 2,
             "generator": generator,
         }
         call_params = inspect.signature(pipe.__call__).parameters
@@ -325,10 +377,36 @@ def run_inference_sync(
             pipe_kwargs["guidance_scale"] = float(guidance_scale)
 
         t_pipe = time.perf_counter()
-        result = pipe(**pipe_kwargs)
-        out_img = result.images[0].convert("RGB")
-        del result
-        logger.info("Qwen pipe execution finished in %.2fs", time.perf_counter() - t_pipe)
+        try:
+            try:
+                result = pipe(**pipe_kwargs)
+            except Exception as oom_exc:
+                if not _is_cuda_oom(oom_exc):
+                    raise
+                logger.warning(
+                    "CUDA OOM on refs=%d (%s); retrying with attention slicing + compact 384px refs...",
+                    len(ref_list),
+                    oom_exc,
+                )
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                _set_low_vram_mode(pipe, enabled=True, slice_attention=True)
+                compact_refs = [_cap_pil_edge(img, 384) for img in ref_list]
+                pipe_kwargs["image"] = compact_refs[0] if len(compact_refs) == 1 else compact_refs
+                pipe_kwargs["use_kv_cache"] = False
+                pipe_kwargs["generator"] = torch.Generator("cpu").manual_seed(used_seed)
+                result = pipe(**pipe_kwargs)
+
+            out_img = result.images[0].convert("RGB")
+            del result
+            logger.info("Qwen pipe execution finished in %.2fs", time.perf_counter() - t_pipe)
+        finally:
+            if is_multi or hasattr(pipe, "disable_attention_slicing"):
+                _set_low_vram_mode(pipe, enabled=False, slice_attention=False)
+            if is_multi and torch.cuda.is_available():
+                gc.collect()
+                torch.cuda.empty_cache()
 
     t_save = time.perf_counter()
     buf = io.BytesIO()

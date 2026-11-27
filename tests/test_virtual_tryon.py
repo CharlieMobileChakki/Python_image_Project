@@ -119,6 +119,11 @@ class TestMultiImageGpuWorkerAndClient(unittest.TestCase):
             self.assertEqual(len(prepared), 3)
             self.assertEqual(prepared[0].size, (768, 768))
 
+            raw_five = [_make_image_bytes((i * 30, 110, 140), (1000, 1000)) for i in range(5)]
+            adaptive_five = engine.prepare_ref_images(raw_five)
+            self.assertEqual(adaptive_five[0].size, (512, 512))
+            self.assertEqual(adaptive_five[1].size, (448, 448))
+
             fake_pipe = MagicMock(
                 return_value=types.SimpleNamespace(images=[Image.new("RGB", (768, 1024), (250, 250, 250))])
             )
@@ -128,6 +133,25 @@ class TestMultiImageGpuWorkerAndClient(unittest.TestCase):
             self.assertGreater(len(png_bytes), 100)
             self.assertIsInstance(fake_pipe.call_args.kwargs["image"], list)
             self.assertEqual(len(fake_pipe.call_args.kwargs["image"]), 3)
+            self.assertFalse(fake_pipe.call_args.kwargs["use_kv_cache"])
+
+            # Verify automatic OOM rescue downscales to 384px, slices attention, and retries cleanly
+            oom_pipe = MagicMock(
+                side_effect=[
+                    RuntimeError("CUDA out of memory. Tried to allocate 568.00 MiB"),
+                    types.SimpleNamespace(images=[Image.new("RGB", (768, 1024), (245, 245, 245))]),
+                ]
+            )
+            oom_pipe.__call__ = oom_pipe
+            oom_pipe.enable_attention_slicing = MagicMock()
+            oom_pipe.disable_attention_slicing = MagicMock()
+            with patch.object(engine, "load_qwen21_pipeline", return_value=oom_pipe):
+                rescued_bytes, _, _ = engine.run_inference_sync(adaptive_five, "<image1> + 4 refs", width=768, height=1024)
+            self.assertGreater(len(rescued_bytes), 100)
+            self.assertEqual(oom_pipe.call_count, 2)
+            oom_pipe.enable_attention_slicing.assert_called_once_with("max")
+            oom_pipe.disable_attention_slicing.assert_called_once()
+            self.assertEqual(oom_pipe.call_args.kwargs["image"][0].size, (384, 384))
 
             b64_list = [base64.b64encode(_make_image_bytes((10, 20, 30), (64, 64))).decode("ascii") for _ in range(3)]
             out_bytes = _make_image_bytes((200, 210, 220), (768, 1024))

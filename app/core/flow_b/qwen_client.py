@@ -500,8 +500,8 @@ def generate_garment_via_gpu(
         img_bytes_list = [
             _encode_image_bytes(
                 img,
-                max_dim=1024 if is_multi else 1600,
-                quality=92 if is_multi else 98,
+                max_dim=640 if is_multi else 1600,
+                quality=90 if is_multi else 98,
             )
             for img in refs
         ]
