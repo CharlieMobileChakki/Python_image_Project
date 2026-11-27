@@ -213,7 +213,19 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("COMPLETE GARMENT DRESSING", prompt)
         self.assertNotIn("DEFAULT LOWER GARMENT", prompt)
 
-        # When NO bottom pant is uploaded with a top, default jet-black tailored pants must be applied
+        # When NO top shirt is uploaded (pants/jeans ONLY!), never generate shirtless — add modest complement top
+        bottom_only_prompt, bottom_only_refs = build_qwen_tryon_prompt(
+            plan["avatar_summary"],
+            [plan["garments"][2]],
+            [],
+            occasion="casual",
+            avatar_gender="male",
+        )
+        self.assertEqual(bottom_only_refs, 2)
+        self.assertIn("NO SHIRTLESS TORSO", bottom_only_prompt)
+        self.assertIn("T-shirt", bottom_only_prompt)
+
+        # When NO bottom pant is uploaded with a top, default black tailored trousers/jeans must be applied
         top_only_prompt, top_only_refs = build_qwen_tryon_prompt(
             plan["avatar_summary"],
             [plan["garments"][0]],
@@ -222,7 +234,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             avatar_gender="male",
         )
         self.assertEqual(top_only_refs, 2)
-        self.assertIn("jet-black tailored slim-fit trousers", top_only_prompt)
+        self.assertIn("jet-black tailored slim", top_only_prompt)
         self.assertIn("adult male fashion model", top_only_prompt)
 
     def test_stylist_isolated_parallel_vision_and_gender_accessory_filtering(self):
@@ -351,16 +363,16 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             self.assertEqual(res["total_combinations"], 2)
             self.assertEqual(len(captured_calls), 2)
             for refs, prompt, w, h in captured_calls:
-                self.assertEqual((w, h), (768, 1024))
+                self.assertEqual((w, h), (832, 1152))
                 self.assertEqual(len(refs), 4)  # avatar + top + bottom + watch
                 self.assertIn("<image4>", prompt)
             for look in res["combinations"]:
                 self.assertTrue(look["url"].startswith("https://bg.arangtik.com/api/outputs/"))
-                self.assertEqual(look["resolution"], "768x1024")
+                self.assertEqual(look["resolution"], "832x1152")
                 saved_name = look["url"].rsplit("/", 1)[-1]
                 self.assertTrue((Path(tmpdir) / saved_name).exists())
 
-            # Top-only upload without pants automatically applies Default Solid Jet-Black Trousers
+            # Top-only upload without pants dynamically applies solid jet-black trousers/jeans
             top_only_res = virtual_tryon.process_virtual_tryon_pipeline(
                 avatar_bytes=_make_image_bytes((210, 180, 160), (256, 384)),
                 garment_entries=[
@@ -368,11 +380,19 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
                 ],
                 max_combinations=1,
             )
-            self.assertEqual(
-                top_only_res["combinations"][0]["garment_details"][-1]["label"],
-                "Default Solid Jet-Black Trousers",
+            self.assertIn("Jet-Black", top_only_res["combinations"][0]["garment_details"][-1]["label"])
+            self.assertIn("jet-black tailored slim", top_only_res["combinations"][0]["prompt_used"])
+
+            # Bottom-only (jeans ONLY, no shirt) automatically adds modest upper top (never shirtless)
+            jeans_only_res = virtual_tryon.process_virtual_tryon_pipeline(
+                avatar_bytes=_make_image_bytes((210, 180, 160), (256, 384)),
+                garment_entries=[
+                    {"bytes": _make_image_bytes((40, 70, 130)), "role_hint": "bottom", "filename": "blue_denim_jeans.jpg"},
+                ],
+                max_combinations=1,
             )
-            self.assertIn("jet-black tailored slim-fit trousers", top_only_res["combinations"][0]["prompt_used"])
+            self.assertEqual(jeans_only_res["combinations"][0]["garment_details"][0]["label"], "Default Modest Complementary Top")
+            self.assertIn("NO SHIRTLESS TORSO", jeans_only_res["combinations"][0]["prompt_used"])
 
         from app.api.routes import router as api_router
         from app.api.virtual_tryon import virtual_tryon_router

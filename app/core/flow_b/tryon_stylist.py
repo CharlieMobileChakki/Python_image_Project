@@ -86,12 +86,14 @@ Return STRICTLY valid JSON:
   "design_details": "..."
 }"""
 
-COMBO_CURATION_SYSTEM_PROMPT = """You are a celebrity fashion stylist curating outfit combinations from an already-analyzed catalog JSON for the specified `avatar_gender` and `occasion`.
+COMBO_CURATION_SYSTEM_PROMPT = """You are a celebrity fashion stylist curating complete, modest, head-to-toe outfit combinations from an already-analyzed catalog JSON for the specified `avatar_gender` and `occasion`.
 
 Rules:
 - Create up to `max_combinations` distinct, well-coordinated looks matching `avatar_gender`.
 - Pair complementary tops with bottoms (and include full_outfit entries). Order upper/full garments before bottoms.
-- Incorporate ALL provided compatible accessories in every look (only pick between competing items of the same body slot, like 2 pairs of shoes).
+- If a look has ONLY upper garments (no bottom, not full_outfit), dynamically include `"complement_bottom"` describing well-matched solid jet-black/dark trousers or black denim suited to the top's style and gender.
+- If a look has ONLY lower garments/pants/jeans (no top, not full_outfit), you MUST dynamically include `"complement_top"` describing a clean, modest, solid neutral upper shirt or fitted crew-neck T-shirt suited to `avatar_gender` so the torso is NEVER shirtless.
+- Incorporate ALL provided compatible accessories in every look (only pick between competing items of the same body slot).
 - Reference ONLY valid 0-based `garment_index` and `accessory_index` integers from the catalog.
 
 Return STRICTLY valid JSON:
@@ -102,7 +104,9 @@ Return STRICTLY valid JSON:
       "occasion": "smart_casual",
       "style_reason": "Why colors, silhouette, gender styling, and accessories work together.",
       "selected_garment_indices": [0, 1],
-      "selected_accessory_indices": [0, 1]
+      "selected_accessory_indices": [0, 1],
+      "complement_top": "",
+      "complement_bottom": ""
     }
   ]
 }"""
@@ -278,11 +282,97 @@ def _build_fallback_accessory_item(acc: dict[str, Any], idx: int) -> dict[str, A
     }
 
 
+def _dynamic_missing_garment(
+    role_needed: str,
+    selected_garments: list[dict[str, Any]],
+    avatar_gender: str,
+    occasion: str,
+) -> tuple[str, str]:
+    """Dynamically choose modest upper or lower complement matching uploaded clothes, gender, and occasion."""
+    ctx = " ".join(
+        f"{g.get('title', '')} {g.get('colors', '')} {g.get('patterns_and_design', '')}"
+        for g in selected_garments
+    ).lower()
+    occ = (occasion or "smart_casual").lower()
+
+    if role_needed == "bottom":
+        if any(k in ctx for k in ("kurta", "sherwani", "ethnic", "nehru", "festive")):
+            return (
+                "Tailored Solid Jet-Black Ethnic Straight Trousers",
+                "crisp solid jet-black straight-leg ethnic trousers tailored neatly to the ankles, zero logos or prints",
+            )
+        if any(k in ctx for k in ("formal", "blazer", "oxford", "suit", "button-down")) or occ == "formal":
+            return (
+                "Tailored Solid Jet-Black Formal Trousers",
+                "crisp solid jet-black tailored slim formal trousers extending neatly to the ankles with sharp crease and zero patterns",
+            )
+        return (
+            "Solid Jet-Black Slim-Fit Trousers / Denim Jeans",
+            "clean solid jet-black tailored slim trousers/denim jeans extending naturally to the ankles without logos or prints",
+        )
+
+    # role_needed == "top": NEVER leave torso shirtless when user uploads only pants/jeans!
+    is_denim_or_casual = any(k in ctx for k in ("jean", "denim", "cargo", "jogger", "short")) or occ in ("casual", "streetwear")
+    is_black_bottom = any(k in ctx for k in ("black", "charcoal", "dark grey"))
+    if avatar_gender == "female":
+        if is_denim_or_casual:
+            top_color = "crisp optic white" if is_black_bottom else "clean soft ivory white"
+            return (
+                "Modest Solid Fitted Short-Sleeve Crew-Neck Top",
+                f"{top_color} modest fitted cotton crew-neck short-sleeve top covering the full torso down to the waistband, plain unbranded fabric",
+            )
+        return (
+            "Modest Solid Tailored Collared Shirt / Blouse",
+            "crisp solid ivory-white tailored modest full-coverage shirt tucked neatly into the waistband so visual focus stays on the uploaded bottom garment",
+        )
+
+    if is_denim_or_casual:
+        top_color = "clean solid crisp optic white" if is_black_bottom else "clean solid soft off-white"
+        return (
+            "Modest Solid Matte Crew-Neck Cotton T-Shirt",
+            f"{top_color} modest crew-neck short-sleeve cotton T-shirt covering the entire chest, shoulders, and torso down to the waistband",
+        )
+    return (
+        "Modest Solid Crisp Classic Collared Shirt",
+        "crisp solid white or pale mist-blue tailored full-coverage cotton shirt worn neatly over the waistband so visual focus stays on the uploaded trousers",
+    )
+
+
+def _resolve_combo_complements(
+    sel_meta: list[dict[str, Any]],
+    avatar_gender: str,
+    occasion: str,
+    raw_comp_top: str = "",
+    raw_comp_bottom: str = "",
+) -> tuple[str, str, str]:
+    """Ensure every incomplete combo gets dynamic complementary top or bottom (never bare skin)."""
+    has_top = any(g["role"] in ("top", "outerwear", "full_outfit") for g in sel_meta)
+    has_bottom = any(g["role"] in ("bottom", "full_outfit") for g in sel_meta)
+
+    comp_top = str(raw_comp_top or "").strip() if not has_top else ""
+    comp_bottom = str(raw_comp_bottom or "").strip() if not has_bottom else ""
+    note = ""
+
+    if not has_top and not comp_top:
+        t_title, comp_top = _dynamic_missing_garment("top", sel_meta, avatar_gender, occasion)
+        note = f" styled modestly with {t_title.lower()}"
+    elif not has_top:
+        note = f" styled modestly with {comp_top}"
+    elif not has_bottom and not comp_bottom:
+        b_title, comp_bottom = _dynamic_missing_garment("bottom", sel_meta, avatar_gender, occasion)
+        note = f" paired with {b_title.lower()}"
+    elif not has_bottom:
+        note = f" paired with {comp_bottom}"
+
+    return comp_top, comp_bottom, note
+
+
 def _build_deterministic_combinations(
     eligible_garments: list[dict[str, Any]],
     eligible_accessories: list[dict[str, Any]],
     max_combinations: int,
     occasion: str,
+    avatar_gender: str = "unknown",
 ) -> list[dict[str, Any]]:
     raw_combos = _generate_diverse_garment_pairs(eligible_garments, max_combinations)
     garment_by_idx = {g["garment_index"]: g for g in eligible_garments}
@@ -290,18 +380,20 @@ def _build_deterministic_combinations(
     combinations: list[dict[str, Any]] = []
     for c_idx, g_indices in enumerate(raw_combos):
         g_sorted = sorted(g_indices, key=lambda idx: (_ROLE_SORT_ORDER.get(garment_by_idx[idx]["role"], 2), idx))
-        titles = [garment_by_idx[i]["title"] for i in g_sorted]
-        has_bottom = any(garment_by_idx[i]["role"] in ("bottom", "full_outfit") for i in g_sorted)
-        bottom_note = "" if has_bottom else " paired with solid jet-black tailored pants"
+        sel_meta = [garment_by_idx[i] for i in g_sorted]
+        titles = [g["title"] for g in sel_meta]
+        comp_top, comp_bottom, note = _resolve_combo_complements(sel_meta, avatar_gender, occasion)
         max_acc = max(0, MAX_TRYON_CONDITION_IMAGES - 1 - len(g_sorted))
         acc_sel = all_acc_indices[:max_acc]
         acc_note = f" + {len(acc_sel)} matching accessory/ies" if acc_sel else ""
         combinations.append({
             "title": " + ".join(titles) or f"Curated Look #{c_idx + 1}",
             "occasion": occasion or "smart_casual",
-            "style_reason": f"Balanced coordination pairing {', '.join(titles)}{bottom_note}{acc_note}.",
+            "style_reason": f"Balanced coordination showcasing {', '.join(titles)}{note}{acc_note}.",
             "selected_garment_indices": g_sorted,
             "selected_accessory_indices": acc_sel,
+            "complement_top": comp_top,
+            "complement_bottom": comp_bottom,
         })
     return combinations
 
@@ -494,8 +586,9 @@ def _sanitize_combinations(
     eligible_accessories: list[dict[str, Any]],
     max_combinations: int,
     occasion: str,
+    avatar_gender: str = "unknown",
 ) -> list[dict[str, Any]]:
-    """Validate stylist combination indices, enforce top->bottom ordering, and retain compatible accessories."""
+    """Validate stylist combination indices, enforce top->bottom ordering, and ensure full modest coverage."""
     garment_by_idx = {g["garment_index"]: g for g in eligible_garments}
     acc_by_idx = {a["accessory_index"]: a for a in eligible_accessories}
     valid_g = set(garment_by_idx.keys())
@@ -545,17 +638,30 @@ def _sanitize_combinations(
             continue
         seen_sigs.add(sig)
 
+        sel_meta = [garment_by_idx[i] for i in g_sel]
+        comp_top, comp_bottom, _ = _resolve_combo_complements(
+            sel_meta,
+            avatar_gender,
+            str(raw_c.get("occasion") or occasion or "smart_casual").strip(),
+            raw_comp_top=str(raw_c.get("complement_top") or ""),
+            raw_comp_bottom=str(raw_c.get("complement_bottom") or ""),
+        )
+
         cleaned.append({
             "title": str(raw_c.get("title") or f"Styled Look #{len(cleaned) + 1}").strip(),
             "occasion": str(raw_c.get("occasion") or occasion or "smart_casual").strip(),
             "style_reason": str(raw_c.get("style_reason") or "Curated wardrobe coordination.").strip(),
             "selected_garment_indices": g_sel,
             "selected_accessory_indices": a_sel,
+            "complement_top": comp_top,
+            "complement_bottom": comp_bottom,
         })
         if len(cleaned) >= max_combinations:
             break
 
-    return cleaned or _build_deterministic_combinations(eligible_garments, eligible_accessories, max_combinations, occasion)
+    return cleaned or _build_deterministic_combinations(
+        eligible_garments, eligible_accessories, max_combinations, occasion, avatar_gender
+    )
 
 
 def analyze_wardrobe_and_plan_tryon(
@@ -646,12 +752,17 @@ def analyze_wardrobe_and_plan_tryon(
                 eligible_a,
                 max_combinations,
                 occasion,
+                avatar_gender=avatar_gender,
             )
         except Exception as exc:
             logger.warning("Combo curation text call failed (%s); using deterministic stylist pairing.", exc)
-            combinations = _build_deterministic_combinations(eligible_g, eligible_a, max_combinations, occasion)
+            combinations = _build_deterministic_combinations(
+                eligible_g, eligible_a, max_combinations, occasion, avatar_gender
+            )
     else:
-        combinations = _build_deterministic_combinations(eligible_g, eligible_a, max_combinations, occasion)
+        combinations = _build_deterministic_combinations(
+            eligible_g, eligible_a, max_combinations, occasion, avatar_gender
+        )
 
     return {
         "avatar_gender": avatar_gender,
@@ -683,6 +794,8 @@ def build_qwen_tryon_prompt(
     custom_prompt: str | None = None,
     original_worn_clothes: str = "",
     avatar_gender: str = "unknown",
+    complement_top: str = "",
+    complement_bottom: str = "",
 ) -> tuple[str, int]:
     """Build crisp, identity-anchored `<image1>`, `<image2>`, ... multi-image Qwen-2.1 prompt."""
     garment_clauses: list[str] = []
@@ -693,7 +806,7 @@ def build_qwen_tryon_prompt(
         garment_clauses.append(
             f"Dress the model's {g['role']} EXCLUSIVELY in the EXACT {g['title']} shown in {tag}: "
             f"colors {g['colors']}; {g['patterns_and_design']}. "
-            f"Reproduce every authentic stripe, crest, logo, pattern motif, collar/neckline shape, sleeve length, and fabric weave from {tag}."
+            f"Reproduce every authentic wash, stripe, topstitch, crest, logo, pattern motif, collar/neckline shape, sleeve length, and fabric weave from {tag}."
         )
 
     accessory_clauses: list[str] = []
@@ -706,32 +819,37 @@ def build_qwen_tryon_prompt(
             f"Wear the EXACT {a['title']} ({a['accessory_type']}) from {tag} {a['body_placement']}: {a['design_details']}"
         )
 
-    has_bottom = any(g["role"] == "bottom" for g in selected_garments)
-    has_full_outfit = any(g["role"] == "full_outfit" for g in selected_garments)
+    has_top = any(g["role"] in ("top", "outerwear", "full_outfit") for g in selected_garments)
+    has_bottom = any(g["role"] in ("bottom", "full_outfit") for g in selected_garments)
     has_top_and_bottom = (
         any(g["role"] in ("top", "outerwear") for g in selected_garments)
-        and has_bottom
+        and any(g["role"] == "bottom" for g in selected_garments)
     )
     has_shoes = any(
         any(k in f"{a.get('accessory_type', '')} {a.get('body_placement', '')}".lower() for k in ("shoe", "sneaker", "boot", "heel", "loafer", "sandal", "feet"))
         for a in selected_accessories
     )
 
-    default_pants_clause = ""
-    if not has_bottom and not has_full_outfit:
-        default_pants_clause = (
-            "DEFAULT LOWER GARMENT (NO BOTTOM UPLOADED): Since no pants or lower garment was provided, "
-            "dress the lower body cleanly in crisp solid jet-black tailored slim-fit trousers / pants extending naturally down to the ankles with zero patterns or logos."
+    complement_clauses: list[str] = []
+    if not has_top:
+        top_desc = complement_top.strip() or _dynamic_missing_garment("top", selected_garments, avatar_gender, occasion)[1]
+        complement_clauses.append(
+            f"MANDATORY MODEST UPPER COVERAGE (NO SHIRTLESS TORSO): Since only lower wear was provided, dress the entire chest, shoulders, and torso modestly in a {top_desc}, never shirtless or bare-chested."
+        )
+    if not has_bottom:
+        bottom_desc = complement_bottom.strip() or _dynamic_missing_garment("bottom", selected_garments, avatar_gender, occasion)[1]
+        complement_clauses.append(
+            f"DEFAULT LOWER GARMENT (NO BOTTOM UPLOADED): Dress the lower body cleanly in {bottom_desc}."
         )
 
     extra_footwear_hint = (
-        "Complete the look with clean understated black/neutral footwear matching the outfit."
+        "Complete the look with clean understated neutral/black footwear matching the outfit."
         if not has_shoes
         else "Keep the exact footwear from its reference accessory image fully visible on both feet planted naturally on the studio floor."
     )
     tuck_note = (
         "Drape the upper garment cleanly and naturally at the waist over the lower trousers."
-        if has_top_and_bottom
+        if has_top_and_bottom or (not has_top or not has_bottom)
         else ""
     )
     anti_old_shirt = f" Replace and omit the old {original_worn_clothes}." if original_worn_clothes else ""
@@ -746,13 +864,13 @@ def build_qwen_tryon_prompt(
             "Keep the face sharp, unretouched, level, straight-facing toward the camera, and evenly studio-lit so the person is unmistakably recognizable as the exact individual in <image1>."
         ),
         (
-            f"STUDIO E-COMMERCE FASHION CATALOG MODEL: Full-length 0-degree direct front-facing studio lookbook photograph of {model_gender_phrase}, "
-            "standing upright with level shoulders and relaxed natural arms against a completely clean, seamless warm alabaster studio backdrop (#F4F1EC) with subtle natural floor shadow."
+            f"STUDIO E-COMMERCE FASHION CATALOG MODEL: Close-framed full-length 0-degree direct front-facing studio lookbook photograph of {model_gender_phrase}, "
+            "filling roughly 88-92% of the vertical frame height from top of hair near the upper edge down to shoes near the bottom edge so the face is large and high-detail against a clean seamless warm alabaster backdrop (#F4F1EC)."
         ),
         (
             f"COMPLETE GARMENT DRESSING:{anti_old_shirt} "
             + " ".join(garment_clauses)
-            + (" " + default_pants_clause if default_pants_clause else "")
+            + (" " + " ".join(complement_clauses) if complement_clauses else "")
             + (" " + tuck_note if tuck_note else "")
         ),
     ]
@@ -764,7 +882,7 @@ def build_qwen_tryon_prompt(
         )
     sections.append(
         f"FULL-LENGTH CLARITY ({occasion} aesthetic): "
-        f"{extra_footwear_hint} Full head-to-toe framing with ample space above the hair and below both shoes, sharp 8K skin & fabric detail, and anatomically accurate hands."
+        f"{extra_footwear_hint} Tight minimal headroom above hair and clean studio floor under both shoes, sharp 8K skin & fabric detail, anatomically accurate hands."
     )
     if custom_prompt and custom_prompt.strip():
         sections.append(f"Additional styling instruction: {custom_prompt.strip()}")

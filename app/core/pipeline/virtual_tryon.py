@@ -11,6 +11,7 @@ import time
 from typing import Any
 import uuid
 
+import numpy as np
 from PIL import Image, ImageEnhance, ImageStat
 
 logger = logging.getLogger(__name__)
@@ -21,14 +22,15 @@ from app.core.flow_b import (
     is_gpu_worker_configured,
 )
 from app.core.flow_b.tryon_stylist import (
+    _dynamic_missing_garment,
     analyze_wardrobe_and_plan_tryon,
     build_qwen_tryon_prompt,
 )
 from app.core.image_processing import image_to_base64_data_uri, load_image_bytes
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
 
-TRYON_OUTPUT_WIDTH = 768
-TRYON_OUTPUT_HEIGHT = 1024
+TRYON_OUTPUT_WIDTH = 832
+TRYON_OUTPUT_HEIGHT = 1152
 
 
 def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | None:
@@ -62,7 +64,7 @@ def prepare_face_identity_ref(
     face_box_2d: list[int] | None = None,
     canvas_size: int = 576,
 ) -> Image.Image:
-    """Extract a sharp, evenly exposed, tightly framed head/face identity reference excluding old torso clothes."""
+    """Create a borderless, soft-feathered head & upper-neck portrait fading smoothly into studio ivory."""
     w, h = avatar_rgb.size
     if w < 128 or h < 128:
         return avatar_rgb
@@ -72,15 +74,25 @@ def prepare_face_identity_ref(
         ymin, xmin, ymax, xmax = face_box_2d
         bw = max(1.0, (xmax - xmin) * w / 1000.0)
         bh = max(1.0, (ymax - ymin) * h / 1000.0)
-        x1 = max(0, int(xmin * w / 1000.0 - 0.16 * bw))
-        y1 = max(0, int(ymin * h / 1000.0 - 0.14 * bh))
-        x2 = min(w, int(xmax * w / 1000.0 + 0.16 * bw))
-        y2 = min(h, int(ymax * h / 1000.0 + 0.04 * bh))
+        x1 = max(0, int(xmin * w / 1000.0 - 0.28 * bw))
+        y1 = max(0, int(ymin * h / 1000.0 - 0.24 * bh))
+        x2 = min(w, int(xmax * w / 1000.0 + 0.28 * bw))
+        y2 = min(h, int(ymax * h / 1000.0 + 0.26 * bh))
         if x2 - x1 >= 48 and y2 - y1 >= 48:
             crop_coords = (x1, y1, x2, y2)
 
     if crop_coords is None:
-        crop_coords = _detect_face_box_cv(avatar_rgb)
+        cv_box = _detect_face_box_cv(avatar_rgb)
+        if cv_box is not None:
+            cx1, cy1, cx2, cy2 = cv_box
+            bw = max(1.0, float(cx2 - cx1))
+            bh = max(1.0, float(cy2 - cy1))
+            crop_coords = (
+                max(0, int(cx1 - 0.14 * bw)),
+                max(0, int(cy1 - 0.12 * bh)),
+                min(w, int(cx2 + 0.14 * bw)),
+                min(h, int(cy2 + 0.14 * bh)),
+            )
 
     if crop_coords is None:
         return avatar_rgb
@@ -94,13 +106,29 @@ def prepare_face_identity_ref(
     if min(head_crop.size) < 400:
         head_crop = ImageEnhance.Sharpness(head_crop).enhance(1.18)
 
-    # Tightly fill 92% of a clean neutral studio card (~530px face) for maximum facial pixel fidelity & zero collar leak
-    canvas = Image.new("RGB", (canvas_size, canvas_size), (244, 241, 236))
-    max_head_dim = int(canvas_size * 0.92)
+    # Smooth cosine-feathered elliptical vignette + soft bottom fade eliminates hard cutout edges & shirt bleed
+    max_head_dim = int(canvas_size * 0.94)
     head_crop.thumbnail((max_head_dim, max_head_dim), Image.Resampling.LANCZOS)
-    px = (canvas_size - head_crop.width) // 2
-    py = (canvas_size - head_crop.height) // 2
-    canvas.paste(head_crop, (px, py))
+    rw, rh = head_crop.size
+    yy, xx = np.mgrid[0:rh, 0:rw].astype(np.float32)
+    nx = (xx - rw * 0.50) / max(1.0, rw * 0.44)
+    ny = (yy - rh * 0.45) / max(1.0, rh * 0.46)
+    dist = np.sqrt(nx * nx + ny * ny)
+    vignette = np.clip((1.0 - dist) / 0.34, 0.0, 1.0)
+    # Fade lower torso/collar smoothly from 74% to 98% height while keeping full chin/upper neck clear
+    y_norm = yy / max(1.0, float(rh))
+    bottom_fade = np.clip((0.98 - y_norm) / 0.24, 0.0, 1.0)
+    alpha = (0.5 - 0.5 * np.cos(np.pi * vignette)) * (0.5 - 0.5 * np.cos(np.pi * bottom_fade))
+
+    bg_color = np.array([244.0, 241.0, 236.0], dtype=np.float32)
+    fg = np.asarray(head_crop, dtype=np.float32)
+    blended = np.clip(fg * alpha[..., None] + bg_color * (1.0 - alpha[..., None]), 0, 255).astype(np.uint8)
+    feathered = Image.fromarray(blended, mode="RGB")
+
+    canvas = Image.new("RGB", (canvas_size, canvas_size), (244, 241, 236))
+    px = (canvas_size - rw) // 2
+    py = (canvas_size - rh) // 2
+    canvas.paste(feathered, (px, py))
     return canvas
 
 
@@ -167,6 +195,8 @@ def process_virtual_tryon_pipeline(
         selected_g_meta = [garment_by_idx[i] for i in g_indices]
         selected_a_meta = [acc_by_idx[i] for i in a_indices]
 
+        comp_top = str(combo.get("complement_top") or "").strip()
+        comp_bottom = str(combo.get("complement_bottom") or "").strip()
         prompt_text, total_refs = build_qwen_tryon_prompt(
             avatar_summary=plan["avatar_summary"],
             selected_garments=selected_g_meta,
@@ -175,6 +205,8 @@ def process_virtual_tryon_pipeline(
             custom_prompt=custom_prompt,
             original_worn_clothes=plan.get("original_worn_clothes", ""),
             avatar_gender=plan.get("avatar_gender", "unknown"),
+            complement_top=comp_top,
+            complement_bottom=comp_bottom,
         )
         condition_images: list[Image.Image] = (
             [identity_avatar_img]
@@ -213,12 +245,26 @@ def process_virtual_tryon_pipeline(
             }
             for g in selected_g_meta
         ]
-        if not any(g["role"] in ("bottom", "full_outfit") for g in selected_g_meta):
+        if not any(g["role"] in ("top", "outerwear", "full_outfit") for g in selected_g_meta):
+            default_t_title, default_t_desc = _dynamic_missing_garment(
+                "top", selected_g_meta, plan.get("avatar_gender", "unknown"), combo.get("occasion") or occasion
+            )
+            garment_details.insert(0, {
+                "role": "top",
+                "index": -1,
+                "label": "Default Modest Complementary Top",
+                "details": comp_top or f"{default_t_title}: {default_t_desc}",
+                "body_placement": None,
+            })
+        elif not any(g["role"] in ("bottom", "full_outfit") for g in selected_g_meta):
+            default_b_title, default_b_desc = _dynamic_missing_garment(
+                "bottom", selected_g_meta, plan.get("avatar_gender", "unknown"), combo.get("occasion") or occasion
+            )
             garment_details.append({
                 "role": "bottom",
                 "index": -1,
-                "label": "Default Solid Jet-Black Trousers",
-                "details": "Auto-applied solid jet-black tailored slim-fit pants (no lower garment uploaded).",
+                "label": default_b_title,
+                "details": comp_bottom or default_b_desc,
                 "body_placement": None,
             })
 
