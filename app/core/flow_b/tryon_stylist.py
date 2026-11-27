@@ -736,13 +736,14 @@ def build_qwen_tryon_prompt(
     )
     anti_old_shirt = f" Replace and omit the old {original_worn_clothes}." if original_worn_clothes else ""
     model_gender_phrase = _describe_model_gender(avatar_gender)
+    gender_person_noun = "man" if avatar_gender == "male" else ("woman" if avatar_gender == "female" else "person")
 
     sections = [
         (
-            "EXACT IDENTITY FACE LOCK (<image1> SAME REAL PERSON): "
-            f"The full-length model in this studio photograph IS the EXACT SAME real individual shown in <image1> ({avatar_summary}). "
-            "Transfer their EXACT recognizable face directly from <image1> — keeping the identical eye shape, iris expression, eyebrows, nose bridge and nostril width, cheekbones, nasolabial lines, lips, jawline contour, mustache/beard, hairline, salt-and-pepper hair pattern, warm skin tone, and authentic true age so anyone recognizes them immediately as the identical person. "
-            "Keep the head straight, centered, level, and evenly lit in soft daylight matching the body."
+            "STRICT FACE & IDENTITY PRESERVATION (<image1> IDENTICAL PERSON LOCK): "
+            f"The full-length studio fashion model MUST be the EXACT SAME real {gender_person_noun} shown in <image1>. "
+            "Copy and preserve the exact face directly from <image1> — keeping the identical eye shape, irises, eyebrows, eyeglasses (only if worn on eyes in <image1>), nose shape and width, lips, cheek contours, smile lines, jawline, chin, facial hair/mustache, exact hairline and hair pattern, true skin tone, and authentic real age 100% faithfully matching <image1>. "
+            "Keep the face sharp, unretouched, level, straight-facing toward the camera, and evenly studio-lit so the person is unmistakably recognizable as the exact individual in <image1>."
         ),
         (
             f"STUDIO E-COMMERCE FASHION CATALOG MODEL: Full-length 0-degree direct front-facing studio lookbook photograph of {model_gender_phrase}, "

@@ -86,17 +86,17 @@ def prepare_face_identity_ref(
         return avatar_rgb
 
     head_crop = avatar_rgb.crop(crop_coords)
-    # Gently lift dark indoor/night facial exposure so eye/crease/hairline details stay clear for vision encoding
+    # Apply only gentle shadow lift on very dark night photos so skin tone/contrast stay natural and faithful
     mean_luma = float(ImageStat.Stat(head_crop.convert("L")).mean[0])
-    if 15.0 < mean_luma < 105.0:
-        lift = min(1.38, 118.0 / mean_luma)
+    if 15.0 < mean_luma < 85.0:
+        lift = min(1.18, 96.0 / mean_luma)
         head_crop = ImageEnhance.Brightness(head_crop).enhance(lift)
-    if min(head_crop.size) < 380:
-        head_crop = ImageEnhance.Sharpness(head_crop).enhance(1.15)
+    if min(head_crop.size) < 400:
+        head_crop = ImageEnhance.Sharpness(head_crop).enhance(1.18)
 
-    # Tightly fill 90% of a clean neutral studio card (~518px face) for maximum facial pixel fidelity & zero collar leak
+    # Tightly fill 92% of a clean neutral studio card (~530px face) for maximum facial pixel fidelity & zero collar leak
     canvas = Image.new("RGB", (canvas_size, canvas_size), (244, 241, 236))
-    max_head_dim = int(canvas_size * 0.90)
+    max_head_dim = int(canvas_size * 0.92)
     head_crop.thumbnail((max_head_dim, max_head_dim), Image.Resampling.LANCZOS)
     px = (canvas_size - head_crop.width) // 2
     py = (canvas_size - head_crop.height) // 2

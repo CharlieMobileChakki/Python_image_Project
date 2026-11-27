@@ -209,7 +209,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertEqual(total_refs, 5)
         for tag in ("<image1>", "<image2>", "<image3>", "<image4>", "<image5>"):
             self.assertIn(tag, prompt)
-        self.assertIn("EXACT IDENTITY FACE LOCK", prompt)
+        self.assertIn("STRICT FACE & IDENTITY PRESERVATION", prompt)
         self.assertIn("COMPLETE GARMENT DRESSING", prompt)
         self.assertNotIn("DEFAULT LOWER GARMENT", prompt)
 
