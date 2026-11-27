@@ -1,10 +1,10 @@
 """ChatGPT Vision Virtual Try-On Stylist & Multi-Image Qwen Prompt Builder.
 
 Analyzes `[AVATAR]`, each uploaded `[GARMENT_i]`, and each uploaded `[ACCESSORY_j]` in
-**strictly isolated parallel single-image Vision calls** so clothing worn in the user's
+strictly isolated parallel single-image Vision calls so clothing worn in the user's
 original avatar photo can NEVER bleed into or replace uploaded garment descriptions.
-Then curates balanced outfit combinations and constructs pixel-accurate positional
-`<image1>`, `<image2>`, ... prompts for Qwen-Image-2.1 virtual try-on synthesis.
+Applies gender-aware styling & accessory filtering, defaults to solid jet-black pants
+when no bottom garment is uploaded, and builds precision Qwen-2.1 multi-image prompts.
 """
 from __future__ import annotations
 
@@ -28,17 +28,18 @@ AVATAR_ANALYSIS_SYSTEM_PROMPT = """You are a forensic facial & portrait biometri
 
 Analyze ONLY the person in this photograph (IGNORE the clothing/shirt/background they are currently wearing — only note clothing in `original_worn_clothes` so the generator discards it).
 
-Examine every facial region deeply:
-- `age_and_gender`: Apparent age bracket, gender presentation, ethnic complexion, and natural body build (e.g., "early-50s Indian man, warm medium-olive wheatish skin tone, average build").
-- `forensic_face_details`: Detailed geometric description covering:
-  1. Forehead & Hairline: exact hairline shape (receding temples, widow's peak, full, etc.), forehead horizontal lines, exact hair color & salt-and-pepper grey ratio, hair length & parting style.
-  2. Eyes & Brows: eyebrow thickness/arch/color, upper/lower eyelid shape, eye size & spacing, crow's feet or under-eye bags, exact eyeglasses style ONLY IF actually worn ON the eyes/nose bridge (if glasses hang on shirt, explicitly write "no glasses worn on face").
-  3. Nose & Cheeks: nose bridge width, length, bulbous/narrow tip shape, nostril flare, cheek structure, nasolabial smile folds.
-  4. Mouth, Jaw & Chin: lip fullness, mustache/beard stubble pattern & grey mix, jawline width, chin shape, visible neck/ear proportions.
+Determine carefully:
+- `avatar_gender`: "male" | "female" — inspect facial bone structure, brow ridge, jawline, facial hair/stubble/mustache, hairstyle, and overall presentation. Never guess blindly; be accurate.
+- `age_and_gender`: Apparent age bracket, gender, complexion, and natural body build (e.g., "early-50s Indian man, warm medium wheatish skin tone, average build").
+- `forensic_face_details`: Concise, exact facial landmark description:
+  1. Hairline & Hair: receding temples/crown/density, exact hair color & salt-and-pepper grey percentage, parting/comb direction.
+  2. Eyes & Brows: eyebrow thickness/color, eyelid fold, under-eye lines/bags, exact glasses ONLY IF worn ON the eyes (if glasses hang on shirt collar, write "no glasses on eyes").
+  3. Nose, Cheeks & Mouth: nose bridge width/shape, tip shape, nasolabial smile folds, mustache/beard/stubble pattern, lip shape, jawline width & chin contour.
 - `avatar_face_box_2d`: [ymin, xmin, ymax, xmax] integers (0..1000) framing strictly TOP OF HAIR down to CHIN / UPPER JAWLINE (exclude shoulders and shirt collar below chin!).
 
 Return STRICTLY valid JSON:
 {
+  "avatar_gender": "male",
   "avatar_summary": "...",
   "forensic_face_details": "...",
   "original_worn_clothes": "...",
@@ -47,44 +48,50 @@ Return STRICTLY valid JSON:
 
 GARMENT_ANALYSIS_SYSTEM_PROMPT = """You are a master e-commerce textile and apparel catalog director performing a deep pixel-by-pixel inspection of ONE standalone garment image.
 
-Classify the garment into `role`: "top" | "bottom" | "full_outfit" | "outerwear".
-Honor the caller's optional `role_hint` if valid unless unmistakably contradicted.
+Classify:
+- `role`: "top" | "bottom" | "full_outfit" | "outerwear" (honor caller `role_hint` if valid unless clearly contradicted).
+- `target_gender`: "men" | "women" | "unisex" (e.g., sarees, lehengas, female kurtis/crop-tops/gowns -> "women"; standard t-shirts, jeans, chinos, hoodies -> "unisex" unless tailored distinctively for "men" or "women").
 
 Inspect EVERY visual pixel carefully:
 - `title`: Specific product title (e.g., "Optic White Crimson-Trimmed Athletic Football Jersey T-Shirt", "Beige Slim-Fit Cotton Chinos").
 - `colors`: Exact dye hues, trim colors, striping colors, and undertones (never vague generic names).
-- `patterns_and_design`: Exhaustive pixel-level description covering silhouette/fit, exact neckline or collar construction (e.g., crew-neck round collar vs V-neck vs classic button-down collar, buttoned or strictly pullover/buttonless), sleeve length & cuffs, chest/side graphics, logos/crests (specify exact side left/right, color, shape — e.g. small black sportswear 3-bars logo on wearer's right chest, circular gold-crowned crest on left chest, 3 crimson shoulder stripes), prints, embroidery, weave/knit texture, pockets, waistband/hem.
+- `patterns_and_design`: Exhaustive pixel-level description covering silhouette/fit, exact neckline or collar construction (e.g., crew-neck round collar vs V-neck vs classic button-down collar, buttoned or strictly pullover/buttonless), sleeve length & cuffs, chest/side graphics, logos/crests (exact side left/right, color, shape), prints, embroidery, weave/knit texture, pockets, waistband/hem.
 
 Return STRICTLY valid JSON:
 {
   "role": "top",
+  "target_gender": "unisex",
   "title": "...",
   "colors": "...",
   "patterns_and_design": "..."
 }"""
 
-ACCESSORY_ANALYSIS_SYSTEM_PROMPT = """You are a luxury accessories catalog director performing a deep pixel-level inspection of ONE standalone fashion accessory.
+ACCESSORY_ANALYSIS_SYSTEM_PROMPT = """You are a luxury accessories catalog director performing a deep pixel-by-pixel inspection of ONE standalone fashion accessory.
 
-Identify:
-- `accessory_type`: e.g., "wristwatch", "sneakers", "leather_shoes", "sunglasses", "necklace", "earrings", "belt", "handbag", "bracelet", "cap".
-- `body_placement`: exact natural wearing position (e.g., "left wrist", "worn on both feet", "on face/eyes", "around neck", "both ears", "around waist").
+Identify carefully:
+- `accessory_type`: e.g., "wristwatch", "sneakers", "leather_shoes", "sunglasses", "necklace", "earrings", "jhumkas", "bangles", "kada", "ring", "belt", "handbag", "bracelet", "cap", "heels", "anklet".
+- `target_gender`: "men" | "women" | "unisex":
+  * Women-only items: jhumkas, dangling/stud women's earrings, bridal necklaces, chokers, mangalsutra, kundan/pearl haar, bridal/ladies bangle stacks, payal/anklets, women's heels/stiletto sandals, ladies clutch purses -> "women".
+  * Men's or unisex items: wristwatches, sneakers, loafers/dress shoes, sunglasses, belts, caps, backpacks -> "unisex" (or "men" if distinctly men's oxford/mens kada/necktie).
+- `body_placement`: exact natural wearing position (e.g., "left wrist", "worn on both feet", "on face/eyes", "around neck against collarbone", "both earlobes", "around wrist", "around waist", "on ring finger").
 - `title`: Specific concise title.
 - `design_details`: Exhaustive visual details (case finish, dial color/markers, strap texture/color; shoe upper material, toe box, side stripes/logos, midsole/outsole shape; metal karat luster, stones, lens tint).
 
 Return STRICTLY valid JSON:
 {
   "accessory_type": "...",
+  "target_gender": "unisex",
   "body_placement": "...",
   "title": "...",
   "design_details": "..."
 }"""
 
-COMBO_CURATION_SYSTEM_PROMPT = """You are a celebrity fashion stylist curating outfit combinations from an already-analyzed catalog JSON.
+COMBO_CURATION_SYSTEM_PROMPT = """You are a celebrity fashion stylist curating outfit combinations from an already-analyzed catalog JSON for the specified `avatar_gender` and `occasion`.
 
 Rules:
-- Create up to `max_combinations` distinct, well-coordinated looks for the requested `occasion`.
+- Create up to `max_combinations` distinct, well-coordinated looks matching `avatar_gender`.
 - Pair complementary tops with bottoms (and include full_outfit entries). Order upper/full garments before bottoms.
-- Incorporate ALL uploaded non-competing accessories in every look (only pick between competing items of the same body slot, like 2 pairs of shoes).
+- Incorporate ALL provided compatible accessories in every look (only pick between competing items of the same body slot, like 2 pairs of shoes).
 - Reference ONLY valid 0-based `garment_index` and `accessory_index` integers from the catalog.
 
 Return STRICTLY valid JSON:
@@ -93,7 +100,7 @@ Return STRICTLY valid JSON:
     {
       "title": "Smart Casual Sporty Crisp",
       "occasion": "smart_casual",
-      "style_reason": "Why colors, silhouette, and accessories work together.",
+      "style_reason": "Why colors, silhouette, gender styling, and accessories work together.",
       "selected_garment_indices": [0, 1],
       "selected_accessory_indices": [0, 1]
     }
@@ -103,6 +110,12 @@ Return STRICTLY valid JSON:
 _TOP_HINTS = ("shirt", "tshirt", "t-shirt", "tee", "jersey", "top", "kurta", "jacket", "blazer", "hoodie", "polo", "sweater", "blouse")
 _BOTTOM_HINTS = ("pant", "pants", "jean", "jeans", "trouser", "chino", "cargo", "short", "skirt", "joggers", "palazzo")
 _OUTFIT_HINTS = ("dress", "gown", "saree", "lehenga", "jumpsuit", "suit")
+_WOMEN_ITEM_HINTS = (
+    "jhumka", "jhumkas", "earring", "earrings", "mangalsutra", "necklace", "choker", "haar",
+    "bangle", "bangles", "payal", "anklet", "stiletto", "heels", "clutch", "saree", "lehenga",
+    "blouse", "gown", "kurti", "salwar", "dupatta", "skirt", "nose ring", "maang tikka",
+)
+_MEN_ITEM_HINTS = ("necktie", "bowtie", "bow tie", "mens kada", "cufflink")
 _ROLE_SORT_ORDER = {"full_outfit": 0, "top": 1, "outerwear": 2, "bottom": 3}
 
 
@@ -136,18 +149,54 @@ def _normalize_role(raw_role: str | None, fallback: str) -> str:
     return fallback
 
 
+def _normalize_avatar_gender(raw_gender: str | None) -> str:
+    val = (raw_gender or "").strip().lower()
+    if val in ("male", "man", "men", "boy", "masculine"):
+        return "male"
+    if val in ("female", "woman", "women", "girl", "feminine"):
+        return "female"
+    return "unknown"
+
+
+def _normalize_target_gender(raw_gender: str | None, text_blob: str = "") -> str:
+    val = (raw_gender or "").strip().lower()
+    if val in ("women", "woman", "female", "ladies", "girl", "girls"):
+        return "women"
+    if val in ("men", "man", "male", "boys", "gents"):
+        return "men"
+    if val == "unisex":
+        return "unisex"
+    lowered = text_blob.lower()
+    if any(k in lowered for k in _WOMEN_ITEM_HINTS):
+        return "women"
+    if any(k in lowered for k in _MEN_ITEM_HINTS):
+        return "men"
+    return "unisex"
+
+
+def _is_item_gender_compatible(target_gender: str, avatar_gender: str) -> bool:
+    """Return False when a gendered item clearly belongs to the opposite sex."""
+    if avatar_gender == "male" and target_gender == "women":
+        return False
+    if avatar_gender == "female" and target_gender == "men":
+        return False
+    return True
+
+
 def _default_body_placement(accessory_type: str, filename: str = "") -> str:
     text = f"{accessory_type} {filename}".lower()
-    if any(k in text for k in ("watch", "smartwatch", "bangle", "bracelet", "cuff")):
-        return "on left wrist"
+    if any(k in text for k in ("watch", "smartwatch", "bangle", "kada", "bracelet", "cuff")):
+        return "fitted cleanly around wrist"
     if any(k in text for k in ("shoe", "sneaker", "boot", "heel", "loafer", "sandal", "footwear")):
         return "worn on both feet"
     if any(k in text for k in ("glass", "sunglass", "shades", "eyewear", "spectacle")):
-        return "worn naturally on face over eyes"
-    if any(k in text for k in ("necklace", "chain", "pendant", "choker", "tie", "scarf")):
-        return "draped cleanly around neck"
+        return "seated naturally on nose bridge and face over eyes"
+    if any(k in text for k in ("necklace", "chain", "pendant", "choker", "haar", "mangalsutra", "tie", "scarf")):
+        return "draped naturally around neck against collarbone"
     if any(k in text for k in ("earring", "jhumka", "stud")):
-        return "worn on both ears"
+        return "worn symmetrically on both earlobes"
+    if "ring" in text:
+        return "fitted cleanly on ring finger"
     if "belt" in text:
         return "buckled cleanly around waistband"
     if any(k in text for k in ("bag", "handbag", "tote", "clutch", "backpack", "purse")):
@@ -189,6 +238,10 @@ def _generate_diverse_garment_pairs(garment_catalog: list[dict[str, Any]], max_c
             pair = [t, b]
             if pair not in candidates:
                 candidates.append(pair)
+    elif tops:
+        candidates.extend([[t] for t in tops])
+    elif bottoms:
+        candidates.extend([[b] for b in bottoms])
     for f_idx in fulls:
         if [f_idx] not in candidates:
             candidates.append([f_idx])
@@ -199,10 +252,12 @@ def _generate_diverse_garment_pairs(garment_catalog: list[dict[str, Any]], max_c
 
 def _build_fallback_garment_item(g: dict[str, Any], idx: int, total: int) -> dict[str, Any]:
     role = _infer_garment_role(g, idx, total)
-    stem = os.path.splitext(str(g.get("filename") or f"Garment {idx + 1}"))[0].replace("_", " ").replace("-", " ").strip()
+    raw_name = str(g.get("filename") or f"Garment {idx + 1}")
+    stem = os.path.splitext(raw_name)[0].replace("_", " ").replace("-", " ").strip()
     return {
         "garment_index": idx,
         "role": role,
+        "target_gender": _normalize_target_gender("auto", stem),
         "title": stem.title() or f"Garment #{idx + 1} ({role})",
         "colors": "authentic original colors from reference image",
         "patterns_and_design": f"exact garment fabric, print patterns, neckline/collar cut, logos, silhouette, and construction visible in Garment #{idx + 1}",
@@ -210,11 +265,13 @@ def _build_fallback_garment_item(g: dict[str, Any], idx: int, total: int) -> dic
 
 
 def _build_fallback_accessory_item(acc: dict[str, Any], idx: int) -> dict[str, Any]:
-    stem = os.path.splitext(str(acc.get("filename") or f"Accessory {idx + 1}"))[0].replace("_", " ").replace("-", " ").strip()
+    raw_name = str(acc.get("filename") or f"Accessory {idx + 1}")
+    stem = os.path.splitext(raw_name)[0].replace("_", " ").replace("-", " ").strip()
     placement = _default_body_placement(stem, stem)
     return {
         "accessory_index": idx,
         "accessory_type": stem or "accessory",
+        "target_gender": _normalize_target_gender("auto", stem),
         "body_placement": placement,
         "title": stem.title() or f"Accessory #{idx + 1}",
         "design_details": f"exact shape, color, strap/material finish, and hardware details visible in Accessory #{idx + 1}",
@@ -222,25 +279,27 @@ def _build_fallback_accessory_item(acc: dict[str, Any], idx: int) -> dict[str, A
 
 
 def _build_deterministic_combinations(
-    garment_catalog: list[dict[str, Any]],
-    accessory_catalog: list[dict[str, Any]],
+    eligible_garments: list[dict[str, Any]],
+    eligible_accessories: list[dict[str, Any]],
     max_combinations: int,
     occasion: str,
 ) -> list[dict[str, Any]]:
-    raw_combos = _generate_diverse_garment_pairs(garment_catalog, max_combinations)
-    garment_by_idx = {g["garment_index"]: g for g in garment_catalog}
-    all_acc_indices = [a["accessory_index"] for a in accessory_catalog][: max(0, MAX_TRYON_CONDITION_IMAGES - 1)]
+    raw_combos = _generate_diverse_garment_pairs(eligible_garments, max_combinations)
+    garment_by_idx = {g["garment_index"]: g for g in eligible_garments}
+    all_acc_indices = [a["accessory_index"] for a in eligible_accessories][: max(0, MAX_TRYON_CONDITION_IMAGES - 1)]
     combinations: list[dict[str, Any]] = []
     for c_idx, g_indices in enumerate(raw_combos):
         g_sorted = sorted(g_indices, key=lambda idx: (_ROLE_SORT_ORDER.get(garment_by_idx[idx]["role"], 2), idx))
         titles = [garment_by_idx[i]["title"] for i in g_sorted]
+        has_bottom = any(garment_by_idx[i]["role"] in ("bottom", "full_outfit") for i in g_sorted)
+        bottom_note = "" if has_bottom else " paired with solid jet-black tailored pants"
         max_acc = max(0, MAX_TRYON_CONDITION_IMAGES - 1 - len(g_sorted))
         acc_sel = all_acc_indices[:max_acc]
         acc_note = f" + {len(acc_sel)} matching accessory/ies" if acc_sel else ""
         combinations.append({
             "title": " + ".join(titles) or f"Curated Look #{c_idx + 1}",
             "occasion": occasion or "smart_casual",
-            "style_reason": f"Balanced coordination pairing {', '.join(titles)}{acc_note}.",
+            "style_reason": f"Balanced coordination pairing {', '.join(titles)}{bottom_note}{acc_note}.",
             "selected_garment_indices": g_sorted,
             "selected_accessory_indices": acc_sel,
         })
@@ -297,8 +356,9 @@ def _analyze_avatar_single(
     model_name: str,
     base_url: str,
 ) -> dict[str, Any]:
-    """Analyze the avatar photo in complete isolation for biometric facial geometry & head crop."""
+    """Analyze the avatar photo in complete isolation for gender, biometric landmarks & head box."""
     default_avatar = {
+        "avatar_gender": "unknown",
         "avatar_summary": "Same individual from the reference portrait preserving exact age, facial structure, hairline, skin tone, and expression",
         "forensic_face_details": "exact eye shape, brow thickness, nose bridge width, nasolabial contours, lip shape, jawline, hairline, and natural skin texture",
         "original_worn_clothes": "",
@@ -308,7 +368,7 @@ def _analyze_avatar_single(
         parsed = _call_openai_json(
             AVATAR_ANALYSIS_SYSTEM_PROMPT,
             _vision_message_for_image(
-                "[AVATAR] Inspect every facial landmark, hairline, age marker, and skin tone deeply; provide tight head box above shirt.",
+                "[AVATAR] Identify gender accurately and inspect every facial landmark, hairline, age marker, and skin tone deeply; provide tight head box above shirt.",
                 avatar_img,
             ),
             api_key,
@@ -320,6 +380,7 @@ def _analyze_avatar_single(
         forensic = str(parsed.get("forensic_face_details") or "").strip()
         combined = f"{summary}. Facial landmarks: {forensic}".strip(". ") if forensic else summary
         return {
+            "avatar_gender": _normalize_avatar_gender(parsed.get("avatar_gender")),
             "avatar_summary": combined,
             "forensic_face_details": forensic or default_avatar["forensic_face_details"],
             "original_worn_clothes": str(parsed.get("original_worn_clothes") or "").strip(),
@@ -346,7 +407,7 @@ def _analyze_garment_single(
         parsed = _call_openai_json(
             GARMENT_ANALYSIS_SYSTEM_PROMPT,
             _vision_message_for_image(
-                f"[GARMENT_{idx}] (caller role_hint={hint}). Analyze ONLY this garment's colors, collar/neckline, buttons/pullover front, graphics/logos, prints, and fabric weave in extreme pixel detail.",
+                f"[GARMENT_{idx}] (caller role_hint={hint}). Analyze ONLY this garment's colors, target_gender, collar/neckline, buttons/pullover front, graphics/logos, prints, and fabric weave in extreme pixel detail.",
                 g_entry["image"],
             ),
             api_key,
@@ -354,12 +415,15 @@ def _analyze_garment_single(
             base_url,
             max_tokens=550,
         )
+        title = str(parsed.get("title") or fallback["title"]).strip()
+        patterns = str(parsed.get("patterns_and_design") or fallback["patterns_and_design"]).strip()
         return {
             "garment_index": idx,
             "role": _normalize_role(parsed.get("role"), fallback["role"]),
-            "title": str(parsed.get("title") or fallback["title"]).strip(),
+            "target_gender": _normalize_target_gender(parsed.get("target_gender"), f"{title} {patterns}"),
+            "title": title,
             "colors": str(parsed.get("colors") or fallback["colors"]).strip(),
-            "patterns_and_design": str(parsed.get("patterns_and_design") or fallback["patterns_and_design"]).strip(),
+            "patterns_and_design": patterns,
         }
     except Exception as exc:
         logger.warning("Isolated garment #%d Vision analysis failed (%s); using fallback.", idx, exc)
@@ -379,37 +443,61 @@ def _analyze_accessory_single(
         parsed = _call_openai_json(
             ACCESSORY_ANALYSIS_SYSTEM_PROMPT,
             _vision_message_for_image(
-                f"[ACCESSORY_{idx}] Analyze ONLY this accessory's exact type, wearing placement, colors, dials/stripes/soles, and materials.",
+                f"[ACCESSORY_{idx}] Analyze ONLY this accessory's exact type, target_gender (men/women/unisex), wearing placement, colors, dials/stripes/soles/gemstones, and materials.",
                 acc_entry["image"],
             ),
             api_key,
             model_name,
             base_url,
-            max_tokens=400,
+            max_tokens=450,
         )
         acc_type = str(parsed.get("accessory_type") or fallback["accessory_type"]).strip()
+        title = str(parsed.get("title") or fallback["title"]).strip()
+        details = str(parsed.get("design_details") or fallback["design_details"]).strip()
         return {
             "accessory_index": idx,
             "accessory_type": acc_type,
+            "target_gender": _normalize_target_gender(parsed.get("target_gender"), f"{acc_type} {title} {details}"),
             "body_placement": str(parsed.get("body_placement") or _default_body_placement(acc_type)).strip(),
-            "title": str(parsed.get("title") or fallback["title"]).strip(),
-            "design_details": str(parsed.get("design_details") or fallback["design_details"]).strip(),
+            "title": title,
+            "design_details": details,
         }
     except Exception as exc:
         logger.warning("Isolated accessory #%d Vision analysis failed (%s); using fallback.", idx, exc)
         return fallback
 
 
-def _sanitize_combinations(
-    raw_combos: list[Any],
+def _filter_catalogs_by_gender(
+    avatar_gender: str,
     garment_catalog: list[dict[str, Any]],
     accessory_catalog: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Filter incompatible gendered garments/accessories cleanly based on detected avatar gender."""
+    if avatar_gender not in ("male", "female"):
+        return garment_catalog, accessory_catalog, [], []
+
+    compatible_g = [g for g in garment_catalog if _is_item_gender_compatible(g.get("target_gender", "unisex"), avatar_gender)]
+    excluded_g = [g for g in garment_catalog if g not in compatible_g]
+    # Never leave 0 garments if every uploaded item was tagged opposite gender
+    if not compatible_g:
+        compatible_g = garment_catalog
+        excluded_g = []
+
+    compatible_a = [a for a in accessory_catalog if _is_item_gender_compatible(a.get("target_gender", "unisex"), avatar_gender)]
+    excluded_a = [a for a in accessory_catalog if a not in compatible_a]
+    return compatible_g, compatible_a, excluded_g, excluded_a
+
+
+def _sanitize_combinations(
+    raw_combos: list[Any],
+    eligible_garments: list[dict[str, Any]],
+    eligible_accessories: list[dict[str, Any]],
     max_combinations: int,
     occasion: str,
 ) -> list[dict[str, Any]]:
-    """Validate stylist combination indices, enforce top->bottom ordering, and retain missed accessories."""
-    garment_by_idx = {g["garment_index"]: g for g in garment_catalog}
-    acc_by_idx = {a["accessory_index"]: a for a in accessory_catalog}
+    """Validate stylist combination indices, enforce top->bottom ordering, and retain compatible accessories."""
+    garment_by_idx = {g["garment_index"]: g for g in eligible_garments}
+    acc_by_idx = {a["accessory_index"]: a for a in eligible_accessories}
     valid_g = set(garment_by_idx.keys())
     valid_a = set(acc_by_idx.keys())
 
@@ -467,7 +555,7 @@ def _sanitize_combinations(
         if len(cleaned) >= max_combinations:
             break
 
-    return cleaned or _build_deterministic_combinations(garment_catalog, accessory_catalog, max_combinations, occasion)
+    return cleaned or _build_deterministic_combinations(eligible_garments, eligible_accessories, max_combinations, occasion)
 
 
 def analyze_wardrobe_and_plan_tryon(
@@ -477,7 +565,7 @@ def analyze_wardrobe_and_plan_tryon(
     max_combinations: int = 2,
     occasion: str = "smart_casual",
 ) -> dict[str, Any]:
-    """Analyze avatar, every garment, and every accessory in isolated parallel Vision calls, then curate combos."""
+    """Analyze avatar (with gender), garments, and accessories in isolated parallel Vision calls, then curate combos."""
     accessories = accessories or []
     max_combinations = max(1, min(int(max_combinations or 2), 4))
 
@@ -487,11 +575,14 @@ def analyze_wardrobe_and_plan_tryon(
         g_cat = [_build_fallback_garment_item(g, g["index"], len(garments)) for g in garments]
         a_cat = [_build_fallback_accessory_item(a, a["index"]) for a in accessories]
         return {
+            "avatar_gender": "unknown",
             "avatar_summary": "Same individual from the reference portrait preserving exact age, facial structure, hairline, and skin tone",
             "original_worn_clothes": "",
             "avatar_face_box_2d": None,
             "garments": g_cat,
             "accessories": a_cat,
+            "excluded_garments": [],
+            "excluded_accessories": [],
             "combinations": _build_deterministic_combinations(g_cat, a_cat, max_combinations, occasion),
             "prompt_source": "deterministic_fallback",
         }
@@ -499,7 +590,6 @@ def analyze_wardrobe_and_plan_tryon(
     model_name = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini").strip()
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 
-    # Execute isolated per-image Vision calls concurrently so Avatar clothing can never bleed into Garments
     total_calls = 1 + len(garments) + len(accessories)
     with ThreadPoolExecutor(max_workers=min(8, max(1, total_calls))) as pool:
         avatar_fut = pool.submit(_analyze_avatar_single, avatar_img, api_key, model_name, base_url)
@@ -516,17 +606,30 @@ def analyze_wardrobe_and_plan_tryon(
         garment_catalog = sorted((f.result() for f in garment_futs), key=lambda x: x["garment_index"])
         accessory_catalog = sorted((f.result() for f in accessory_futs), key=lambda x: x["accessory_index"])
 
-    possible_pairs = _generate_diverse_garment_pairs(garment_catalog, max_combinations=max(4, max_combinations))
-    has_multiple_garment_choices = len(garment_catalog) > 2 or len(possible_pairs) > 1
+    avatar_gender = avatar_info.get("avatar_gender", "unknown")
+    eligible_g, eligible_a, excluded_g, excluded_a = _filter_catalogs_by_gender(
+        avatar_gender, garment_catalog, accessory_catalog
+    )
+    if excluded_a:
+        logger.info(
+            "Filtered %d gender-incompatible accessory item(s) for %s avatar: %s",
+            len(excluded_a),
+            avatar_gender,
+            [a["title"] for a in excluded_a],
+        )
+
+    possible_pairs = _generate_diverse_garment_pairs(eligible_g, max_combinations=max(4, max_combinations))
+    has_multiple_garment_choices = len(eligible_g) > 2 or len(possible_pairs) > 1
 
     combinations: list[dict[str, Any]]
     if has_multiple_garment_choices:
         try:
             combo_req = {
+                "avatar_gender": avatar_gender,
                 "occasion": occasion,
                 "max_combinations": max_combinations,
-                "garments": garment_catalog,
-                "accessories": accessory_catalog,
+                "garments": eligible_g,
+                "accessories": eligible_a,
             }
             parsed_combos = _call_openai_json(
                 COMBO_CURATION_SYSTEM_PROMPT,
@@ -539,26 +642,37 @@ def analyze_wardrobe_and_plan_tryon(
             )
             combinations = _sanitize_combinations(
                 parsed_combos.get("combinations") or [],
-                garment_catalog,
-                accessory_catalog,
+                eligible_g,
+                eligible_a,
                 max_combinations,
                 occasion,
             )
         except Exception as exc:
             logger.warning("Combo curation text call failed (%s); using deterministic stylist pairing.", exc)
-            combinations = _build_deterministic_combinations(garment_catalog, accessory_catalog, max_combinations, occasion)
+            combinations = _build_deterministic_combinations(eligible_g, eligible_a, max_combinations, occasion)
     else:
-        combinations = _build_deterministic_combinations(garment_catalog, accessory_catalog, max_combinations, occasion)
+        combinations = _build_deterministic_combinations(eligible_g, eligible_a, max_combinations, occasion)
 
     return {
+        "avatar_gender": avatar_gender,
         "avatar_summary": avatar_info["avatar_summary"],
         "original_worn_clothes": avatar_info.get("original_worn_clothes", ""),
         "avatar_face_box_2d": avatar_info.get("avatar_face_box_2d"),
         "garments": garment_catalog,
         "accessories": accessory_catalog,
+        "excluded_garments": excluded_g,
+        "excluded_accessories": excluded_a,
         "combinations": combinations[:max_combinations],
         "prompt_source": avatar_info.get("source") or f"openai:{model_name}",
     }
+
+
+def _describe_model_gender(avatar_gender: str) -> str:
+    if avatar_gender == "male":
+        return "an adult male fashion model with natural masculine shoulders, flat tailored chest fit, and confident masculine stance"
+    if avatar_gender == "female":
+        return "an adult female fashion model with graceful feminine silhouette tailoring and natural poised stance"
+    return "an adult fashion model standing in clean upright fashion lookbook stance"
 
 
 def build_qwen_tryon_prompt(
@@ -568,17 +682,18 @@ def build_qwen_tryon_prompt(
     occasion: str = "smart_casual",
     custom_prompt: str | None = None,
     original_worn_clothes: str = "",
+    avatar_gender: str = "unknown",
 ) -> tuple[str, int]:
-    """Build positional `<image1>`, `<image2>`, ... multi-image Qwen-2.1 virtual try-on prompt."""
+    """Build crisp, identity-anchored `<image1>`, `<image2>`, ... multi-image Qwen-2.1 prompt."""
     garment_clauses: list[str] = []
     next_tag_idx = 2
     for g in selected_garments:
         tag = f"<image{next_tag_idx}>"
         next_tag_idx += 1
         garment_clauses.append(
-            f"For the {g['role']} garment, dress the model EXCLUSIVELY in the EXACT {g['title']} from {tag}: "
+            f"Dress the model's {g['role']} EXCLUSIVELY in the EXACT {g['title']} shown in {tag}: "
             f"colors {g['colors']}; {g['patterns_and_design']}. "
-            f"Replicate every authentic stripe, crest, logo, pattern motif, collar/neckline construction, sleeve length, and fabric texture directly from {tag}"
+            f"Reproduce every authentic stripe, crest, logo, pattern motif, collar/neckline shape, sleeve length, and fabric weave from {tag}."
         )
 
     accessory_clauses: list[str] = []
@@ -588,21 +703,29 @@ def build_qwen_tryon_prompt(
         tag = f"<image{next_tag_idx}>"
         next_tag_idx += 1
         accessory_clauses.append(
-            f"Wear the EXACT {a['title']} ({a['accessory_type']}) from {tag} {a['body_placement']}: "
-            f"{a['design_details']}"
+            f"Wear the EXACT {a['title']} ({a['accessory_type']}) from {tag} {a['body_placement']}: {a['design_details']}"
         )
 
+    has_bottom = any(g["role"] == "bottom" for g in selected_garments)
+    has_full_outfit = any(g["role"] == "full_outfit" for g in selected_garments)
     has_top_and_bottom = (
         any(g["role"] in ("top", "outerwear") for g in selected_garments)
-        and any(g["role"] == "bottom" for g in selected_garments)
+        and has_bottom
     )
     has_shoes = any(
         any(k in f"{a.get('accessory_type', '')} {a.get('body_placement', '')}".lower() for k in ("shoe", "sneaker", "boot", "heel", "loafer", "sandal", "feet"))
         for a in selected_accessories
     )
 
+    default_pants_clause = ""
+    if not has_bottom and not has_full_outfit:
+        default_pants_clause = (
+            "DEFAULT LOWER GARMENT (NO BOTTOM UPLOADED): Since no pants or lower garment was provided, "
+            "dress the lower body cleanly in crisp solid jet-black tailored slim-fit trousers / pants extending naturally down to the ankles with zero patterns or logos."
+        )
+
     extra_footwear_hint = (
-        "Complete the look with clean understated neutral footwear matching the outfit."
+        "Complete the look with clean understated black/neutral footwear matching the outfit."
         if not has_shoes
         else "Keep the exact footwear from its reference accessory image fully visible on both feet planted naturally on the studio floor."
     )
@@ -611,42 +734,36 @@ def build_qwen_tryon_prompt(
         if has_top_and_bottom
         else ""
     )
-    anti_old_shirt = (
-        f" NEVER draw or keep any element of the old {original_worn_clothes}."
-        if original_worn_clothes
-        else ""
-    )
+    anti_old_shirt = f" Replace and omit the old {original_worn_clothes}." if original_worn_clothes else ""
+    model_gender_phrase = _describe_model_gender(avatar_gender)
 
     sections = [
         (
-            "STUDIO E-COMMERCE FASHION CATALOG PHOTOGRAPH (MYNTRA / ZARA LOOKBOOK POSE): "
-            "Generate a fresh full-length standing fashion model photograph facing 0-degree straight forward toward the camera "
-            "with level horizontal shoulders, upright relaxed posture, and arms hanging naturally along both sides. "
-            "Clean, smooth, completely spotless warm alabaster-ivory studio seamless backdrop (#F4F1EC) with subtle floor shadows and zero background clutter or lines."
+            "EXACT IDENTITY FACE LOCK (<image1> SAME REAL PERSON): "
+            f"The full-length model in this studio photograph IS the EXACT SAME real individual shown in <image1> ({avatar_summary}). "
+            "Transfer their EXACT recognizable face directly from <image1> — keeping the identical eye shape, iris expression, eyebrows, nose bridge and nostril width, cheekbones, nasolabial lines, lips, jawline contour, mustache/beard, hairline, salt-and-pepper hair pattern, warm skin tone, and authentic true age so anyone recognizes them immediately as the identical person. "
+            "Keep the head straight, centered, level, and evenly lit in soft daylight matching the body."
         ),
         (
-            "EXACT BIOMETRIC FACIAL IDENTITY PRESERVATION (SAME PERSON FROM <image1>, NO DE-AGING, NO CUTOUT PASTE): "
-            f"The standing model MUST be the EXACT SAME human individual shown in <image1> ({avatar_summary}). "
-            "Faithfully preserve their true age, exact hairline & salt-and-pepper hair pattern, exact eye spacing/shape/eyelids, nose bridge & tip width, cheekbone contours, nasolabial folds, mouth corners, jawline, mustache/stubble, and skin undertones from <image1>. "
-            "Do NOT replace with a younger generic fashion model face and do NOT airbrush away authentic facial structure. "
-            "Freshly align head straight upright facing directly forward at 0-degree eye level with smooth neutral studio daylight key lighting blending head, neck, and shoulders seamlessly."
+            f"STUDIO E-COMMERCE FASHION CATALOG MODEL: Full-length 0-degree direct front-facing studio lookbook photograph of {model_gender_phrase}, "
+            "standing upright with level shoulders and relaxed natural arms against a completely clean, seamless warm alabaster studio backdrop (#F4F1EC) with subtle natural floor shadow."
         ),
         (
-            "COMPLETE GARMENT REPLACEMENT (PIXEL-EXACT CLOTHING TRANSFER): "
-            f"Dress the model ONLY in the garments specified below.{anti_old_shirt} "
+            f"COMPLETE GARMENT DRESSING:{anti_old_shirt} "
             + " ".join(garment_clauses)
+            + (" " + default_pants_clause if default_pants_clause else "")
             + (" " + tuck_note if tuck_note else "")
         ),
     ]
     if accessory_clauses:
         sections.append(
-            "ACCESSORY STYLING (WEAR ALL SPECIFIED ACCESSORIES): "
+            "JEWELRY & ACCESSORY ANATOMICAL FIT (NATURAL SCALE & PLACEMENT): "
             + "; ".join(accessory_clauses)
-            + ". Render each accessory at authentic scale without duplication."
+            + ". Seat jewelry, chains, necklaces, earrings, watches, rings, and glasses naturally in exact physical contact with bare skin/neck/ears/wrists/bridge at realistic delicate scale with authentic metallic luster and zero clipping or duplication."
         )
     sections.append(
-        f"FULL-LENGTH STUDIO CLARITY ({occasion} aesthetic): "
-        f"{extra_footwear_hint} Full head-to-toe framing with ample space above the head and below both shoes, crisp 8K skin & textile micro-detail, anatomically accurate hands and fingers."
+        f"FULL-LENGTH CLARITY ({occasion} aesthetic): "
+        f"{extra_footwear_hint} Full head-to-toe framing with ample space above the hair and below both shoes, sharp 8K skin & fabric detail, and anatomically accurate hands."
     )
     if custom_prompt and custom_prompt.strip():
         sections.append(f"Additional styling instruction: {custom_prompt.strip()}")

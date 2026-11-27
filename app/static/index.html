@@ -1226,9 +1226,13 @@
       document.getElementById('tryonCompareAfter').src = active.output_png_url || active.url;
 
       const diag = data.diagnostics || {};
+      const genderBadge = diag.avatar_gender && diag.avatar_gender !== 'unknown'
+        ? `<div class="telemetry-badge">Gender: <strong>${escapeHtml(diag.avatar_gender.toUpperCase())}</strong></div>`
+        : '';
       document.getElementById('tryonTelemetryRow').innerHTML = `
         <div class="telemetry-badge">Resolution: <strong>${escapeHtml(active.resolution || '768x1024')}</strong></div>
         <div class="telemetry-badge">Occasion: <strong>${escapeHtml(active.occasion || 'smart_casual')}</strong></div>
+        ${genderBadge}
         <div class="telemetry-badge">GPU: <strong>${escapeHtml(active.gpu_name || 'Remote GPU')}</strong></div>
         <div class="telemetry-badge">Time: <strong>${escapeHtml(data.processing_time_sec || '0')}s</strong></div>
         <div class="telemetry-badge">Vision: <strong>${escapeHtml(diag.prompt_source || 'stylist')}</strong></div>
@@ -1240,6 +1244,10 @@
       const accLis = (active.accessory_details || []).map(a =>
         `<li><strong>ACCESSORY (${escapeHtml(a.body_placement || 'worn')}) — ${escapeHtml(a.label)}:</strong> ${escapeHtml(a.details)}</li>`
       ).join('');
+      const skippedAcc = (diag.excluded_accessories || []);
+      const skippedNote = skippedAcc.length
+        ? `<div style="margin-top:8px; font-size:11px; color:var(--accent-warn);">Skipped for ${escapeHtml(diag.avatar_gender || 'avatar')}: ${escapeHtml(skippedAcc.join(', '))}</div>`
+        : '';
 
       const breakdownEl = document.getElementById('tryonStylistBreakdown');
       breakdownEl.style.display = 'block';
@@ -1247,6 +1255,7 @@
         <h5>✨ Stylist Breakdown — ${escapeHtml(active.title)}</h5>
         <div>${escapeHtml(active.style_reason || '')}</div>
         <ul class="tryon-stylist-list">${garmentLis}${accLis}</ul>
+        ${skippedNote}
       `;
 
       switchTryonOutputView(tryonState.viewMode);

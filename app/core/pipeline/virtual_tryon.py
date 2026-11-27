@@ -11,7 +11,7 @@ import time
 from typing import Any
 import uuid
 
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageStat
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,9 @@ def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | 
 def prepare_face_identity_ref(
     avatar_rgb: Image.Image,
     face_box_2d: list[int] | None = None,
-    canvas_size: int = 512,
+    canvas_size: int = 576,
 ) -> Image.Image:
-    """Extract a clean neutral-padded head/face identity reference excluding old torso clothes and background pose."""
+    """Extract a sharp, evenly exposed, tightly framed head/face identity reference excluding old torso clothes."""
     w, h = avatar_rgb.size
     if w < 128 or h < 128:
         return avatar_rgb
@@ -72,9 +72,9 @@ def prepare_face_identity_ref(
         ymin, xmin, ymax, xmax = face_box_2d
         bw = max(1.0, (xmax - xmin) * w / 1000.0)
         bh = max(1.0, (ymax - ymin) * h / 1000.0)
-        x1 = max(0, int(xmin * w / 1000.0 - 0.14 * bw))
-        y1 = max(0, int(ymin * h / 1000.0 - 0.12 * bh))
-        x2 = min(w, int(xmax * w / 1000.0 + 0.14 * bw))
+        x1 = max(0, int(xmin * w / 1000.0 - 0.16 * bw))
+        y1 = max(0, int(ymin * h / 1000.0 - 0.14 * bh))
+        x2 = min(w, int(xmax * w / 1000.0 + 0.16 * bw))
         y2 = min(h, int(ymax * h / 1000.0 + 0.04 * bh))
         if x2 - x1 >= 48 and y2 - y1 >= 48:
             crop_coords = (x1, y1, x2, y2)
@@ -86,9 +86,17 @@ def prepare_face_identity_ref(
         return avatar_rgb
 
     head_crop = avatar_rgb.crop(crop_coords)
-    # Tightly fill 86% of a clean neutral studio card (~440px face) for maximum facial pixel fidelity & zero collar leak
+    # Gently lift dark indoor/night facial exposure so eye/crease/hairline details stay clear for vision encoding
+    mean_luma = float(ImageStat.Stat(head_crop.convert("L")).mean[0])
+    if 15.0 < mean_luma < 105.0:
+        lift = min(1.38, 118.0 / mean_luma)
+        head_crop = ImageEnhance.Brightness(head_crop).enhance(lift)
+    if min(head_crop.size) < 380:
+        head_crop = ImageEnhance.Sharpness(head_crop).enhance(1.15)
+
+    # Tightly fill 90% of a clean neutral studio card (~518px face) for maximum facial pixel fidelity & zero collar leak
     canvas = Image.new("RGB", (canvas_size, canvas_size), (244, 241, 236))
-    max_head_dim = int(canvas_size * 0.86)
+    max_head_dim = int(canvas_size * 0.90)
     head_crop.thumbnail((max_head_dim, max_head_dim), Image.Resampling.LANCZOS)
     px = (canvas_size - head_crop.width) // 2
     py = (canvas_size - head_crop.height) // 2
@@ -166,6 +174,7 @@ def process_virtual_tryon_pipeline(
             occasion=combo.get("occasion") or occasion,
             custom_prompt=custom_prompt,
             original_worn_clothes=plan.get("original_worn_clothes", ""),
+            avatar_gender=plan.get("avatar_gender", "unknown"),
         )
         condition_images: list[Image.Image] = (
             [identity_avatar_img]
@@ -194,6 +203,25 @@ def process_virtual_tryon_pipeline(
         res_str = f"{out_img.width}x{out_img.height}"
         b64_uri = image_to_base64_data_uri(out_img) if include_base64 else None
 
+        garment_details = [
+            {
+                "role": g["role"],
+                "index": g["garment_index"],
+                "label": g["title"],
+                "details": f"{g['colors']}; {g['patterns_and_design']}",
+                "body_placement": None,
+            }
+            for g in selected_g_meta
+        ]
+        if not any(g["role"] in ("bottom", "full_outfit") for g in selected_g_meta):
+            garment_details.append({
+                "role": "bottom",
+                "index": -1,
+                "label": "Default Solid Jet-Black Trousers",
+                "details": "Auto-applied solid jet-black tailored slim-fit pants (no lower garment uploaded).",
+                "body_placement": None,
+            })
+
         return {
             "combination_index": combo_idx + 1,
             "title": combo["title"],
@@ -205,16 +233,7 @@ def process_virtual_tryon_pipeline(
             "output_png_base64": b64_uri,
             "selected_garment_indices": g_indices,
             "selected_accessory_indices": a_indices,
-            "garment_details": [
-                {
-                    "role": g["role"],
-                    "index": g["garment_index"],
-                    "label": g["title"],
-                    "details": f"{g['colors']}; {g['patterns_and_design']}",
-                    "body_placement": None,
-                }
-                for g in selected_g_meta
-            ],
+            "garment_details": garment_details,
             "accessory_details": [
                 {
                     "role": "accessory",
@@ -253,6 +272,9 @@ def process_virtual_tryon_pipeline(
         "mode": "virtual_tryon_stylist",
         "diagnostics": {
             "prompt_source": plan["prompt_source"],
+            "avatar_gender": plan.get("avatar_gender", "unknown"),
+            "excluded_accessories": [a["title"] for a in plan.get("excluded_accessories", [])],
+            "excluded_garments": [g["title"] for g in plan.get("excluded_garments", [])],
             "vision_analysis_ms": vision_ms,
             "garments_uploaded": len(garments),
             "accessories_uploaded": len(accessories),

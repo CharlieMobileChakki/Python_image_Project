@@ -121,7 +121,7 @@ class TestMultiImageGpuWorkerAndClient(unittest.TestCase):
 
             raw_five = [_make_image_bytes((i * 30, 110, 140), (1000, 1000)) for i in range(5)]
             adaptive_five = engine.prepare_ref_images(raw_five)
-            self.assertEqual(adaptive_five[0].size, (512, 512))
+            self.assertEqual(adaptive_five[0].size, (576, 576))
             self.assertEqual(adaptive_five[1].size, (448, 448))
 
             fake_pipe = MagicMock(
@@ -133,6 +133,8 @@ class TestMultiImageGpuWorkerAndClient(unittest.TestCase):
             self.assertGreater(len(png_bytes), 100)
             self.assertIsInstance(fake_pipe.call_args.kwargs["image"], list)
             self.assertEqual(len(fake_pipe.call_args.kwargs["image"]), 3)
+            self.assertEqual(fake_pipe.call_args.kwargs["image"][0].size, (576, 576))
+            self.assertEqual(fake_pipe.call_args.kwargs["image"][1].size, (512, 512))
             self.assertFalse(fake_pipe.call_args.kwargs["use_kv_cache"])
 
             # Verify automatic OOM rescue downscales to 384px, slices attention, and retries cleanly
@@ -207,10 +209,23 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertEqual(total_refs, 5)
         for tag in ("<image1>", "<image2>", "<image3>", "<image4>", "<image5>"):
             self.assertIn(tag, prompt)
-        self.assertIn("EXACT BIOMETRIC FACIAL IDENTITY PRESERVATION", prompt)
-        self.assertIn("COMPLETE GARMENT REPLACEMENT", prompt)
+        self.assertIn("EXACT IDENTITY FACE LOCK", prompt)
+        self.assertIn("COMPLETE GARMENT DRESSING", prompt)
+        self.assertNotIn("DEFAULT LOWER GARMENT", prompt)
 
-    def test_stylist_isolated_parallel_vision_prevents_avatar_cloth_bleed(self):
+        # When NO bottom pant is uploaded with a top, default jet-black tailored pants must be applied
+        top_only_prompt, top_only_refs = build_qwen_tryon_prompt(
+            plan["avatar_summary"],
+            [plan["garments"][0]],
+            [],
+            occasion="smart_casual",
+            avatar_gender="male",
+        )
+        self.assertEqual(top_only_refs, 2)
+        self.assertIn("jet-black tailored slim-fit trousers", top_only_prompt)
+        self.assertIn("adult male fashion model", top_only_prompt)
+
+    def test_stylist_isolated_parallel_vision_and_gender_accessory_filtering(self):
         from app.core.flow_b.tryon_stylist import analyze_wardrobe_and_plan_tryon
         from app.core.pipeline.virtual_tryon import prepare_face_identity_ref
 
@@ -227,12 +242,13 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
                 self.assertEqual(sum(1 for p in user_content if p["type"] == "image_url"), 1)
                 tag_text = user_content[0]["text"]
                 if "[GARMENT_0]" in tag_text:
-                    res = {"role": "top", "title": "White Crimson-Stripe Football Jersey T-Shirt", "colors": "optic white, crimson red, dark navy", "patterns_and_design": "crew-neck jersey, right-chest Adidas 3-bar logo, left-chest gold club crest, red shoulder 3-stripes, zero buttons"}
+                    res = {"role": "top", "target_gender": "unisex", "title": "White Crimson-Stripe Football Jersey T-Shirt", "colors": "optic white, crimson red, dark navy", "patterns_and_design": "crew-neck jersey, right-chest Adidas 3-bar logo, left-chest gold club crest, red shoulder 3-stripes, zero buttons"}
                 else:
-                    res = {"role": "bottom", "title": "Sand Cotton Twill Chinos", "colors": "warm sand beige", "patterns_and_design": "slim tapered fit, slant pockets"}
+                    res = {"role": "bottom", "target_gender": "unisex", "title": "Sand Cotton Twill Chinos", "colors": "warm sand beige", "patterns_and_design": "slim tapered fit, slant pockets"}
             elif "forensic facial & portrait biometric analyst" in sys_txt:
                 self.assertEqual(sum(1 for p in user_content if p["type"] == "image_url"), 1)
                 res = {
+                    "avatar_gender": "male",
                     "avatar_summary": "50s Indian man with warm wheatish skin tone and average build",
                     "forensic_face_details": "receding salt-and-pepper grey-black hair, soft under-eye contour, broad nose bridge, no glasses worn on face",
                     "original_worn_clothes": "light blue tropical floral collared shirt",
@@ -241,11 +257,13 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             elif "ONE standalone fashion accessory" in sys_txt:
                 tag_text = user_content[0]["text"]
                 if "[ACCESSORY_0]" in tag_text:
-                    res = {"accessory_type": "wristwatch", "body_placement": "left wrist", "title": "Silver Steel Dress Watch", "design_details": "white dial, black leather strap"}
+                    res = {"accessory_type": "wristwatch", "target_gender": "unisex", "body_placement": "left wrist", "title": "Silver Steel Dress Watch", "design_details": "white dial, black leather strap"}
+                elif "[ACCESSORY_1]" in tag_text:
+                    res = {"accessory_type": "jhumkas", "target_gender": "women", "body_placement": "both earlobes", "title": "Gold Bridal Jhumka Earrings", "design_details": "22K yellow gold bell drops with pearl fringe"}
                 else:
-                    res = {"accessory_type": "sneakers", "body_placement": "worn on both feet", "title": "White Low-Top Sneakers", "design_details": "matte white leather upper, grey sole"}
+                    res = {"accessory_type": "sneakers", "target_gender": "unisex", "body_placement": "worn on both feet", "title": "White Low-Top Sneakers", "design_details": "matte white leather upper, grey sole"}
             else:
-                res = {"combinations": [{"title": "Sporty Crisp Look", "occasion": "smart_casual", "style_reason": "Clean jersey + beige chinos.", "selected_garment_indices": [1, 0, 99], "selected_accessory_indices": [0]}]}
+                res = {"combinations": [{"title": "Sporty Crisp Look", "occasion": "smart_casual", "style_reason": "Clean jersey + beige chinos.", "selected_garment_indices": [1, 0, 99], "selected_accessory_indices": [0, 1]}]}
 
             mock_resp = MagicMock()
             mock_resp.raise_for_status = MagicMock()
@@ -267,7 +285,8 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         ]
         accessories = [
             {"index": 0, "image": Image.new("RGB", (100, 100), (180, 180, 190)), "filename": "watch.jpg"},
-            {"index": 1, "image": Image.new("RGB", (100, 100), (245, 245, 245)), "filename": "shoes.jpg"},
+            {"index": 1, "image": Image.new("RGB", (100, 100), (210, 180, 70)), "filename": "gold_jhumka.jpg"},
+            {"index": 2, "image": Image.new("RGB", (100, 100), (245, 245, 245)), "filename": "shoes.jpg"},
         ]
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}, clear=False), patch(
@@ -276,17 +295,20 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             plan = analyze_wardrobe_and_plan_tryon(avatar, garments, accessories, max_combinations=2)
 
         combo = plan["combinations"][0]
+        self.assertEqual(plan["avatar_gender"], "male")
         self.assertEqual(combo["selected_garment_indices"], [0, 1])
-        self.assertEqual(sorted(combo["selected_accessory_indices"]), [0, 1])
+        # Women-only jhumka earrings (1) excluded automatically for male avatar; watch (0) and sneakers (2) kept!
+        self.assertEqual(sorted(combo["selected_accessory_indices"]), [0, 2])
+        self.assertEqual([a["title"] for a in plan["excluded_accessories"]], ["Gold Bridal Jhumka Earrings"])
         self.assertEqual(plan["avatar_face_box_2d"], [100, 350, 380, 650])
         self.assertEqual(plan["original_worn_clothes"], "light blue tropical floral collared shirt")
         self.assertIn("Adidas 3-bar logo", plan["garments"][0]["patterns_and_design"])
 
-        # High-fill face identity crop (86%) retains sharp face detail and pads cleanly around corners
-        id_ref = prepare_face_identity_ref(avatar, plan["avatar_face_box_2d"], canvas_size=512)
-        self.assertEqual(id_ref.size, (512, 512))
+        # High-fill face identity crop (90% of 576px card) retains sharp face detail and pads cleanly around corners
+        id_ref = prepare_face_identity_ref(avatar, plan["avatar_face_box_2d"], canvas_size=576)
+        self.assertEqual(id_ref.size, (576, 576))
         self.assertEqual(id_ref.getpixel((5, 5)), (244, 241, 236))
-        self.assertGreater(id_ref.getpixel((256, 256))[0], 150)
+        self.assertGreater(id_ref.getpixel((288, 288))[0], 150)
 
     def test_full_virtual_tryon_pipeline_saves_pngs_and_preserves_routes_and_ui(self):
         from app.core.pipeline import virtual_tryon
@@ -337,6 +359,20 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
                 self.assertEqual(look["resolution"], "768x1024")
                 saved_name = look["url"].rsplit("/", 1)[-1]
                 self.assertTrue((Path(tmpdir) / saved_name).exists())
+
+            # Top-only upload without pants automatically applies Default Solid Jet-Black Trousers
+            top_only_res = virtual_tryon.process_virtual_tryon_pipeline(
+                avatar_bytes=_make_image_bytes((210, 180, 160), (256, 384)),
+                garment_entries=[
+                    {"bytes": _make_image_bytes((240, 240, 255)), "role_hint": "top", "filename": "polo_shirt.jpg"},
+                ],
+                max_combinations=1,
+            )
+            self.assertEqual(
+                top_only_res["combinations"][0]["garment_details"][-1]["label"],
+                "Default Solid Jet-Black Trousers",
+            )
+            self.assertIn("jet-black tailored slim-fit trousers", top_only_res["combinations"][0]["prompt_used"])
 
         from app.api.routes import router as api_router
         from app.api.virtual_tryon import virtual_tryon_router

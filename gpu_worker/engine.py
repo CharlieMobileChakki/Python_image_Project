@@ -264,14 +264,14 @@ def prepare_ref_image(raw_bytes: bytes, max_in: int = 896) -> Image.Image:
 
 
 def _adaptive_multi_edge(idx: int, total_refs: int) -> int:
-    """Choose VRAM-safe reference image resolution budget by batch reference count."""
+    """Choose VRAM-safe reference image resolution budget while prioritizing <image1> face detail."""
     if total_refs <= 1:
         return 896
     if total_refs <= 3:
-        return 512
+        return 576 if idx == 0 else 512
     if total_refs <= 5:
-        return 512 if idx == 0 else 448
-    return 448 if idx == 0 else 384
+        return 576 if idx == 0 else 448
+    return 480 if idx == 0 else 384
 
 
 def prepare_ref_images(raw_bytes_list: list[bytes], max_in: int | None = None) -> list[Image.Image]:
