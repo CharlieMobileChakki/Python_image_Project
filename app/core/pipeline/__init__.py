@@ -8,6 +8,7 @@ from app.core.pipeline.unified_pipeline import (
     execute_studio_generation,
     process_garment_pipeline,
 )
+from app.core.pipeline.virtual_tryon import process_virtual_tryon_pipeline
 
 __all__ = [
     "OUTPUT_DIR",
@@ -15,4 +16,5 @@ __all__ = [
     "execute_jewelry_studio_pipeline",
     "execute_studio_generation",
     "process_garment_pipeline",
+    "process_virtual_tryon_pipeline",
 ]

@@ -36,6 +36,7 @@ from engine import (
     is_pipeline_warming,
     preload_models,
     prepare_ref_image,
+    prepare_ref_images,
     run_inference_sync,
 )
 
@@ -53,6 +54,35 @@ def _verify_api_key(x_api_key: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header.")
 
 
+async def _read_uploaded_ref_images(
+    image: Optional[UploadFile],
+    images: Optional[list[UploadFile]],
+) -> Image.Image | list[Image.Image]:
+    """Decode one or multiple uploaded reference images cleanly via shared engine helpers."""
+    uploads = [f for f in ([image] if image else []) + list(images or []) if f is not None]
+    if not uploads:
+        raise HTTPException(status_code=400, detail="At least one reference image is required.")
+
+    raw_bytes_list: list[bytes] = []
+    for upload in uploads[:10]:
+        try:
+            raw = await upload.read()
+        finally:
+            await upload.close()
+        if not raw:
+            raise HTTPException(status_code=400, detail=f"Empty image uploaded ({upload.filename or 'file'}).")
+        raw_bytes_list.append(raw)
+
+    try:
+        return (
+            prepare_ref_images(raw_bytes_list)
+            if len(raw_bytes_list) > 1
+            else prepare_ref_image(raw_bytes_list[0])
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
+
+
 def _prune_old_jobs() -> None:
     now = time.time()
     with _jobs_lock:
@@ -63,7 +93,7 @@ def _prune_old_jobs() -> None:
 
 def _background_job_runner(
     job_id: str,
-    ref_img: Image.Image,
+    ref_img: Image.Image | list[Image.Image],
     prompt: str,
     steps: int,
     guidance_scale: float,
@@ -123,7 +153,8 @@ def health(x_api_key: Optional[str] = Header(default=None)):
 
 @app.post("/jobs")
 async def submit_job(
-    image: UploadFile = File(...),
+    image: Optional[UploadFile] = File(None),
+    images: Optional[list[UploadFile]] = File(None),
     prompt: str = Form(...),
     steps: int = Form(8),
     guidance_scale: float = Form(1.0),
@@ -136,15 +167,7 @@ async def submit_job(
     _verify_api_key(x_api_key)
     _prune_old_jobs()
 
-    raw_bytes = await image.read()
-    await image.close()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Empty image uploaded.")
-
-    try:
-        ref_img = prepare_ref_image(raw_bytes)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
+    ref_img = await _read_uploaded_ref_images(image, images)
 
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
@@ -200,7 +223,8 @@ def get_job_result(job_id: str, x_api_key: Optional[str] = Header(default=None))
 
 @app.post("/generate")
 async def generate_garment(
-    image: UploadFile = File(..., description="Original reference image."),
+    image: Optional[UploadFile] = File(None, description="Primary reference image."),
+    images: Optional[list[UploadFile]] = File(None, description="Multiple reference images (up to 10) for multi-image generation."),
     prompt: str = Form(..., description="Detailed studio generation prompt from ChatGPT Vision."),
     steps: int = Form(8),
     guidance_scale: float = Form(1.0),
@@ -212,15 +236,7 @@ async def generate_garment(
     """Run synchronous Qwen-Image-2.1-Turbo generation in worker thread so /health stays responsive."""
     _verify_api_key(x_api_key)
 
-    raw_bytes = await image.read()
-    await image.close()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Empty image uploaded.")
-
-    try:
-        ref_img = prepare_ref_image(raw_bytes)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid image: {exc}") from exc
+    ref_img = await _read_uploaded_ref_images(image, images)
 
     try:
         png_bytes, headers, _ = await run_in_threadpool(

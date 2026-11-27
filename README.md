@@ -22,6 +22,7 @@ Open `http://127.0.0.1:8000/` for the Studio UI or `http://127.0.0.1:8000/docs` 
 ## Core Endpoints
 
 - `POST /api/background-removal` — Primary studio generator (`json` response with `url`, or `response_format=image_direct` binary PNG; alias: `/api/generate-garment`)
+- `POST /api/virtual-tryon` — Multi-garment & accessory virtual try-on (`avatar` + `garments`/`tops`/`bottoms` + optional `accessories` ➔ curated outfit combinations on user avatar)
 - `POST /api/qwen-image` — Direct single-image PNG response endpoint
 - `POST /api/jewelry-studio` — Single or multi-angle (up to 4 images) jewelry boutique stand generator (`2048×2048`)
 - `POST /api/forward-downstream` — Forward generated job PNGs in a single multipart request to an external API

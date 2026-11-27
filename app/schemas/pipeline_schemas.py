@@ -66,3 +66,47 @@ class HealthResponse(BaseModel):
     models_loaded: dict[str, bool] = Field(default_factory=dict)
     hardware: dict[str, Any] = Field(default_factory=dict)
 
+
+class TryOnSelectedItem(BaseModel):
+    """Forensic styling description for a garment or accessory selected in an outfit combination."""
+    role: str = Field(..., description="Item role: top, bottom, full_outfit, outerwear, or accessory")
+    index: int = Field(..., description="0-based upload index within its input group")
+    label: str = Field(..., description="Human-readable item title")
+    details: str = Field(..., description="Forensic design, pattern, fabric, or material breakdown")
+    body_placement: str | None = Field(default=None, description="Wearing placement for accessories")
+
+
+class TryOnCombination(BaseModel):
+    """One curated and generated virtual try-on outfit look."""
+    combination_index: int
+    title: str
+    occasion: str = "smart_casual"
+    style_reason: str
+    url: str
+    resolution: str = "768x1024"
+    output_png_url: str | None = None
+    output_png_base64: str | None = None
+    selected_garment_indices: list[int] = Field(default_factory=list)
+    selected_accessory_indices: list[int] = Field(default_factory=list)
+    garment_details: list[TryOnSelectedItem] = Field(default_factory=list)
+    accessory_details: list[TryOnSelectedItem] = Field(default_factory=list)
+    avatar_description: str | None = None
+    prompt_used: str | None = None
+    engine: str | None = None
+    gpu_name: str | None = None
+
+
+class VirtualTryOnResponse(BaseModel):
+    """Response schema for multi-garment and accessory virtual try-on generation."""
+    status: str = Field(default="success")
+    success: bool = Field(default=True)
+    job_id: str
+    total_combinations: int
+    combinations: list[TryOnCombination] = Field(default_factory=list)
+    garment_catalog: list[dict[str, Any]] = Field(default_factory=list)
+    accessory_catalog: list[dict[str, Any]] = Field(default_factory=list)
+    processing_time_sec: float = 0.0
+    execution_time_ms: float = 0.0
+    mode: str = "virtual_tryon_stylist"
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+

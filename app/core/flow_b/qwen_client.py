@@ -341,15 +341,30 @@ def _call_runpod_endpoint(
                 raise RuntimeError(f"RunPod job {job_id} {status}: {state.get('error') or state}")
 
 
+def _build_http_files_payload(
+    img_bytes: bytes | list[bytes],
+) -> dict[str, tuple[str, bytes, str]] | list[tuple[str, tuple[str, bytes, str]]]:
+    """Build multipart files payload for single-image (`image`) or multi-image (`images`) worker endpoints."""
+    if isinstance(img_bytes, list):
+        if len(img_bytes) == 1:
+            return {"image": ("reference.jpg", img_bytes[0], "image/jpeg")}
+        return [
+            ("images", (f"reference_{idx}.jpg", raw, "image/jpeg"))
+            for idx, raw in enumerate(img_bytes[:10])
+        ]
+    return {"image": ("reference.jpg", img_bytes, "image/jpeg")}
+
+
 def _call_http_worker_generate(
     remote_url: str,
-    img_bytes: bytes,
+    img_bytes: bytes | list[bytes],
     form_data: dict[str, str],
     seed: int | None,
     timeout_sec: float,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """Call standard FastAPI HTTP GPU worker (`/generate` fast-path with `/jobs` fallback)."""
     headers = _http_headers()
+    files_payload = _build_http_files_payload(img_bytes)
     t_start = time.perf_counter()
     is_cloudflare = "trycloudflare.com" in remote_url
     direct_timeout = min(timeout_sec, 60.0 if is_cloudflare else 150.0)
@@ -360,7 +375,7 @@ def _call_http_worker_generate(
             gen_resp = fast_client.post(
                 f"{remote_url}/generate",
                 headers=headers,
-                files={"image": ("reference.jpg", img_bytes, "image/jpeg")},
+                files=files_payload,
                 data=form_data,
             )
             if gen_resp.status_code == 200 and gen_resp.headers.get("content-type", "").startswith("image/"):
@@ -391,7 +406,7 @@ def _call_http_worker_generate(
                 submit_resp = client.post(
                     f"{remote_url}/jobs",
                     headers=headers,
-                    files={"image": ("reference.jpg", img_bytes, "image/jpeg")},
+                    files=files_payload,
                     data=form_data,
                 )
                 if submit_resp.status_code == 200:
@@ -464,7 +479,7 @@ def _call_http_worker_generate(
 
 
 def generate_garment_via_gpu(
-    reference_image: Image.Image,
+    reference_image: Image.Image | list[Image.Image],
     prompt: str,
     steps: int = 8,
     guidance_scale: float = 1.0,
@@ -472,12 +487,31 @@ def generate_garment_via_gpu(
     width: int | None = None,
     height: int | None = None,
 ) -> tuple[Image.Image, dict[str, Any]]:
-    """Generate studio product PNG via configured GPU backend (RunPod Serverless or HTTP cluster)."""
+    """Generate studio PNG via configured GPU backend (single or multi-image RunPod/HTTP cluster)."""
     configured, msg = is_gpu_worker_configured()
     if not configured:
         raise RuntimeError(msg)
 
-    img_bytes = _encode_image_bytes(reference_image, max_dim=1600, quality=98)
+    if isinstance(reference_image, list):
+        refs = [img for img in reference_image if img is not None][:10]
+        if not refs:
+            raise ValueError("reference_image list cannot be empty.")
+        is_multi = len(refs) > 1
+        img_bytes_list = [
+            _encode_image_bytes(
+                img,
+                max_dim=1024 if is_multi else 1600,
+                quality=92 if is_multi else 98,
+            )
+            for img in refs
+        ]
+        http_files_input: bytes | list[bytes] = img_bytes_list if is_multi else img_bytes_list[0]
+    else:
+        is_multi = False
+        single_bytes = _encode_image_bytes(reference_image, max_dim=1600, quality=98)
+        img_bytes_list = [single_bytes]
+        http_files_input = single_bytes
+
     timeout_sec = _get_timeout()
     urls = _ordered_urls_for_request()
     last_exc: Exception | None = None
@@ -487,11 +521,15 @@ def generate_garment_via_gpu(
             if _is_runpod_url(url):
                 payload: dict[str, Any] = {
                     "action": "generate",
-                    "image_base64": base64.b64encode(img_bytes).decode("ascii"),
+                    "image_base64": base64.b64encode(img_bytes_list[0]).decode("ascii"),
                     "prompt": prompt,
                     "steps": int(steps),
                     "guidance_scale": float(guidance_scale),
                 }
+                if is_multi:
+                    payload["images_base64"] = [
+                        base64.b64encode(raw).decode("ascii") for raw in img_bytes_list
+                    ]
                 if seed is not None:
                     payload["seed"] = int(seed)
                 if width and width > 0:
@@ -527,7 +565,7 @@ def generate_garment_via_gpu(
             if height and height > 0:
                 form_data["height"] = str(height)
 
-            return _call_http_worker_generate(url, img_bytes, form_data, seed=seed, timeout_sec=timeout_sec)
+            return _call_http_worker_generate(url, http_files_input, form_data, seed=seed, timeout_sec=timeout_sec)
 
         except Exception as exc:
             last_exc = exc

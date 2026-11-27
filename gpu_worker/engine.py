@@ -248,19 +248,25 @@ def preload_models(background_qwen: bool = False) -> None:
         threading.Thread(target=_bg, daemon=True, name="qwen-warmup").start()
 
 
-def prepare_ref_image(raw_bytes: bytes) -> Image.Image:
-    """Decode EXIF-corrected RGB reference image capped cleanly to 896px max edge."""
+def prepare_ref_image(raw_bytes: bytes, max_in: int = 896) -> Image.Image:
+    """Decode EXIF-corrected RGB reference image capped cleanly to ``max_in`` max edge."""
     ref_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes))).convert("RGB")
     w, h = ref_img.size
-    max_in = 896
     if max(w, h) > max_in:
         scale = max_in / float(max(w, h))
         ref_img = ref_img.resize((max(64, int(w * scale)), max(64, int(h * scale))), Image.Resampling.LANCZOS)
     return ref_img
 
 
+def prepare_ref_images(raw_bytes_list: list[bytes], max_in: int = 768) -> list[Image.Image]:
+    """Decode up to 10 EXIF-corrected RGB condition images for Qwen-Image-2.1 multi-image inference."""
+    if not raw_bytes_list:
+        raise ValueError("At least one reference image is required.")
+    return [prepare_ref_image(raw, max_in=max_in) for raw in raw_bytes_list[:10]]
+
+
 def run_inference_sync(
-    ref_img: Image.Image,
+    ref_img: Image.Image | list[Image.Image],
     prompt: str,
     steps: int = 8,
     guidance_scale: float = 1.0,
@@ -268,21 +274,28 @@ def run_inference_sync(
     width: Optional[int] = None,
     height: Optional[int] = None,
 ) -> tuple[bytes, dict[str, str], dict[str, Any]]:
-    """Run direct Qwen-Image-2.1-Turbo studio generation and encode RGB PNG bytes."""
+    """Run direct Qwen-Image-2.1-Turbo single or multi-image generation and encode RGB PNG bytes."""
     pipe = load_qwen21_pipeline()
     used_seed = seed if seed is not None else int(time.time()) % 1000000
     generator = torch.Generator("cpu").manual_seed(used_seed)
+
+    ref_list = [ref_img] if isinstance(ref_img, Image.Image) else list(ref_img)[:10]
+    if not ref_list:
+        raise ValueError("No reference images provided for Qwen-Image-2.1-Turbo inference.")
+    pipe_image: Image.Image | list[Image.Image] = ref_list[0] if len(ref_list) == 1 else ref_list
 
     target_w = int(width) if width and int(width) > 0 else OUTPUT_WIDTH
     target_h = int(height) if height and int(height) > 0 else OUTPUT_HEIGHT
 
     t0 = time.perf_counter()
 
+    in_sizes = ref_list[0].size if len(ref_list) == 1 else [img.size for img in ref_list]
     logger.info(
-        "Running Qwen-Image-2.1-Turbo (size=%dx%d, in=%s) | prompt: %.200s...",
+        "Running Qwen-Image-2.1-Turbo (size=%dx%d, refs=%d, in=%s) | prompt: %.200s...",
         target_w,
         target_h,
-        ref_img.size,
+        len(ref_list),
+        in_sizes,
         prompt,
     )
 
@@ -297,7 +310,7 @@ def run_inference_sync(
     with _pipe_lock, torch.inference_mode():
         pipe_kwargs: dict[str, Any] = {
             "prompt": prompt,
-            "image": ref_img,
+            "image": pipe_image,
             "width": target_w,
             "height": target_h,
             "use_kv_cache": True,

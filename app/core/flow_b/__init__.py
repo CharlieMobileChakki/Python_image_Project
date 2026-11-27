@@ -14,11 +14,17 @@ from app.core.flow_b.qwen_client import (
     get_worker_capacity,
     is_gpu_worker_configured,
 )
+from app.core.flow_b.tryon_stylist import (
+    analyze_wardrobe_and_plan_tryon,
+    build_qwen_tryon_prompt,
+)
 
 __all__ = [
     "COMMON_STUDIO_RULES",
     "analyze_garment_and_build_prompts",
     "analyze_jewelry_and_build_prompts",
+    "analyze_wardrobe_and_plan_tryon",
+    "build_qwen_tryon_prompt",
     "check_gpu_worker_health",
     "create_multi_angle_composite",
     "generate_garment_via_gpu",

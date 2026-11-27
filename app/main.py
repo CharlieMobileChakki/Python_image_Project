@@ -4,6 +4,7 @@ Provides:
 - Browser Studio UI (served at / and /ui).
 - Production APIs:
   - POST /api/background-removal (ChatGPT Vision + Remote GPU Qwen-Image-2.1-Turbo -> 1024x1024 Studio PNG; alias: /api/generate-garment)
+  - POST /api/virtual-tryon (ChatGPT Vision Outfit Stylist + Multi-Image Qwen 2.1 Avatar Try-On)
   - POST /api/qwen-image (Direct single-image Qwen 2.1 PNG endpoint)
   - POST /api/jewelry-studio (Multi-angle luxury jewelry generator)
   - POST /api/forward-downstream (Forward generated PNGs to external API)
@@ -30,6 +31,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
+from app.api.virtual_tryon import virtual_tryon_router
 from app.core.flow_b import check_gpu_worker_health
 from app.schemas import HealthResponse
 
@@ -84,6 +86,7 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 app.include_router(reconstruction_router, prefix="/api")
+app.include_router(virtual_tryon_router, prefix="/api")
 
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
 

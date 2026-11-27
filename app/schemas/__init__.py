@@ -5,6 +5,9 @@ from app.schemas.pipeline_schemas import (
     GarmentItem,
     HealthResponse,
     ProcessGarmentResponse,
+    TryOnCombination,
+    TryOnSelectedItem,
+    VirtualTryOnResponse,
 )
 
 __all__ = [
@@ -13,4 +16,7 @@ __all__ = [
     "GarmentItem",
     "HealthResponse",
     "ProcessGarmentResponse",
+    "TryOnCombination",
+    "TryOnSelectedItem",
+    "VirtualTryOnResponse",
 ]

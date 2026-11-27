@@ -28,6 +28,7 @@ from engine import (
     is_pipeline_loaded,
     preload_models,
     prepare_ref_image,
+    prepare_ref_images,
     run_inference_sync,
 )
 
@@ -43,6 +44,16 @@ def _decode_base64_image(b64_payload: str) -> bytes:
     if "," in cleaned and cleaned[:64].lower().startswith("data:"):
         cleaned = cleaned.split(",", 1)[1]
     return base64.b64decode(cleaned)
+
+
+def _decode_job_ref_images(job_input: dict[str, Any]) -> list[bytes]:
+    """Decode either multi-image ``images_base64`` list or single ``image_base64`` input."""
+    raw_multi = job_input.get("images_base64")
+    if isinstance(raw_multi, list) and len(raw_multi) > 0:
+        decoded = [_decode_base64_image(str(item or "")) for item in raw_multi[:10]]
+        if decoded:
+            return decoded
+    return [_decode_base64_image(str(job_input.get("image_base64") or ""))]
 
 
 def handler(job: dict[str, Any]) -> dict[str, Any]:
@@ -61,16 +72,20 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        raw_bytes = _decode_base64_image(str(job_input.get("image_base64") or ""))
+        raw_bytes_list = _decode_job_ref_images(job_input)
     except Exception as exc:
-        return {"error": f"Invalid image_base64 input: {exc}"}
+        return {"error": f"Invalid image input: {exc}"}
 
     prompt = str(job_input.get("prompt") or "").strip()
     if not prompt:
         return {"error": "Missing 'prompt' in job input."}
 
     try:
-        ref_img = prepare_ref_image(raw_bytes)
+        ref_img = (
+            prepare_ref_images(raw_bytes_list)
+            if len(raw_bytes_list) > 1
+            else prepare_ref_image(raw_bytes_list[0])
+        )
         steps = int(job_input.get("steps") or 8)
         guidance_scale = float(job_input.get("guidance_scale") or 1.0)
         raw_seed = job_input.get("seed")
