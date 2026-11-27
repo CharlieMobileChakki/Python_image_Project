@@ -74,6 +74,7 @@ class TryOnSelectedItem(BaseModel):
     label: str = Field(..., description="Human-readable item title")
     details: str = Field(..., description="Forensic design, pattern, fabric, or material breakdown")
     body_placement: str | None = Field(default=None, description="Wearing placement for accessories")
+    is_complementary: bool = Field(default=False, description="True if item was AI-added as a complementary modest piece")
 
 
 class TryOnCombination(BaseModel):
@@ -94,6 +95,8 @@ class TryOnCombination(BaseModel):
     prompt_used: str | None = None
     engine: str | None = None
     gpu_name: str | None = None
+    photography_style: str | None = None
+    pose_preference: str | None = None
 
 
 class VirtualTryOnResponse(BaseModel):

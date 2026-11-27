@@ -30,12 +30,14 @@ Analyze ONLY the person in this photograph (IGNORE the clothing/shirt/background
 
 Determine carefully:
 - `avatar_gender`: "male" | "female" — inspect facial bone structure, brow ridge, jawline, facial hair/stubble/mustache, hairstyle, and overall presentation. Never guess blindly; be accurate.
-- `age_and_gender`: Apparent age bracket, gender, complexion, and natural body build (e.g., "early-50s Indian man, warm medium wheatish skin tone, average build").
+- `age_and_gender`: Apparent age bracket, gender, complexion, and natural body build (e.g., "early-20s Indian man, slim athletic build, medium wheatish complexion").
 - `forensic_face_details`: Concise, exact facial landmark description:
-  1. Hairline & Hair: receding temples/crown/density, exact hair color & salt-and-pepper grey percentage, parting/comb direction.
-  2. Eyes & Brows: eyebrow thickness/color, eyelid fold, under-eye lines/bags, exact glasses ONLY IF worn ON the eyes (if glasses hang on shirt collar, write "no glasses on eyes").
-  3. Nose, Cheeks & Mouth: nose bridge width/shape, tip shape, nasolabial smile folds, mustache/beard/stubble pattern, lip shape, jawline width & chin contour.
-- `avatar_face_box_2d`: [ymin, xmin, ymax, xmax] integers (0..1000) framing strictly TOP OF HAIR down to CHIN / UPPER JAWLINE (exclude shoulders and shirt collar below chin!).
+  1. Hairline & Hairstyle: hairline pattern, exact hair color, texture, styling/cut (e.g., styled forward messy fringe, textured quiff, side parted, buzzcut, wavy curls).
+  2. Eyes & Eyewear: eye shape, eyelids, eyebrows thickness and shape. EYEGLASSES: specify exactly whether the person wears prescription glasses or sunglasses directly on their eyes (describe frame material/shape/color, e.g., thin wireframe rectangular metallic glasses with clear lenses), or explicitly state "no glasses worn on face".
+  3. Nose, Cheeks & Mouth: nose bridge width/shape, tip shape, cheek contour, smile lines, lip shape, and natural expression (gentle smile, confident, relaxed).
+  4. Facial Hair: clean shaven, light 5 o'clock shadow, trimmed mustache, chin goatee, or full beard.
+  5. Skin Complexion: exact natural skin tone and undertone (fair, wheatish, warm tan, deep brown), smooth/natural skin texture.
+- `avatar_face_box_2d`: [ymin, xmin, ymax, xmax] integers (0..1000) framing comfortably from TOP OF HAIR down to BASE OF NECK / UPPER COLLARBONE (keep full hair width and both ears inside the box!).
 
 Return STRICTLY valid JSON:
 {
@@ -43,7 +45,7 @@ Return STRICTLY valid JSON:
   "avatar_summary": "...",
   "forensic_face_details": "...",
   "original_worn_clothes": "...",
-  "avatar_face_box_2d": [80, 320, 420, 660]
+  "avatar_face_box_2d": [60, 260, 480, 740]
 }"""
 
 GARMENT_ANALYSIS_SYSTEM_PROMPT = """You are a master e-commerce textile and apparel catalog director performing a deep pixel-by-pixel inspection of ONE standalone garment image.
@@ -53,8 +55,9 @@ Classify:
 - `target_gender`: "men" | "women" | "unisex" (e.g., sarees, lehengas, female kurtis/crop-tops/gowns -> "women"; standard t-shirts, jeans, chinos, hoodies -> "unisex" unless tailored distinctively for "men" or "women").
 
 Inspect EVERY visual pixel carefully:
-- `title`: Specific product title (e.g., "Optic White Crimson-Trimmed Athletic Football Jersey T-Shirt", "Beige Slim-Fit Cotton Chinos").
+- `title`: Specific product title (e.g., "Optic White Crimson-Trimmed Athletic Football Jersey T-Shirt", "Beige Slim-Fit Cotton Chinos", "Stonewashed Indigo Raw Denim Jeans").
 - `colors`: Exact dye hues, trim colors, striping colors, and undertones (never vague generic names).
+- `fabric_type`: Fabric physical structure (e.g., heavy twill denim with contrast copper stitching, lightweight breathable cotton jersey, crisp poplin cotton, fluid silk/chiffon with natural drape, fine knit wool).
 - `patterns_and_design`: Exhaustive pixel-level description covering silhouette/fit, exact neckline or collar construction (e.g., crew-neck round collar vs V-neck vs classic button-down collar, buttoned or strictly pullover/buttonless), sleeve length & cuffs, chest/side graphics, logos/crests (exact side left/right, color, shape), prints, embroidery, weave/knit texture, pockets, waistband/hem.
 
 Return STRICTLY valid JSON:
@@ -63,6 +66,7 @@ Return STRICTLY valid JSON:
   "target_gender": "unisex",
   "title": "...",
   "colors": "...",
+  "fabric_type": "...",
   "patterns_and_design": "..."
 }"""
 
@@ -509,6 +513,9 @@ def _analyze_garment_single(
         )
         title = str(parsed.get("title") or fallback["title"]).strip()
         patterns = str(parsed.get("patterns_and_design") or fallback["patterns_and_design"]).strip()
+        fabric = str(parsed.get("fabric_type") or "").strip()
+        if fabric and fabric.lower() not in patterns.lower():
+            patterns = f"{patterns}. Fabric: {fabric}".strip(". ")
         return {
             "garment_index": idx,
             "role": _normalize_role(parsed.get("role"), fallback["role"]),
@@ -683,6 +690,7 @@ def analyze_wardrobe_and_plan_tryon(
         return {
             "avatar_gender": "unknown",
             "avatar_summary": "Same individual from the reference portrait preserving exact age, facial structure, hairline, and skin tone",
+            "forensic_face_details": "exact eye shape, brow arch, nose bridge, lips, jawline, and natural skin texture",
             "original_worn_clothes": "",
             "avatar_face_box_2d": None,
             "garments": g_cat,
@@ -767,6 +775,7 @@ def analyze_wardrobe_and_plan_tryon(
     return {
         "avatar_gender": avatar_gender,
         "avatar_summary": avatar_info["avatar_summary"],
+        "forensic_face_details": avatar_info.get("forensic_face_details", ""),
         "original_worn_clothes": avatar_info.get("original_worn_clothes", ""),
         "avatar_face_box_2d": avatar_info.get("avatar_face_box_2d"),
         "garments": garment_catalog,
@@ -786,6 +795,135 @@ def _describe_model_gender(avatar_gender: str) -> str:
     return "an adult fashion model standing in clean upright fashion lookbook stance"
 
 
+def _determine_dynamic_pose(
+    avatar_gender: str,
+    occasion: str,
+    selected_garments: list[dict[str, Any]],
+    selected_accessories: list[dict[str, Any]],
+    pose_preference: str = "auto",
+) -> str:
+    """Generate dynamic, natural, relaxed human fashion photography poses instead of stiff mannequins."""
+    pref = (pose_preference or "auto").strip().lower()
+    occ = (occasion or "smart_casual").strip().lower()
+
+    has_watch = any("watch" in f"{a.get('accessory_type', '')} {a.get('title', '')}".lower() for a in selected_accessories)
+    is_traditional = any(
+        any(k in f"{g.get('title', '')} {g.get('patterns_and_design', '')}".lower() for k in ("kurta", "sherwani", "saree", "lehenga", "ethnic", "nehru"))
+        for g in selected_garments
+    ) or occ in ("festive", "party")
+    is_formal = any(
+        any(k in f"{g.get('title', '')} {g.get('patterns_and_design', '')}".lower() for k in ("suit", "blazer", "formal", "tuxedo", "oxford"))
+        for g in selected_garments
+    ) or occ == "formal"
+
+    watch_clause = (
+        " The arm with the wristwatch is positioned with the wrist exposed so the watch is clearly and elegantly displayed."
+        if has_watch
+        else ""
+    )
+
+    if pref in ("relaxed_casual", "casual") or (pref == "auto" and not is_traditional and not is_formal):
+        return (
+            "Natural relaxed contrapposto human stance with body weight comfortably shifted onto one leg, "
+            "subtle 10-15 degree three-quarter angle to the camera creating natural depth and relaxed silhouette. "
+            "Asymmetric relaxed arm posture: one hand casually resting in the trouser pocket or lightly hooked at the waistband, "
+            "the other arm hanging naturally at the side with a soft natural bend at the elbow and relaxed, unclenched fingers. "
+            "Shoulders naturally relaxed and fluid, confident engaging eye contact toward camera."
+            + watch_clause
+        )
+
+    if pref in ("confident_executive", "formal") or (pref == "auto" and is_formal):
+        return (
+            "Confident modern executive lookbook stance: poised posture with weight subtly on the back leg, "
+            "shoulders naturally relaxed and level without military stiffness. "
+            "Subtle asymmetric arm placement with one hand resting naturally near the trouser pocket or adjusting a cuff, "
+            "the other arm hanging with natural drape. Direct, calm, commanding eye contact with the camera lens."
+            + watch_clause
+        )
+
+    if pref in ("traditional_graceful", "festive", "traditional") or (pref == "auto" and is_traditional):
+        if avatar_gender == "female":
+            return (
+                "Poised, graceful traditional ethnic stance: body turned at an elegant three-quarter angle, "
+                "one hand gently resting near the waist or softly guiding the garment fabric to highlight its natural pleats and drape, "
+                "the other arm relaxed at the side with delicate natural hand pose. Poised, warm, expressive facial expression."
+                + watch_clause
+            )
+        return (
+            "Regal, stately ethnic lookbook stance: upright dignified posture with natural relaxed shoulders, "
+            "subtle contrapposto weight shift, one hand resting naturally at the side and the other hand relaxed near the waistline. "
+            "Warm confident gaze directly at the camera."
+            + watch_clause
+        )
+
+    if pref == "classic_catalog":
+        return (
+            "Clean balanced fashion lookbook stance: upright natural posture with relaxed shoulders, "
+            "arms resting naturally beside the torso with gentle natural bends at elbows and soft relaxed fingers (never stiff or robot-like). "
+            "Direct level gaze toward camera."
+            + watch_clause
+        )
+
+    return (
+        "Natural relaxed contrapposto human fashion stance with weight shifted onto one leg, "
+        "subtle 10-15 degree torso angle for natural depth, relaxed shoulders, and asymmetric natural arm placement. "
+        "Engaging confident eye contact looking directly into the camera lens."
+        + watch_clause
+    )
+
+
+def _determine_photography_style(
+    photography_style: str = "auto",
+    occasion: str = "smart_casual",
+) -> tuple[str, str]:
+    """Resolve high-end fashion photography lighting, backdrop, and camera direction."""
+    style = (photography_style or "auto").strip().lower()
+    occ = (occasion or "smart_casual").strip().lower()
+
+    if style == "auto":
+        if occ in ("formal", "office"):
+            style = "editorial_lookbook"
+        elif occ in ("festive", "party"):
+            style = "traditional_royal"
+        elif occ in ("streetwear", "casual"):
+            style = "streetwear_lifestyle"
+        else:
+            style = "premium_studio"
+
+    if style in ("editorial_lookbook", "editorial"):
+        return (
+            "High-End Fashion Editorial",
+            "Editorial studio photography shot on Hasselblad H6D-100c with 85mm portrait prime lens at f/3.2. "
+            "Sculptural three-point lighting: large diffused key octabox from high 45-degree angle creating flattering facial bone structure definition, "
+            "gentle ambient fill light, subtle rim light separating hair from background, and natural soft grounding floor shadows beneath both shoes "
+            "against a clean, seamless warm alabaster studio backdrop (#F4F1EC)."
+        )
+
+    if style in ("streetwear_lifestyle", "lifestyle"):
+        return (
+            "Modern Streetwear Lookbook",
+            "Contemporary lookbook photography with crisp, punchy fashion lighting: wide diffused beauty dish key light "
+            "rendering rich contrast, authentic fabric weave textures, vivid colors, and soft natural ambient floor shadows "
+            "against a clean warm alabaster studio wall (#F4F1EC)."
+        )
+
+    if style in ("traditional_royal", "royal", "festive"):
+        return (
+            "Luxury Ethnic Studio Portrait",
+            "Luminous luxury studio portraiture with warm golden-hour key light accentuating rich fabric luster, "
+            "intricate embroidery reflections, gold zari sheen, and jewelry sparkle, with gentle flattering fill "
+            "on face and hair against a clean seamless warm alabaster studio backdrop (#F4F1EC)."
+        )
+
+    return (
+        "Premium Studio Catalog Lookbook",
+        "Commercial fashion catalog photograph shot with an 85mm portrait lens with edge-to-edge optical sharpness. "
+        "Flattering large softbox key lighting providing even, soft illumination across the entire body, "
+        "crisp micro-textures on skin pores and textile fibers, realistic floor contact shadows under both shoes, "
+        "and clean seamless warm alabaster backdrop (#F4F1EC)."
+    )
+
+
 def build_qwen_tryon_prompt(
     avatar_summary: str,
     selected_garments: list[dict[str, Any]],
@@ -796,6 +934,9 @@ def build_qwen_tryon_prompt(
     avatar_gender: str = "unknown",
     complement_top: str = "",
     complement_bottom: str = "",
+    forensic_face_details: str = "",
+    photography_style: str = "auto",
+    pose_preference: str = "auto",
 ) -> tuple[str, int]:
     """Build crisp, identity-anchored `<image1>`, `<image2>`, ... multi-image Qwen-2.1 prompt."""
     garment_clauses: list[str] = []
@@ -856,22 +997,58 @@ def build_qwen_tryon_prompt(
     model_gender_phrase = _describe_model_gender(avatar_gender)
     gender_person_noun = "man" if avatar_gender == "male" else ("woman" if avatar_gender == "female" else "person")
 
+    # Combine forensic face details into biometric reference block
+    forensic_blob = (forensic_face_details or "").strip()
+    avatar_desc_blob = (avatar_summary or "").strip()
+    identity_details = f"{avatar_desc_blob}. {forensic_blob}".strip(". ") if forensic_blob else avatar_desc_blob
+
+    # Strict eyeglasses directive: match avatar's exact eyewear state
+    combined_face_text = f"{avatar_desc_blob} {forensic_blob}".lower()
+    has_glasses_on_face = (
+        ("glass" in combined_face_text or "spectacle" in combined_face_text)
+        and "no glass" not in combined_face_text
+        and "without glass" not in combined_face_text
+    )
+    if has_glasses_on_face:
+        glasses_directive = (
+            "MANDATORY EYEWEAR LOCK: The model MUST wear identical eyeglasses on their eyes exactly matching <image1> "
+            "(reproduce the exact frame shape, frame material/color, and clear transparent prescription lenses). Do NOT omit glasses."
+        )
+    else:
+        glasses_directive = (
+            "EYEWEAR: No eyeglasses worn on the eyes in <image1>; do not add unprompted spectacles or sunglasses."
+        )
+
+    style_label, photo_direction = _determine_photography_style(photography_style, occasion)
+    dynamic_pose_desc = _determine_dynamic_pose(
+        avatar_gender, occasion, selected_garments, selected_accessories, pose_preference
+    )
+
     sections = [
         (
             "STRICT FACE & IDENTITY PRESERVATION (<image1> IDENTICAL PERSON LOCK): "
             f"The full-length studio fashion model MUST be the EXACT SAME real {gender_person_noun} shown in <image1>. "
-            "Copy and preserve the exact face directly from <image1> — keeping the identical eye shape, irises, eyebrows, eyeglasses (only if worn on eyes in <image1>), nose shape and width, lips, cheek contours, smile lines, jawline, chin, facial hair/mustache, exact hairline and hair pattern, true skin tone, and authentic real age 100% faithfully matching <image1>. "
-            "Keep the face sharp, unretouched, level, straight-facing toward the camera, and evenly studio-lit so the person is unmistakably recognizable as the exact individual in <image1>."
+            f"Biometric reference: {identity_details}. "
+            "Copy and preserve the exact face directly from <image1> — keeping the identical eye shape, irises, eyebrows, "
+            "nose shape and width, lips, cheek contours, smile lines, jawline, chin, facial hair/mustache/stubble, exact hairline and styled hair pattern, "
+            "true skin tone, and authentic real age 100% faithfully matching <image1>. "
+            f"{glasses_directive} "
+            "The face must be seamlessly integrated with the neck and shoulders with 100% natural anatomical blending and zero cutout lines or pasting artifacts. "
+            "Keep the face sharp, unretouched, and evenly studio-lit so the person is unmistakably recognizable as the exact individual in <image1>."
         ),
         (
-            f"STUDIO E-COMMERCE FASHION CATALOG MODEL: Close-framed full-length 0-degree direct front-facing studio lookbook photograph of {model_gender_phrase}, "
-            "filling roughly 88-92% of the vertical frame height from top of hair near the upper edge down to shoes near the bottom edge so the face is large and high-detail against a clean seamless warm alabaster backdrop (#F4F1EC)."
+            f"PROFESSIONAL FASHION MODEL & NATURAL HUMAN POSTURE: "
+            f"Full-length fashion photography of {model_gender_phrase}. "
+            f"{dynamic_pose_desc} "
+            "The model fills roughly 86-90% of the vertical frame height from top of hair near upper edge down to shoes on the studio floor. "
+            "CRITICAL: The model must look like a real, living, breathing human being captured by a world-class fashion photographer — completely avoid stiff mannequin postures, rigid toy doll aesthetics, or symmetrical arms glued to the sides."
         ),
         (
             f"COMPLETE GARMENT DRESSING:{anti_old_shirt} "
             + " ".join(garment_clauses)
             + (" " + " ".join(complement_clauses) if complement_clauses else "")
             + (" " + tuck_note if tuck_note else "")
+            + " Preserve exact garment fabric textures, authentic denim twill weave, cotton knit, stitching, prints, and logo placements."
         ),
     ]
     if accessory_clauses:
@@ -881,8 +1058,9 @@ def build_qwen_tryon_prompt(
             + ". Seat jewelry, chains, necklaces, earrings, watches, rings, and glasses naturally in exact physical contact with bare skin/neck/ears/wrists/bridge at realistic delicate scale with authentic metallic luster and zero clipping or duplication."
         )
     sections.append(
-        f"FULL-LENGTH CLARITY ({occasion} aesthetic): "
-        f"{extra_footwear_hint} Tight minimal headroom above hair and clean studio floor under both shoes, sharp 8K skin & fabric detail, anatomically accurate hands."
+        f"PHOTOGRAPHY DIRECTION ({style_label}): "
+        f"{photo_direction} "
+        f"{extra_footwear_hint} Realistic grounding contact shadows on the clean studio floor under both shoes. Sharp 8K skin pores, authentic individual hair strands, and realistic textile weave. Anatomically accurate hands with natural relaxed fingers."
     )
     if custom_prompt and custom_prompt.strip():
         sections.append(f"Additional styling instruction: {custom_prompt.strip()}")

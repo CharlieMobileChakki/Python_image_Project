@@ -417,6 +417,50 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("tryonAvatarInput", index_html)
         self.assertIn("tryonGarmentsInput", index_html)
         self.assertIn("tryonAccessoriesInput", index_html)
+        self.assertIn("tryonPhotographyStyle", index_html)
+        self.assertIn("tryonPosePreference", index_html)
+
+    def test_dynamic_poses_biometrics_and_photography_styles(self):
+        from app.core.flow_b.tryon_stylist import (
+            _determine_dynamic_pose,
+            _determine_photography_style,
+            build_qwen_tryon_prompt,
+        )
+
+        garments = [{"role": "top", "title": "White T-Shirt", "colors": "white", "patterns_and_design": "crew-neck"}]
+        accessories = [{"accessory_type": "wristwatch", "title": "Black Chrono Watch", "body_placement": "left wrist", "design_details": "black leather strap"}]
+        pose_casual = _determine_dynamic_pose("male", "smart_casual", garments, accessories, pose_preference="auto")
+        self.assertIn("contrapposto", pose_casual.lower())
+        self.assertIn("wrist", pose_casual.lower())
+
+        pose_formal = _determine_dynamic_pose("male", "formal", garments, accessories, pose_preference="confident_executive")
+        self.assertIn("executive", pose_formal.lower())
+
+        garment_kurta = [{"role": "full_outfit", "title": "White Silk Kurta", "colors": "white", "patterns_and_design": "mandarin collar"}]
+        pose_trad = _determine_dynamic_pose("male", "festive", garment_kurta, [], pose_preference="auto")
+        self.assertIn("stately", pose_trad.lower())
+
+        label_ed, photo_ed = _determine_photography_style("editorial_lookbook", "formal")
+        self.assertIn("Hasselblad", photo_ed)
+        label_st, photo_st = _determine_photography_style("premium_studio", "smart_casual")
+        self.assertIn("softbox", photo_st.lower())
+
+        avatar_summary = "early-20s Indian young man, slim build, wheatish complexion"
+        forensic_face = "styled forward messy fringe hair, thin rectangular wireframe glasses with clear lenses, neat mustache"
+        prompt, refs = build_qwen_tryon_prompt(
+            avatar_summary=avatar_summary,
+            selected_garments=garments,
+            selected_accessories=accessories,
+            occasion="smart_casual",
+            avatar_gender="male",
+            forensic_face_details=forensic_face,
+            photography_style="premium_studio",
+            pose_preference="relaxed_casual",
+        )
+        self.assertIn("messy fringe", prompt)
+        self.assertIn("MANDATORY EYEWEAR LOCK", prompt)
+        self.assertIn("contrapposto", prompt.lower())
+        self.assertNotIn("0-degree direct front-facing studio lookbook photograph", prompt)
 
 
 if __name__ == "__main__":

@@ -237,8 +237,8 @@
           <div class="setting-item">
             <label for="tryonMaxCombos">Looks:</label>
             <select id="tryonMaxCombos" class="studio-select" style="min-width: 115px;">
-              <option value="1">1 Combination</option>
-              <option value="2" selected>2 Combinations</option>
+              <option value="1" selected>1 Combination</option>
+              <option value="2">2 Combinations</option>
               <option value="3">3 Combinations</option>
               <option value="4">4 Combinations</option>
             </select>
@@ -246,7 +246,7 @@
 
           <div class="setting-item">
             <label for="tryonOccasion">Occasion:</label>
-            <select id="tryonOccasion" class="studio-select" style="min-width: 135px;">
+            <select id="tryonOccasion" class="studio-select" style="min-width: 125px;">
               <option value="smart_casual" selected>Smart Casual</option>
               <option value="casual">Everyday Casual</option>
               <option value="formal">Office / Formal</option>
@@ -257,8 +257,31 @@
           </div>
 
           <div class="setting-item">
+            <label for="tryonPhotographyStyle">Photography:</label>
+            <select id="tryonPhotographyStyle" class="studio-select" style="min-width: 140px;">
+              <option value="auto" selected>Auto (Intelligent)</option>
+              <option value="premium_studio">Premium Studio</option>
+              <option value="editorial_lookbook">Editorial Lookbook</option>
+              <option value="natural_casual">Natural Lifestyle</option>
+              <option value="traditional_royal">Traditional Royal</option>
+              <option value="streetwear_lifestyle">Modern Streetwear</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label for="tryonPosePreference">Pose:</label>
+            <select id="tryonPosePreference" class="studio-select" style="min-width: 145px;">
+              <option value="auto" selected>Auto (Contrapposto)</option>
+              <option value="relaxed_casual">Relaxed Casual (Pocket)</option>
+              <option value="confident_executive">Confident Executive</option>
+              <option value="traditional_graceful">Traditional Poised</option>
+              <option value="classic_catalog">Classic Lookbook</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
             <label for="tryonCustomPrompt">Styling Note:</label>
-            <input id="tryonCustomPrompt" type="text" class="tryon-text-input" placeholder="Optional: e.g. tucked-in look, outdoor studio..." />
+            <input id="tryonCustomPrompt" type="text" class="tryon-text-input" placeholder="Optional: e.g. rolled sleeves, golden hour..." />
           </div>
         </div>
 
@@ -1154,6 +1177,8 @@
         tryonState.accessories.forEach(a => fd.append('accessories', a.file));
         fd.append('max_combinations', document.getElementById('tryonMaxCombos').value);
         fd.append('occasion', document.getElementById('tryonOccasion').value);
+        fd.append('photography_style', document.getElementById('tryonPhotographyStyle').value);
+        fd.append('pose_preference', document.getElementById('tryonPosePreference').value);
         const note = document.getElementById('tryonCustomPrompt').value.trim();
         if (note) fd.append('custom_prompt', note);
 
@@ -1229,18 +1254,31 @@
       const genderBadge = diag.avatar_gender && diag.avatar_gender !== 'unknown'
         ? `<div class="telemetry-badge">Gender: <strong>${escapeHtml(diag.avatar_gender.toUpperCase())}</strong></div>`
         : '';
+      const styleVal = active.photography_style || diag.photography_style;
+      const styleBadge = styleVal && styleVal !== 'auto'
+        ? `<div class="telemetry-badge">Style: <strong>${escapeHtml(styleVal)}</strong></div>`
+        : '';
+      const poseVal = active.pose_preference || diag.pose_preference;
+      const poseBadge = poseVal && poseVal !== 'auto'
+        ? `<div class="telemetry-badge">Pose: <strong>${escapeHtml(poseVal)}</strong></div>`
+        : '';
       document.getElementById('tryonTelemetryRow').innerHTML = `
         <div class="telemetry-badge">Resolution: <strong>${escapeHtml(active.resolution || '768x1024')}</strong></div>
         <div class="telemetry-badge">Occasion: <strong>${escapeHtml(active.occasion || 'smart_casual')}</strong></div>
         ${genderBadge}
+        ${styleBadge}
+        ${poseBadge}
         <div class="telemetry-badge">GPU: <strong>${escapeHtml(active.gpu_name || 'Remote GPU')}</strong></div>
         <div class="telemetry-badge">Time: <strong>${escapeHtml(data.processing_time_sec || '0')}s</strong></div>
         <div class="telemetry-badge">Vision: <strong>${escapeHtml(diag.prompt_source || 'stylist')}</strong></div>
       `;
 
-      const garmentLis = (active.garment_details || []).map(g =>
-        `<li><strong>${escapeHtml((g.role || '').toUpperCase())} — ${escapeHtml(g.label)}:</strong> ${escapeHtml(g.details)}</li>`
-      ).join('');
+      const garmentLis = (active.garment_details || []).map(g => {
+        const badge = g.is_complementary
+          ? '<span style="display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; border-radius:4px; background:rgba(99, 102, 241, 0.2); color:#a5b4fc; border:1px solid rgba(99, 102, 241, 0.35);">AI Modest Complement</span>'
+          : '<span style="display:inline-block; margin-left:6px; padding:1px 6px; font-size:10px; border-radius:4px; background:rgba(16, 185, 129, 0.2); color:#6ee7b7; border:1px solid rgba(16, 185, 129, 0.35);">Uploaded Garment</span>';
+        return `<li><strong>${escapeHtml((g.role || '').toUpperCase())} — ${escapeHtml(g.label)}</strong>${badge}: ${escapeHtml(g.details)}</li>`;
+      }).join('');
       const accLis = (active.accessory_details || []).map(a =>
         `<li><strong>ACCESSORY (${escapeHtml(a.body_placement || 'worn')}) — ${escapeHtml(a.label)}:</strong> ${escapeHtml(a.details)}</li>`
       ).join('');

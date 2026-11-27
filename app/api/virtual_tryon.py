@@ -58,6 +58,8 @@ async def virtual_tryon(
     accessories: list[UploadFile] | None = File(None, description="Optional accessories (watch, shoes, sunglasses, bag, jewelry)."),
     max_combinations: int = Form(2, ge=1, le=4, description="Maximum curated outfit combinations to generate (1 to 4)."),
     occasion: str = Form("smart_casual", description="Target styling occasion."),
+    photography_style: str = Form("auto", description="Photography aesthetic: auto, premium_studio, editorial_lookbook, natural_casual, traditional_royal, streetwear_lifestyle."),
+    pose_preference: str = Form("auto", description="Pose style: auto (natural contrapposto), relaxed_casual, confident_executive, traditional_graceful, classic_catalog."),
     custom_prompt: str | None = Form(None, description="Optional extra styling prompt note."),
     include_base64: bool = Form(False),
     seed: int | None = Form(None),
@@ -95,6 +97,8 @@ async def virtual_tryon(
                 base_url=public_base,
                 include_base64=include_base64,
                 seed=seed,
+                photography_style=photography_style,
+                pose_preference=pose_preference,
             )
     except HTTPException:
         raise

@@ -88,10 +88,10 @@ def prepare_face_identity_ref(
             bw = max(1.0, float(cx2 - cx1))
             bh = max(1.0, float(cy2 - cy1))
             crop_coords = (
-                max(0, int(cx1 - 0.14 * bw)),
-                max(0, int(cy1 - 0.12 * bh)),
-                min(w, int(cx2 + 0.14 * bw)),
-                min(h, int(cy2 + 0.14 * bh)),
+                max(0, int(cx1 - 0.16 * bw)),
+                max(0, int(cy1 - 0.14 * bh)),
+                min(w, int(cx2 + 0.16 * bw)),
+                min(h, int(cy2 + 0.18 * bh)),
             )
 
     if crop_coords is None:
@@ -106,19 +106,24 @@ def prepare_face_identity_ref(
     if min(head_crop.size) < 400:
         head_crop = ImageEnhance.Sharpness(head_crop).enhance(1.18)
 
-    # Smooth cosine-feathered elliptical vignette + soft bottom fade eliminates hard cutout edges & shirt bleed
-    max_head_dim = int(canvas_size * 0.94)
+    # Scale cleanly to fit canvas with high pixel density
+    max_head_dim = int(canvas_size * 0.92)
     head_crop.thumbnail((max_head_dim, max_head_dim), Image.Resampling.LANCZOS)
     rw, rh = head_crop.size
     yy, xx = np.mgrid[0:rh, 0:rw].astype(np.float32)
-    nx = (xx - rw * 0.50) / max(1.0, rw * 0.44)
-    ny = (yy - rh * 0.45) / max(1.0, rh * 0.46)
-    dist = np.sqrt(nx * nx + ny * ny)
-    vignette = np.clip((1.0 - dist) / 0.34, 0.0, 1.0)
-    # Fade lower torso/collar smoothly from 74% to 98% height while keeping full chin/upper neck clear
+
+    # Preserve 100% of face, hair volume, glasses, ears, temples, and chin crystal-clear.
+    # Soft vertical fade strictly across the bottom 18% where the avatar's old clothing collar begins.
     y_norm = yy / max(1.0, float(rh))
-    bottom_fade = np.clip((0.98 - y_norm) / 0.24, 0.0, 1.0)
-    alpha = (0.5 - 0.5 * np.cos(np.pi * vignette)) * (0.5 - 0.5 * np.cos(np.pi * bottom_fade))
+    bottom_fade = np.clip((0.99 - y_norm) / 0.18, 0.0, 1.0)
+
+    # Subtle perimeter soften (outermost 4% of crop edges so raw rectangular photo borders don't show)
+    x_edge = np.minimum(xx, rw - 1 - xx) / max(1.0, rw * 0.04)
+    y_edge_top = np.clip(yy / max(1.0, rh * 0.04), 0.0, 1.0)
+    border_fade = np.clip(np.minimum(x_edge, y_edge_top), 0.0, 1.0)
+
+    raw_alpha = bottom_fade * border_fade
+    alpha = 0.5 - 0.5 * np.cos(np.pi * raw_alpha)
 
     bg_color = np.array([244.0, 241.0, 236.0], dtype=np.float32)
     fg = np.asarray(head_crop, dtype=np.float32)
@@ -158,6 +163,8 @@ def process_virtual_tryon_pipeline(
     base_url: str = "",
     include_base64: bool = False,
     seed: int | None = None,
+    photography_style: str = "auto",
+    pose_preference: str = "auto",
 ) -> dict[str, Any]:
     """Run full virtual try-on pipeline: analyze wardrobe -> plan combinations -> synthesize try-on looks."""
     if not garment_entries:
@@ -207,6 +214,9 @@ def process_virtual_tryon_pipeline(
             avatar_gender=plan.get("avatar_gender", "unknown"),
             complement_top=comp_top,
             complement_bottom=comp_bottom,
+            forensic_face_details=plan.get("forensic_face_details", ""),
+            photography_style=photography_style,
+            pose_preference=pose_preference,
         )
         condition_images: list[Image.Image] = (
             [identity_avatar_img]
@@ -242,6 +252,7 @@ def process_virtual_tryon_pipeline(
                 "label": g["title"],
                 "details": f"{g['colors']}; {g['patterns_and_design']}",
                 "body_placement": None,
+                "is_complementary": False,
             }
             for g in selected_g_meta
         ]
@@ -255,6 +266,7 @@ def process_virtual_tryon_pipeline(
                 "label": "Default Modest Complementary Top",
                 "details": comp_top or f"{default_t_title}: {default_t_desc}",
                 "body_placement": None,
+                "is_complementary": True,
             })
         elif not any(g["role"] in ("bottom", "full_outfit") for g in selected_g_meta):
             default_b_title, default_b_desc = _dynamic_missing_garment(
@@ -266,6 +278,7 @@ def process_virtual_tryon_pipeline(
                 "label": default_b_title,
                 "details": comp_bottom or default_b_desc,
                 "body_placement": None,
+                "is_complementary": True,
             })
 
         return {
@@ -294,6 +307,8 @@ def process_virtual_tryon_pipeline(
             "prompt_used": prompt_text,
             "engine": gpu_meta.get("model", "Qwen/Qwen-Image-2.1-Turbo"),
             "gpu_name": gpu_meta.get("gpu_name", "Remote GPU"),
+            "photography_style": photography_style,
+            "pose_preference": pose_preference,
         }
 
     workers = max(1, min(len(combos), get_worker_capacity()))
@@ -319,6 +334,8 @@ def process_virtual_tryon_pipeline(
         "diagnostics": {
             "prompt_source": plan["prompt_source"],
             "avatar_gender": plan.get("avatar_gender", "unknown"),
+            "photography_style": photography_style,
+            "pose_preference": pose_preference,
             "excluded_accessories": [a["title"] for a in plan.get("excluded_accessories", [])],
             "excluded_garments": [g["title"] for g in plan.get("excluded_garments", [])],
             "vision_analysis_ms": vision_ms,
