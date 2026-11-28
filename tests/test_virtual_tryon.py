@@ -394,6 +394,17 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             self.assertEqual(jeans_only_res["combinations"][0]["garment_details"][0]["label"], "Default Modest Complementary Top")
             self.assertIn("NO SHIRTLESS TORSO", jeans_only_res["combinations"][0]["prompt_used"])
 
+            # High-definition quality preset produces 896x1280 resolution with higher fidelity
+            high_q_res = virtual_tryon.process_virtual_tryon_pipeline(
+                avatar_bytes=_make_image_bytes((210, 180, 160), (256, 384)),
+                garment_entries=[
+                    {"bytes": _make_image_bytes((240, 240, 255)), "role_hint": "top", "filename": "shirt.jpg"},
+                ],
+                max_combinations=1,
+                quality_preset="high",
+            )
+            self.assertEqual(high_q_res["combinations"][0]["resolution"], "896x1280")
+
         from app.api.routes import router as api_router
         from app.api.virtual_tryon import virtual_tryon_router
 

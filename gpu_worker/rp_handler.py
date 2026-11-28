@@ -86,8 +86,8 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
             if len(raw_bytes_list) > 1
             else prepare_ref_image(raw_bytes_list[0])
         )
-        steps = int(job_input.get("steps") or 8)
-        guidance_scale = float(job_input.get("guidance_scale") or 1.0)
+        steps = int(job_input.get("steps") or 12)
+        guidance_scale = float(job_input.get("guidance_scale") or 1.4)
         raw_seed = job_input.get("seed")
         seed = int(raw_seed) if raw_seed is not None else None
         raw_w = job_input.get("width")

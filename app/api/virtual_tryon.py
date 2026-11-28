@@ -60,6 +60,7 @@ async def virtual_tryon(
     occasion: str = Form("smart_casual", description="Target styling occasion."),
     photography_style: str = Form("auto", description="Photography aesthetic: auto, premium_studio, editorial_lookbook, natural_casual, traditional_royal, streetwear_lifestyle."),
     pose_preference: str = Form("auto", description="Pose style: auto (natural contrapposto), relaxed_casual, confident_executive, traditional_graceful, classic_catalog."),
+    quality: str = Form("auto", description="Quality preset: auto (832x1152 12-step), high (896x1280 14-step), ultra (1024x1344 18-step), standard (832x1152 10-step)."),
     custom_prompt: str | None = Form(None, description="Optional extra styling prompt note."),
     include_base64: bool = Form(False),
     seed: int | None = Form(None),
@@ -99,6 +100,7 @@ async def virtual_tryon(
                 seed=seed,
                 photography_style=photography_style,
                 pose_preference=pose_preference,
+                quality_preset=quality,
             )
     except HTTPException:
         raise

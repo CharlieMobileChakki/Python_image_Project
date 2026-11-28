@@ -28,9 +28,18 @@ from app.core.flow_b.tryon_stylist import (
 )
 from app.core.image_processing import image_to_base64_data_uri, load_image_bytes
 from app.core.pipeline.pipeline_config import OUTPUT_DIR
+import os
 
-TRYON_OUTPUT_WIDTH = 832
-TRYON_OUTPUT_HEIGHT = 1152
+TRYON_OUTPUT_WIDTH = int(os.getenv("TRYON_OUTPUT_WIDTH", "832"))
+TRYON_OUTPUT_HEIGHT = int(os.getenv("TRYON_OUTPUT_HEIGHT", "1152"))
+TRYON_DEFAULT_STEPS = int(os.getenv("TRYON_INFERENCE_STEPS", "12"))
+TRYON_DEFAULT_GUIDANCE = float(os.getenv("TRYON_GUIDANCE_SCALE", "1.4"))
+
+QUALITY_PRESETS: dict[str, dict[str, Any]] = {
+    "standard": {"width": 832, "height": 1152, "steps": 10, "guidance_scale": 1.2},
+    "high": {"width": 896, "height": 1280, "steps": 14, "guidance_scale": 1.5},
+    "ultra": {"width": 1024, "height": 1344, "steps": 18, "guidance_scale": 1.8},
+}
 
 
 def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | None:
@@ -165,6 +174,7 @@ def process_virtual_tryon_pipeline(
     seed: int | None = None,
     photography_style: str = "auto",
     pose_preference: str = "auto",
+    quality_preset: str = "auto",
 ) -> dict[str, Any]:
     """Run full virtual try-on pipeline: analyze wardrobe -> plan combinations -> synthesize try-on looks."""
     if not garment_entries:
@@ -176,6 +186,20 @@ def process_virtual_tryon_pipeline(
     gpu_ok, gpu_msg = is_gpu_worker_configured()
     if not gpu_ok:
         raise RuntimeError(gpu_msg)
+
+    # Resolve output resolution, diffusion steps, and guidance based on quality preset
+    q_key = (quality_preset or "auto").strip().lower()
+    if q_key in QUALITY_PRESETS:
+        spec = QUALITY_PRESETS[q_key]
+        out_w = spec["width"]
+        out_h = spec["height"]
+        tryon_steps = spec["steps"]
+        tryon_guidance = spec["guidance_scale"]
+    else:
+        out_w = TRYON_OUTPUT_WIDTH
+        out_h = TRYON_OUTPUT_HEIGHT
+        tryon_steps = TRYON_DEFAULT_STEPS
+        tryon_guidance = TRYON_DEFAULT_GUIDANCE
 
     avatar_rgb = load_image_bytes(avatar_bytes)
     garments = _decode_group_entries(garment_entries)
@@ -228,10 +252,19 @@ def process_virtual_tryon_pipeline(
         out_img, gpu_meta = generate_garment_via_gpu(
             reference_image=condition_images,
             prompt=prompt_text,
+            steps=tryon_steps,
+            guidance_scale=tryon_guidance,
             seed=combo_seed,
-            width=TRYON_OUTPUT_WIDTH,
-            height=TRYON_OUTPUT_HEIGHT,
+            width=out_w,
+            height=out_h,
         )
+
+        # Subtle micro-contrast sharpness polish to lift natural hair, eyes, and textile details
+        try:
+            enhancer = ImageEnhance.Sharpness(out_img)
+            out_img = enhancer.enhance(1.08)
+        except Exception:
+            pass
 
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_filename = f"{job_id}_look_{combo_idx + 1:03d}.png"

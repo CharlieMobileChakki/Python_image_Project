@@ -280,6 +280,16 @@
           </div>
 
           <div class="setting-item">
+            <label for="tryonQualityPreset">Quality:</label>
+            <select id="tryonQualityPreset" class="studio-select" style="min-width: 155px;">
+              <option value="auto" selected>Auto (Crisp HD 12-Step)</option>
+              <option value="high">High Definition (896x1280 • 14-Step)</option>
+              <option value="ultra">Ultra Studio (1024x1344 • 18-Step)</option>
+              <option value="standard">Fast Preview (832x1152 • 10-Step)</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
             <label for="tryonCustomPrompt">Styling Note:</label>
             <input id="tryonCustomPrompt" type="text" class="tryon-text-input" placeholder="Optional: e.g. rolled sleeves, golden hour..." />
           </div>
@@ -1179,6 +1189,8 @@
         fd.append('occasion', document.getElementById('tryonOccasion').value);
         fd.append('photography_style', document.getElementById('tryonPhotographyStyle').value);
         fd.append('pose_preference', document.getElementById('tryonPosePreference').value);
+        const qPreset = document.getElementById('tryonQualityPreset');
+        if (qPreset && qPreset.value) fd.append('quality', qPreset.value);
         const note = document.getElementById('tryonCustomPrompt').value.trim();
         if (note) fd.append('custom_prompt', note);
 

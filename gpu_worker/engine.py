@@ -313,8 +313,8 @@ def _is_cuda_oom(exc: BaseException) -> bool:
 def run_inference_sync(
     ref_img: Image.Image | list[Image.Image],
     prompt: str,
-    steps: int = 8,
-    guidance_scale: float = 1.0,
+    steps: int = 12,
+    guidance_scale: float = 1.4,
     seed: Optional[int] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,

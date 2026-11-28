@@ -481,8 +481,8 @@ def _call_http_worker_generate(
 def generate_garment_via_gpu(
     reference_image: Image.Image | list[Image.Image],
     prompt: str,
-    steps: int = 8,
-    guidance_scale: float = 1.0,
+    steps: int = 12,
+    guidance_scale: float = 1.4,
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -500,8 +500,8 @@ def generate_garment_via_gpu(
         img_bytes_list = [
             _encode_image_bytes(
                 img,
-                max_dim=640 if is_multi else 1600,
-                quality=90 if is_multi else 98,
+                max_dim=800 if is_multi else 1600,
+                quality=96 if is_multi else 98,
             )
             for img in refs
         ]
