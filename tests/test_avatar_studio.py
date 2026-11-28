@@ -150,14 +150,54 @@ class TestAvatarStudio(unittest.TestCase):
         self.assertIn("outlined heart doodle", prompt)
         self.assertIn("periwinkle", prompt)
 
+    def test_closed_lips_enforces_zero_teeth_prompt(self):
+        """Verify closed-lip expression strictly bans exposed teeth in prompt."""
+        avatar_info = {
+            "gender": "male",
+            "expression": "confident subtle smile with closed lips",
+            "teeth_visible": False,
+            "hair_details": "thick dark hair",
+            "eyewear": None,
+            "facial_hair": None,
+            "skin_tone_and_complexion": "medium wheatish Indian skin tone",
+            "upper_garment": "black tailored suit with red tie",
+            "distinctive_features": None,
+        }
+        prompt, halo, doodle = build_avatar_stylized_prompt(avatar_info)
+        self.assertIn("STRICT CLOSED-LIP MOUTH LOCK (ABSOLUTELY ZERO TEETH VISIBLE)", prompt)
+        self.assertIn("CRITICAL MANDATE: The character's mouth MUST BE CLOSED with lips resting naturally together!", prompt)
+        self.assertIn("ABSOLUTELY DO NOT open the mouth, DO NOT expose teeth", prompt)
+        self.assertIn("NO exposed teeth, NO open grinning mouth, NO visible teeth", prompt)
+        self.assertNotIn("showing upper teeth", prompt)
+
+    def test_open_mouth_teeth_visible_prompt(self):
+        """Verify open mouth with visible teeth properly instructs renderer."""
+        avatar_info = {
+            "gender": "female",
+            "expression": "warm broad smile showing upper teeth",
+            "teeth_visible": True,
+            "hair_details": "long dark hair",
+            "eyewear": None,
+            "facial_hair": None,
+            "skin_tone_and_complexion": "fair complexion",
+            "upper_garment": "navy blue floral dress",
+            "distinctive_features": None,
+        }
+        prompt, halo, doodle = build_avatar_stylized_prompt(avatar_info)
+        self.assertIn("MOUTH & TEETH: The person in <image1> has an open smile showing teeth", prompt)
+        self.assertNotIn("STRICT CLOSED-LIP MOUTH LOCK", prompt)
+        self.assertNotIn("NO exposed teeth", prompt)
+
     def test_schema_serialization(self):
         """Verify Pydantic schemas validate correctly."""
         identity = AvatarIdentityFeatures(
             gender="male",
             expression="subtle smile",
+            teeth_visible=False,
             hair_details="styled voluminous hair",
             eyewear="wireframe glasses",
             facial_hair="light stubble",
+            skin_tone_and_complexion="medium wheatish Indian skin tone",
             upper_garment="black blazer with red tie",
             distinctive_features=None,
         )
@@ -178,6 +218,8 @@ class TestAvatarStudio(unittest.TestCase):
         dumped = resp.model_dump()
         self.assertEqual(dumped["status"], "success")
         self.assertEqual(dumped["identity_features"]["gender"], "male")
+        self.assertFalse(dumped["identity_features"]["teeth_visible"])
+        self.assertEqual(dumped["identity_features"]["skin_tone_and_complexion"], "medium wheatish Indian skin tone")
         self.assertEqual(dumped["resolution"], "1024x1024")
 
     @patch("app.core.avatar.avatar_pipeline.analyze_avatar_identity")

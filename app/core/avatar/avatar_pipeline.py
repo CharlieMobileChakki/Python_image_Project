@@ -121,9 +121,11 @@ def process_avatar_pipeline(
     identity_obj = AvatarIdentityFeatures(
         gender=avatar_info.get("gender", "unspecified"),
         expression=avatar_info.get("expression", "warm smile"),
+        teeth_visible=bool(avatar_info.get("teeth_visible", False)),
         hair_details=avatar_info.get("hair_details", ""),
         eyewear=avatar_info.get("eyewear"),
         facial_hair=avatar_info.get("facial_hair"),
+        skin_tone_and_complexion=avatar_info.get("skin_tone_and_complexion", ""),
         upper_garment=avatar_info.get("upper_garment", ""),
         distinctive_features=avatar_info.get("distinctive_features"),
     )

@@ -83,33 +83,39 @@ AVATAR_VISION_PROMPT = """You are a master digital portrait painter and characte
 
 Inspect the person's photo with extreme forensic precision:
 1. `gender`: "female" | "male" | "unspecified"
-2. `expression`: Exact facial expression (e.g., "warm genuine smile showing upper teeth", "subtle friendly smile", "neutral composed gaze").
-3. `hair_details`: Exact hair style, texture, volume, parting, bangs/fringe, color, and maturity (e.g., "cropped salt-and-pepper hair with receding hairline, natural volume on sides and crown, realistic grey and black strands", "thick voluminous textured dark hair with styled fringe").
-4. `eyewear`: CRITICAL WORN-ON-FACE RULE: Inspect ONLY the eyes.
+2. `expression`: Exact facial emotion and mouth posture (e.g., "confident subtle smile with lips closed together", "warm broad smile with upper teeth visible", "calm neutral composed closed mouth").
+3. `teeth_visible`: boolean.
+   - CRITICAL MOUTH & TEETH AUDIT: Inspect the person's mouth and lips with forensic precision!
+   - true ONLY if teeth are genuinely parted, exposed, and visibly seen in the photograph!
+   - false if the mouth is closed, lips are touching/shut, or if it is a closed-mouth/closed-lip smile with NO teeth visible!
+   - ABSOLUTELY NEVER hallucinate or assume teeth if the lips are closed!
+4. `hair_details`: Exact hair style, texture, volume, parting, bangs/fringe, color, and maturity (e.g., "cropped salt-and-pepper hair with receding hairline, natural volume on sides and crown, realistic grey and black strands", "thick voluminous textured dark hair with styled fringe").
+5. `eyewear`: CRITICAL WORN-ON-FACE RULE: Inspect ONLY the eyes.
    - If eyeglasses or sunglasses are CURRENTLY WORN DIRECTLY OVER THE EYES on the bridge of the nose, describe the frame (e.g., "thin rectangular wireframe silver spectacles with clear lenses").
    - If the person is NOT wearing glasses on their eyes (even if reading glasses are hanging from their shirt collar or pocket), you MUST set `eyewear: null`! Do NOT report eyewear if glasses are only hanging on the shirt!
    - Note `glasses_hanging_on_shirt`: true if glasses are clipped/hanging on shirt collar/button.
-5. `facial_hair`: Describe mustache, stubble, or beard (e.g., "neat dark mustache and light groomed chin stubble"), or "clean shaven".
-6. `skin_tone_and_complexion`: Exact natural skin tone coordinates (e.g., "natural medium wheatish Indian complexion with warm undertones", "fair ivory with rosy undertone", "warm bronze tan").
-7. `upper_garment`: Exact description of upper clothing (e.g., "light sky-blue and white botanical foliage leaf print button-down shirt with spread collar", "dark navy suit jacket with white shirt and red tie").
-8. `distinctive_features`: Small bindi, forehead lines, laugh lines, earrings, necklace, or null.
-9. `recommended_halo_color`: Best complementary pastel halo color from ("soft_blue", "periwinkle", "lavender", "blush_pink", "mint_green", "warm_amber").
-10. `recommended_doodle`: "crown" (for regal/confident/men), "heart" (for warm/charming/women), or "sparks".
-11. `face_box_2d`: [ymin, xmin, ymax, xmax] integers scaled 0 to 1000 tightly around the face and hair.
+6. `facial_hair`: Describe mustache, stubble, or beard (e.g., "neat dark mustache and light groomed chin stubble"), or "clean shaven".
+7. `skin_tone_and_complexion`: Exact natural skin tone coordinates (e.g., "natural medium wheatish Indian complexion with warm undertones", "fair ivory with rosy undertone", "warm bronze tan").
+8. `upper_garment`: Exact description of upper clothing (e.g., "light sky-blue and white botanical foliage leaf print button-down shirt with spread collar", "dark navy suit jacket with white shirt and red tie").
+9. `distinctive_features`: Small bindi, forehead lines, laugh lines, earrings, necklace, or null.
+10. `recommended_halo_color`: Best complementary pastel halo color from ("soft_blue", "periwinkle", "lavender", "blush_pink", "mint_green", "warm_amber").
+11. `recommended_doodle`: "crown" (for regal/confident/men), "heart" (for warm/charming/women), or "sparks".
+12. `face_box_2d`: [ymin, xmin, ymax, xmax] integers scaled 0 to 1000 tightly around the face and hair.
 
 Return STRICTLY valid JSON:
 {
   "gender": "male",
-  "expression": "warm gentle smile showing teeth",
+  "expression": "subtle confident smile with closed lips",
+  "teeth_visible": false,
   "hair_details": "...",
   "eyewear": null,
-  "glasses_hanging_on_shirt": true,
-  "facial_hair": "clean shaven",
+  "glasses_hanging_on_shirt": false,
+  "facial_hair": "neat dark mustache and light groomed chin stubble",
   "skin_tone_and_complexion": "natural medium wheatish Indian skin tone",
   "upper_garment": "...",
-  "distinctive_features": "natural forehead expression lines and laugh lines",
+  "distinctive_features": null,
   "recommended_halo_color": "soft_blue",
-  "recommended_doodle": "sparks",
+  "recommended_doodle": "crown",
   "face_box_2d": [120, 280, 520, 720]
 }"""
 
@@ -119,7 +125,8 @@ def _build_fallback_identity(avatar_img: Image.Image) -> dict[str, Any]:
     w, h = avatar_img.size
     return {
         "gender": "unspecified",
-        "expression": "natural warm smile",
+        "expression": "natural subtle smile with closed lips",
+        "teeth_visible": False,
         "hair_details": "naturally styled hair with rich textured strands and authentic volume",
         "eyewear": None,
         "glasses_hanging_on_shirt": False,
@@ -151,7 +158,7 @@ def analyze_avatar_identity(
         parsed = _call_openai_json(
             AVATAR_VISION_PROMPT,
             _vision_message_for_image(
-                "Analyze this portrait to create an exact semi-realistic digital art avatar portrait.",
+                "Analyze this portrait to create an exact semi-realistic digital art avatar portrait. Audit mouth/teeth meticulously.",
                 avatar_img,
                 max_edge=1024,
             ),
@@ -181,9 +188,29 @@ def analyze_avatar_identity(
                 raw_eyewear = None
                 glasses_hanging = True
 
+        raw_teeth = parsed.get("teeth_visible")
+        raw_expression = str(parsed.get("expression") or "natural subtle smile").strip()
+        lower_expr = raw_expression.lower()
+
+        if raw_teeth is not None:
+            teeth_vis = bool(raw_teeth)
+        else:
+            teeth_vis = "teeth" in lower_expr and not any(k in lower_expr for k in ("no teeth", "zero teeth", "without teeth", "closed", "shut"))
+
+        if not teeth_vis:
+            clean_expr = re.sub(r'\b(showing|with|revealing)?\s*(upper\s*)?teeth\b', '', raw_expression, flags=re.IGNORECASE).strip()
+            clean_expr = re.sub(r'\s+', ' ', clean_expr).strip(', -')
+            if not any(k in clean_expr.lower() for k in ("closed", "lips together", "mouth shut")):
+                clean_expr = f"{clean_expr} with closed lips (zero teeth visible)" if clean_expr else "subtle smile with closed lips"
+            raw_expression = clean_expr
+        else:
+            if "teeth" not in raw_expression.lower():
+                raw_expression = f"{raw_expression} showing upper teeth"
+
         return {
             "gender": gender,
-            "expression": str(parsed.get("expression") or "warm friendly smile").strip(),
+            "expression": raw_expression,
+            "teeth_visible": teeth_vis,
             "hair_details": str(parsed.get("hair_details") or "authentically styled hair").strip(),
             "eyewear": raw_eyewear,
             "glasses_hanging_on_shirt": glasses_hanging,
@@ -313,6 +340,30 @@ def build_avatar_stylized_prompt(
     skin_desc = avatar_info.get("skin_tone_and_complexion") or "natural authentic skin tone matching <image1>"
     hair_desc = avatar_info.get("hair_details") or "authentically styled hair"
 
+    # Mouth posture and teeth visibility lock
+    raw_teeth = avatar_info.get("teeth_visible")
+    expr_text = (avatar_info.get("expression") or "").lower()
+    if raw_teeth is not None:
+        teeth_vis = bool(raw_teeth)
+    else:
+        teeth_vis = "teeth" in expr_text and not any(k in expr_text for k in ("no teeth", "zero teeth", "without teeth", "closed", "shut"))
+
+    if teeth_vis:
+        mouth_clause = (
+            "MOUTH & TEETH: The person in <image1> has an open smile showing teeth. "
+            "Faithfully render a natural open smile with realistically visible upper teeth matching <image1>."
+        )
+        negative_teeth = ""
+    else:
+        mouth_clause = (
+            "STRICT CLOSED-LIP MOUTH LOCK (ABSOLUTELY ZERO TEETH VISIBLE): "
+            "The person in <image1> has their lips completely closed together with ZERO teeth showing. "
+            "CRITICAL MANDATE: The character's mouth MUST BE CLOSED with lips resting naturally together! "
+            "ABSOLUTELY DO NOT open the mouth, DO NOT expose teeth, and DO NOT draw any visible teeth or grinning mouth aperture! "
+            "Faithfully replicate their exact closed-lip subtle smile with mouth shut matching <image1>."
+        )
+        negative_teeth = "NO exposed teeth, NO open grinning mouth, NO visible teeth, "
+
     sections = [
         (
             f"STYLIZED SEMI-REALISTIC DIGITAL AVATAR PORTRAIT (<image1> EXACT PERSON IDENTITY LOCK): "
@@ -320,6 +371,7 @@ def build_avatar_stylized_prompt(
             f"Style: {style_direction} "
             "EXACT FACIAL LIKENESS MANDATE: The illustrated character MUST be unmistakably recognizable as the exact same person from <image1>. "
             f"Preserve their exact facial bone structure, authentic eye shape, irises, eyebrow arch, nose contour, and genuine expression ({avatar_info.get('expression', 'warm smile')}). "
+            f"{mouth_clause} "
             f"AUTHENTIC HAIR & MATURITY: Preserve their exact hairline, styled hair volume, texture, and natural color from <image1> ({hair_desc}). "
             "If the person has salt-and-pepper, silver, or grey hair, faithfully render the natural silver-grey and dark strands with fine digital strokes and soft highlights, "
             "preserving their dignified, natural age and genuine character. "
@@ -352,7 +404,7 @@ def build_avatar_stylized_prompt(
             "QUALITY & GRAPHIC RENDERING STANDARDS: "
             "Crisp 1024x1024 semi-realistic digital artwork, ultra-delicate fine contours, smooth painterly shading, perfect graphic balance, "
             "appealing modern social media profile picture (PFP). "
-            "STRICT NEGATIVE EXCLUSIONS: ABSOLUTELY NO flat 2D cartoon, NO thick black comic book outlines, NO caricature distortion, "
+            f"STRICT NEGATIVE EXCLUSIONS: {negative_teeth}ABSOLUTELY NO flat 2D cartoon, NO thick black comic book outlines, NO caricature distortion, "
             "NO exaggerated cartoon eyes or teeth, NO Simpsons-style flat yellow/orange skin, NO cheap vector clipart, "
             "NO photorealistic skin pores, NO waxy 3D plastic mannequin, NO uncanny CGI doll, "
             "NO cluttered photographic background, NO photographic noise, NO distorted fingers, NO watermark, NO logo overlay."

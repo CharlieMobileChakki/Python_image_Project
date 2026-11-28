@@ -9,9 +9,11 @@ class AvatarIdentityFeatures(BaseModel):
     """Forensic identity and visual descriptors extracted from user photo."""
     gender: str = Field(default="unspecified", description="Gender / presentation (female, male, etc.)")
     expression: str = Field(default="friendly smile", description="Facial expression and smile description")
+    teeth_visible: bool = Field(default=False, description="Whether teeth are visibly exposed in the photo")
     hair_details: str = Field(default="", description="Hairstyle, length, color, volume, and texture")
     eyewear: str | None = Field(default=None, description="Eyeglasses details if present or None")
     facial_hair: str | None = Field(default=None, description="Facial hair/mustache/stubble if present or None")
+    skin_tone_and_complexion: str = Field(default="", description="Skin tone and complexion coordinates")
     upper_garment: str = Field(default="", description="Stylized upper clothing description")
     distinctive_features: str | None = Field(default=None, description="Bindi, jewelry, or unique facial marks")
 

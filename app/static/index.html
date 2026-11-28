@@ -1612,9 +1612,10 @@
             </div>
             <ul style="margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.6; color: var(--text-secondary);">
               <li><strong>Hair:</strong> ${idf.hair_details || 'Authentic textured hair volume preserved'}</li>
-              <li><strong>Expression:</strong> ${idf.expression || 'Natural warm smile'}</li>
+              <li><strong>Expression:</strong> ${idf.expression || 'Natural subtle smile'} ${idf.teeth_visible ? '<span style="color: #6ee7b7; font-size: 11px;">(teeth visible)</span>' : '<span style="color: #94a3b8; font-size: 11px;">(closed lips, zero teeth)</span>'}</li>
               ${idf.eyewear ? `<li><strong>Eyewear:</strong> ${idf.eyewear}</li>` : ''}
               ${idf.facial_hair ? `<li><strong>Facial Hair:</strong> ${idf.facial_hair}</li>` : ''}
+              ${idf.skin_tone_and_complexion ? `<li><strong>Skin Tone:</strong> ${idf.skin_tone_and_complexion}</li>` : ''}
               <li><strong>Outfit:</strong> ${idf.upper_garment || 'Stylized upper clothing faithfully retained'}</li>
               ${idf.distinctive_features ? `<li><strong>Distinctive Marks:</strong> ${idf.distinctive_features}</li>` : ''}
             </ul>
