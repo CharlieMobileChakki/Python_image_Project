@@ -79,31 +79,37 @@ DOODLE_STYLES: dict[str, str] = {
     "none": "",
 }
 
-AVATAR_VISION_PROMPT = """You are a master digital character designer and art director analyzing ONE user photo to transform it into a premium stylized 2D digital vector art avatar profile picture.
+AVATAR_VISION_PROMPT = """You are a master digital portrait painter and character artist analyzing ONE user photo to transform it into a premium semi-realistic digital art avatar profile picture (as seen in high-end character illustration lookbooks).
 
 Inspect the person's photo with extreme forensic precision:
 1. `gender`: "female" | "male" | "unspecified"
-2. `expression`: Exact facial expression (e.g., "warm genuine smile showing upper teeth", "subtle confident closed-lip smile", "neutral composed gaze").
-3. `hair_details`: Exact hair style, texture, volume, parting, bangs/fringe, length, and color (e.g. "thick voluminous textured dark hair with styled fringe falling naturally over forehead", "long silky straight-wavy dark hair parted in center cascading over shoulders").
-4. `eyewear`: If eyeglasses are present, describe exact frame shape, frame material/color (e.g., "thin square wireframe silver spectacles with clear transparent lenses"), or null if NO glasses.
-5. `facial_hair`: Describe mustache, stubble, or beard (e.g. "neat dark mustache and light groomed chin stubble"), or null if clean shaven.
-6. `upper_garment`: Exact description of upper clothing (e.g. "dark navy floral printed top with cream-yellow flowers and square neckline", "sharp tailored black blazer, crisp white collared dress shirt, vibrant red necktie, and black pocket square").
-7. `distinctive_features`: Small bindi, forehead marks, earrings, necklace, or null.
-8. `recommended_halo_color`: Best complementary pastel halo color from ("soft_blue", "periwinkle", "lavender", "blush_pink", "mint_green", "warm_amber").
-9. `recommended_doodle`: "crown" (for regal/confident/masculine), "heart" (for charming/sweet/feminine), or "sparks".
-10. `face_box_2d`: [ymin, xmin, ymax, xmax] integers scaled 0 to 1000 tightly around the face.
+2. `expression`: Exact facial expression (e.g., "warm genuine smile showing upper teeth", "subtle friendly smile", "neutral composed gaze").
+3. `hair_details`: Exact hair style, texture, volume, parting, bangs/fringe, color, and maturity (e.g., "cropped salt-and-pepper hair with receding hairline, natural volume on sides and crown, realistic grey and black strands", "thick voluminous textured dark hair with styled fringe").
+4. `eyewear`: CRITICAL WORN-ON-FACE RULE: Inspect ONLY the eyes.
+   - If eyeglasses or sunglasses are CURRENTLY WORN DIRECTLY OVER THE EYES on the bridge of the nose, describe the frame (e.g., "thin rectangular wireframe silver spectacles with clear lenses").
+   - If the person is NOT wearing glasses on their eyes (even if reading glasses are hanging from their shirt collar or pocket), you MUST set `eyewear: null`! Do NOT report eyewear if glasses are only hanging on the shirt!
+   - Note `glasses_hanging_on_shirt`: true if glasses are clipped/hanging on shirt collar/button.
+5. `facial_hair`: Describe mustache, stubble, or beard (e.g., "neat dark mustache and light groomed chin stubble"), or "clean shaven".
+6. `skin_tone_and_complexion`: Exact natural skin tone coordinates (e.g., "natural medium wheatish Indian complexion with warm undertones", "fair ivory with rosy undertone", "warm bronze tan").
+7. `upper_garment`: Exact description of upper clothing (e.g., "light sky-blue and white botanical foliage leaf print button-down shirt with spread collar", "dark navy suit jacket with white shirt and red tie").
+8. `distinctive_features`: Small bindi, forehead lines, laugh lines, earrings, necklace, or null.
+9. `recommended_halo_color`: Best complementary pastel halo color from ("soft_blue", "periwinkle", "lavender", "blush_pink", "mint_green", "warm_amber").
+10. `recommended_doodle`: "crown" (for regal/confident/men), "heart" (for warm/charming/women), or "sparks".
+11. `face_box_2d`: [ymin, xmin, ymax, xmax] integers scaled 0 to 1000 tightly around the face and hair.
 
 Return STRICTLY valid JSON:
 {
-  "gender": "female",
-  "expression": "warm radiant smile showing teeth",
+  "gender": "male",
+  "expression": "warm gentle smile showing teeth",
   "hair_details": "...",
   "eyewear": null,
-  "facial_hair": null,
+  "glasses_hanging_on_shirt": true,
+  "facial_hair": "clean shaven",
+  "skin_tone_and_complexion": "natural medium wheatish Indian skin tone",
   "upper_garment": "...",
-  "distinctive_features": "small dark bindi on center of forehead",
-  "recommended_halo_color": "periwinkle",
-  "recommended_doodle": "heart",
+  "distinctive_features": "natural forehead expression lines and laugh lines",
+  "recommended_halo_color": "soft_blue",
+  "recommended_doodle": "sparks",
   "face_box_2d": [120, 280, 520, 720]
 }"""
 
@@ -116,7 +122,9 @@ def _build_fallback_identity(avatar_img: Image.Image) -> dict[str, Any]:
         "expression": "natural warm smile",
         "hair_details": "naturally styled hair with rich textured strands and authentic volume",
         "eyewear": None,
+        "glasses_hanging_on_shirt": False,
         "facial_hair": None,
+        "skin_tone_and_complexion": "natural authentic skin tone",
         "upper_garment": "stylish upper garment faithfully matching the uploaded photo",
         "distinctive_features": None,
         "recommended_halo_color": "soft_blue",
@@ -143,7 +151,7 @@ def analyze_avatar_identity(
         parsed = _call_openai_json(
             AVATAR_VISION_PROMPT,
             _vision_message_for_image(
-                "Analyze this portrait to create an exact stylized 2D digital vector art avatar.",
+                "Analyze this portrait to create an exact semi-realistic digital art avatar portrait.",
                 avatar_img,
                 max_edge=1024,
             ),
@@ -165,12 +173,22 @@ def analyze_avatar_identity(
         if doodle not in DOODLE_STYLES:
             doodle = "heart" if gender == "female" else "crown"
 
+        raw_eyewear = str(parsed.get("eyewear")).strip() if parsed.get("eyewear") else None
+        glasses_hanging = bool(parsed.get("glasses_hanging_on_shirt", False))
+        if raw_eyewear:
+            lower_ew = raw_eyewear.lower()
+            if any(k in lower_ew for k in ("shirt", "collar", "hanging", "pocket", "chest", "not on face", "not worn")):
+                raw_eyewear = None
+                glasses_hanging = True
+
         return {
             "gender": gender,
             "expression": str(parsed.get("expression") or "warm friendly smile").strip(),
             "hair_details": str(parsed.get("hair_details") or "authentically styled hair").strip(),
-            "eyewear": str(parsed.get("eyewear")).strip() if parsed.get("eyewear") else None,
+            "eyewear": raw_eyewear,
+            "glasses_hanging_on_shirt": glasses_hanging,
             "facial_hair": str(parsed.get("facial_hair")).strip() if parsed.get("facial_hair") else None,
+            "skin_tone_and_complexion": str(parsed.get("skin_tone_and_complexion") or "natural complexion matching reference photo").strip(),
             "upper_garment": str(parsed.get("upper_garment") or "upper clothing matching reference photo").strip(),
             "distinctive_features": str(parsed.get("distinctive_features")).strip() if parsed.get("distinctive_features") else None,
             "recommended_halo_color": halo,
@@ -223,42 +241,56 @@ def build_avatar_stylized_prompt(
         doodle_key = avatar_info.get("recommended_doodle") or ("heart" if gender == "female" else "crown")
     resolved_doodle_name = doodle_key
 
-    # Style descriptor
+    # Style descriptor - SEMI-REALISTIC DIGITAL ART PORTRAIT (matching high-end character illustration)
     style_norm = (style or "vector_art").strip().lower()
     if style_norm == "digital_illustration":
         style_direction = (
-            "Premium modern digital art character portrait illustration, rich stylized brushwork, "
-            "vibrant semi-realistic digital painting, clean outlines, polished studio lighting."
+            "Premium semi-realistic digital art character portrait painting, rich digital brushwork, "
+            "realistic anatomical lighting and three-dimensional facial volume, soft skin tones, "
+            "delicate fine outlines, polished character concept art aesthetic."
         )
     elif style_norm == "anime_portrait":
         style_direction = (
-            "Masterpiece modern anime character portrait, crisp expressive line work, clean cel-shading, "
-            "vibrant anime palette, polished manhwa / webtoon hero aesthetic."
+            "Masterpiece high-end webtoon/manhwa hero digital character portrait, semi-realistic anime aesthetics, "
+            "expressive realistic facial bone structure, delicate line art, smooth realistic skin shading."
         )
-    else:  # default: vector_art
+    else:  # default: vector_art / digital art portrait
         style_direction = (
-            "Masterpiece 2D modern digital vector art avatar illustration, crisp clean vector line art, "
-            "smooth luminous cel-shading, vibrant stylized colors, polished professional avatar profile card aesthetic."
+            "Masterpiece semi-realistic stylized digital portrait illustration, high-end digital character art, "
+            "smooth dimensional facial shading with soft volumetric lighting, delicate micro-fine contours (NOT heavy cartoon lines), "
+            "natural skin tones with lifelike depth, polished modern avatar profile card aesthetic."
         )
 
     # Gender noun
     gender = avatar_info.get("gender", "unspecified")
     gender_noun = "woman" if gender == "female" else ("man" if gender == "male" else "person")
 
-    # Eyewear clause
+    # Eyewear handling - STRICT WORN-ON-FACE VERIFICATION
     eyewear = avatar_info.get("eyewear")
+    glasses_on_shirt = bool(avatar_info.get("glasses_hanging_on_shirt", False))
+    if eyewear:
+        lower_ew = eyewear.lower()
+        if any(k in lower_ew for k in ("shirt", "collar", "hanging", "pocket", "chest", "not on face", "not worn")):
+            eyewear = None
+            glasses_on_shirt = True
+
     if eyewear and "no glass" not in eyewear.lower():
         glasses_clause = (
             f"MANDATORY EYEWEAR LOCK: The character MUST wear identical eyeglasses exactly matching <image1> "
-            f"({eyewear}). Reproduce the exact frame geometry, thin wireframe borders, and transparent clear lenses."
+            f"({eyewear}) directly over their eyes. Reproduce the exact frame geometry, thin borders, and clear transparent lenses."
         )
     else:
-        glasses_clause = "EYEWEAR: No eyeglasses worn on the eyes in <image1>; do not add any unprompted glasses or sunglasses."
+        hanging_note = " (Reading glasses hanging from the shirt collar should be illustrated resting naturally on the shirt placket, but the eyes, eyelids, and nose bridge MUST remain 100% free of glasses)." if glasses_on_shirt else ""
+        glasses_clause = (
+            f"STRICT EYEWEAR BAN (ZERO GLASSES ON FACE): The person in <image1> is NOT wearing glasses on their eyes or face. "
+            f"CRITICAL: ABSOLUTELY DO NOT put, draw, or add any spectacles, eyeglasses, or sunglasses over the eyes or face! "
+            f"Keep the eyes, eyelids, and nose bridge 100% natural, visible, and free of glasses{hanging_note}."
+        )
 
     # Facial hair clause
     facial_hair = avatar_info.get("facial_hair")
-    if facial_hair:
-        beard_clause = f"FACIAL HAIR LOCK: Render the exact {facial_hair} with clean stylized vector strokes."
+    if facial_hair and "clean" not in facial_hair.lower():
+        beard_clause = f"FACIAL HAIR LOCK: Render the exact {facial_hair} with clean, subtle, realistic digital painting strokes."
     else:
         beard_clause = "FACIAL HAIR: Clean-shaven face matching <image1> without unprompted beard or stubble."
 
@@ -278,27 +310,36 @@ def build_avatar_stylized_prompt(
     else:
         doodle_clause = "DOODLE ACCENTS: Minimalist, clean graphic styling."
 
+    skin_desc = avatar_info.get("skin_tone_and_complexion") or "natural authentic skin tone matching <image1>"
+    hair_desc = avatar_info.get("hair_details") or "authentically styled hair"
+
     sections = [
         (
-            f"STYLIZED 2D AVATAR PROFILE ILLUSTRATION (<image1> EXACT PERSON IDENTITY LOCK): "
-            f"Transform the real {gender_noun} in <image1> into an iconic, charming 2D digital vector art avatar illustration. "
+            f"STYLIZED SEMI-REALISTIC DIGITAL AVATAR PORTRAIT (<image1> EXACT PERSON IDENTITY LOCK): "
+            f"Transform the real {gender_noun} in <image1> into an iconic, charming semi-realistic digital art portrait illustration. "
             f"Style: {style_direction} "
             "EXACT FACIAL LIKENESS MANDATE: The illustrated character MUST be unmistakably recognizable as the exact same person from <image1>. "
-            f"Preserve their exact facial proportions, authentic eye shape, irises, eyebrow arch, nose contour, and genuine expression ({avatar_info.get('expression', 'warm smile')}). "
-            f"Preserve their exact hairstyle: {avatar_info.get('hair_details', 'authentically styled hair')}, "
-            "rendered with detailed graphic vector strokes, smooth highlights, and stylized hair volume. "
+            f"Preserve their exact facial bone structure, authentic eye shape, irises, eyebrow arch, nose contour, and genuine expression ({avatar_info.get('expression', 'warm smile')}). "
+            f"AUTHENTIC HAIR & MATURITY: Preserve their exact hairline, styled hair volume, texture, and natural color from <image1> ({hair_desc}). "
+            "If the person has salt-and-pepper, silver, or grey hair, faithfully render the natural silver-grey and dark strands with fine digital strokes and soft highlights, "
+            "preserving their dignified, natural age and genuine character. "
+            f"AUTHENTIC SKIN COMPLEXION & ZERO CARICATURE ORANGE LOCK: "
+            f"Preserve the EXACT natural skin tone and undertones from <image1>: {skin_desc}. "
+            "The skin must look lifelike and natural with soft, smooth three-dimensional digital painting highlights — "
+            "CRITICAL: ABSOLUTELY DO NOT make the skin cartoonish yellow or oversaturated orange! "
+            "Keep the authentic wheatish/olive/fair complexion 100% faithful to the real person in <image1>. "
             f"{glasses_clause} "
             f"{beard_clause} "
             f"{distinctive_clause} "
-            "STRICT PROPORTION & NATURAL CHEEK LOCK (ABSOLUTELY NO ARTIFICIAL FACIAL SLIMMING): "
+            "STRICT PROPORTION & NATURAL CHEEK LOCK (ABSOLUTELY NO ARTIFICIAL FACIAL SLIMMING OR CARICATURE DISTORTION): "
             "Preserve the authentic face width, cheek fullness, and natural jaw contour of <image1>. "
-            "DO NOT artificially slim the face, DO NOT narrow the jaw, and DO NOT exaggerate into an unnatural V-line."
+            "DO NOT artificially slim the face, DO NOT narrow the jaw, and DO NOT exaggerate features into an unnatural comic caricature."
         ),
         (
-            f"UPPER OUTFIT VECTOR STYLING: "
-            f"Illustrate a faithful stylized vector rendition of the upper garment worn in <image1>: {outfit}. "
-            "Preserve the exact garment colors, print patterns (e.g. floral blossoms, stripes, or tailored lapels and tie), "
-            "crisp collar lines, and tailored silhouette with clean vector outlines and smooth shading."
+            f"UPPER OUTFIT STYLING: "
+            f"Illustrate a faithful stylized digital art rendition of the upper garment worn in <image1>: {outfit}. "
+            "Preserve the exact garment colors, print patterns (e.g. botanical floral foliage, stripes, or tailored lapels), "
+            "crisp collar lines, and tailored silhouette with clean subtle outlines and smooth dimensional shading."
         ),
         (
             f"CIRCULAR HALO BADGE & COMPOSITION: "
@@ -309,9 +350,11 @@ def build_avatar_stylized_prompt(
         ),
         (
             "QUALITY & GRAPHIC RENDERING STANDARDS: "
-            "Crisp 1024x1024 digital artwork, sharp vector linework, vibrant luminous palette, smooth cel-shading, perfect graphic balance, "
+            "Crisp 1024x1024 semi-realistic digital artwork, ultra-delicate fine contours, smooth painterly shading, perfect graphic balance, "
             "appealing modern social media profile picture (PFP). "
-            "STRICT NEGATIVE EXCLUSIONS: ABSOLUTELY NO photorealistic skin pores, NO waxy 3D plastic mannequin, NO uncanny CGI doll, "
+            "STRICT NEGATIVE EXCLUSIONS: ABSOLUTELY NO flat 2D cartoon, NO thick black comic book outlines, NO caricature distortion, "
+            "NO exaggerated cartoon eyes or teeth, NO Simpsons-style flat yellow/orange skin, NO cheap vector clipart, "
+            "NO photorealistic skin pores, NO waxy 3D plastic mannequin, NO uncanny CGI doll, "
             "NO cluttered photographic background, NO photographic noise, NO distorted fingers, NO watermark, NO logo overlay."
         ),
     ]

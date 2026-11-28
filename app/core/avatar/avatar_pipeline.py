@@ -83,8 +83,9 @@ def process_avatar_pipeline(
 
     # 5. Call GPU worker (Qwen-Image-2.1-Turbo)
     # 1024x1024 resolution is the gold standard for avatar profile pictures (PFP)
+    # Guidance 1.35 preserves soft skin shading and lifelike digital painting without cartoon edge burning
     steps = 16 if quality in ("high", "ultra") else 14
-    guidance = 2.0
+    guidance = 1.35
 
     try:
         generated_img, diagnostics = generate_garment_via_gpu(

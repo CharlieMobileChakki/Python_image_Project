@@ -93,7 +93,7 @@ class TestAvatarStudio(unittest.TestCase):
 
         self.assertEqual(halo, "soft_blue")
         self.assertEqual(doodle, "crown")
-        self.assertIn("STYLIZED 2D AVATAR PROFILE ILLUSTRATION", prompt)
+        self.assertIn("STYLIZED SEMI-REALISTIC DIGITAL AVATAR PORTRAIT", prompt)
         self.assertIn("EXACT FACIAL LIKENESS MANDATE", prompt)
         self.assertIn("MANDATORY EYEWEAR LOCK", prompt)
         self.assertIn("thin rectangular wireframe eyeglasses", prompt)
@@ -102,6 +102,26 @@ class TestAvatarStudio(unittest.TestCase):
         self.assertIn("crown doodle", prompt)
         self.assertIn("ABSOLUTELY NO ARTIFICIAL FACIAL SLIMMING", prompt)
         self.assertIn("NO photorealistic skin pores", prompt)
+
+    def test_hanging_glasses_on_shirt_bans_glasses_on_face(self):
+        """Verify reading glasses on shirt collar/placket strictly bans eyeglasses on face."""
+        avatar_info = {
+            "gender": "male",
+            "expression": "warm gentle smile",
+            "hair_details": "salt-and-pepper cropped hair",
+            "eyewear": "reading glasses hanging from shirt collar",
+            "glasses_hanging_on_shirt": True,
+            "facial_hair": "clean shaven",
+            "skin_tone_and_complexion": "medium wheatish Indian skin tone",
+            "upper_garment": "light blue floral shirt",
+            "distinctive_features": None,
+            "recommended_halo_color": "soft_blue",
+            "recommended_doodle": "sparks",
+        }
+        prompt, halo, doodle = build_avatar_stylized_prompt(avatar_info)
+        self.assertIn("STRICT EYEWEAR BAN (ZERO GLASSES ON FACE)", prompt)
+        self.assertIn("ABSOLUTELY DO NOT put, draw, or add any spectacles", prompt)
+        self.assertNotIn("MANDATORY EYEWEAR LOCK", prompt)
 
     def test_build_avatar_stylized_prompt_female_floral_dress(self):
         """Verify prompt construction for feminine avatar with floral dress, bindi, and heart doodle."""
