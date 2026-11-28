@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 UPPER_STUDIO_RULES = (
     "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Amazon Fashion hero shot): "
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing the hollow interior with zero human body inside. "
+    "MANDATORY FABRIC TEXTURE & WEAVE LOCK: Reconstruct the authentic microscopic textile micro-texture: whether fine 100% combed cotton single jersey knit, breathable honeycomb piqué knit, waffle knit, 2x2 rib knit, crisp poplin, or heavy diagonal twill denim, preserve the exact textile tactile grain and authentic hand without plastic smoothing. "
     "Seamlessly reconstruct the continuous authentic fabric pattern and textile weave across the chest, stomach, and sleeves. "
     "For pullover t-shirts and jerseys, maintain a completely solid, seamless front panel with ZERO buttons or vertical seams down the torso. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, both sleeves hanging straight down along both sides at symmetrical matching angles, and strictly level horizontal hemline. "
     "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the chest, torso, and ESPECIALLY BOTH SLEEVES must be solid, pristine, completely clean, and uniform in its authentic base color with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, ZERO shadow bleeding from the bedsheet or folds, and ZERO armpit burn patches. Both sleeves must have perfectly clean, unblemished, matching fabric surfaces with balanced, identical studio illumination. Any contrast trim (like collar or cuff bands) must remain strictly confined to the thin outer edge/cuff hem and NEVER bleed or smudge onto the sleeves or torso. "
-    "CHEST EMBLEMS & BRAND LOGOS: Faithfully preserve and replicate ONLY the authentic logos, badges, embroidery, and crests that are genuinely visible on the garment in the reference photo. If logos are present on either or both sides of the chest, reconstruct each logo in its exact position with sharp crisp detail. If the garment is plain without logos, keep it completely plain with zero added logos. "
+    "CHEST EMBLEMS & BRAND LOGOS: Faithfully preserve and replicate ONLY the authentic logos, badges, embroidery, and crests that are genuinely visible on the garment in the reference photo. If logos are present on either or both sides of the chest, reconstruct each logo in its exact position, proportions, and colors with sharp crisp detail. STRICTLY ZERO ADDED LOGOS / UNBRANDED: If the garment is plain without logos, keep it completely plain solid fabric with ABSOLUTELY NO chest logo, no crest, no emblem, no brand mark, and no text anywhere. Do NOT add, invent, or hallucinate any sportswear tick, luxury badge, or brand symbol. "
     "CRITICAL ISOLATION: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, legs, or bottom garments! The bottom half of the image MUST BE 100% empty, clean pure solid white (#FFFFFF). "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
@@ -34,8 +35,10 @@ UPPER_STUDIO_RULES = (
 LOWER_STUDIO_RULES = (
     "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Amazon Fashion hero shot): "
     "Empty hollow 3D open waistband aperture at top, and empty open bottom ankle leg cuffs showing the hollow interior with zero human body inside. "
+    "MANDATORY FABRIC TEXTURE & WEAVE LOCK: Reconstruct the authentic microscopic textile weave: whether heavy diagonal 3x1 twill denim with authentic slub yarns and natural wash fading, smooth cotton twill chino, crisp linen slub weave, or tailored wool blend suiting, preserve the exact real-world textile texture, tactile hand, and drape without plastic smoothing. "
     "Seamlessly reconstruct the authentic fabric weave, textile texture, waistband, front fly button/zipper, pockets, and full trouser leg length. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, horizontally level waistband across the top, both trouser legs hanging completely straight down vertically parallel to each other side-by-side with zero knee bend and zero walking tilt, both ankle leg cuffs aligned at the exact same horizontal height. "
+    "BRAND MARKS & POCKET TABS: Reconstruct authentic pocket tabs, rivet details, and brand patches only if genuinely visible on the garment. If plain, STRICTLY ZERO added patches, logos, or graphics. "
     "CRITICAL ISOLATION: ABSOLUTELY DO NOT GENERATE ANY SHIRT, TOP, T-SHIRT, JACKET, COLLAR, SHOULDERS, SLEEVES, CHEST, TORSO, OR UPPER BODY! "
     "The top half of the canvas MUST BE 100% empty, clean, pure solid white (#FFFFFF). Generate EXCLUSIVELY the standalone pants/trousers/skirt floating by themselves with NO upper garment attached! "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
@@ -44,7 +47,13 @@ LOWER_STUDIO_RULES = (
 FULL_OUTFIT_STUDIO_RULES = (
     "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Amazon Fashion hero shot): "
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing hollow interior with zero human body inside. "
+    "MANDATORY FABRIC TEXTURE & WEAVE LOCK: Reconstruct the authentic microscopic textile weave, fiber hand, drape weight, and natural folding physics of the dress/ensemble. "
+    "Whether fluid silk/satin with liquid sheen, delicate sheer georgette with translucent drape, heavy brocade/jacquard weave with raised metallic zari threads, "
+    "textured organic linen with horizontal slub grain, crisp cotton poplin, or plush velvet pile, reproduce the exact real-world textile micro-texture, yarn grain, and authentic fabric drape without smoothing into plastic or artificial gloss. "
+    "MANDATORY LOGO / BRAND MARK & EMBELLISHMENT LOCK: Faithfully preserve authentic embroidery, zari borders, lace trims, prints, and brand crests genuinely visible on the reference photo at their exact placement, scale, and colors without altering or redesigning. "
+    "If the garment is plain/solid without logos, keep it completely plain with STRICTLY ZERO added logos, crests, badges, emblems, or text anywhere. Do NOT add, invent, or hallucinate any brand mark or symbol. "
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, perfectly level horizontal shoulders, symmetrical silhouette, and plumb vertical alignment. "
+    "SPOTLESS PRISTINE FABRIC & ZERO SMUDGE RULE: The fabric across the entire garment must be solid, pristine, completely clean, and uniform in its authentic base dye with ZERO dark gradient smudges, ZERO dirty gray airbrush marks, and ZERO shadow bleeding from the bedsheet, floor, or fold crevices. Balanced, uniform studio illumination. "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
 )
 
@@ -66,12 +75,33 @@ CRITICAL RULES:
    - ONLY analyze genuine, stitched, wearable clothing items (e.g., an olive green kurta laid on the bed).
    - If only ONE garment is present in the photo (e.g., only a kurta lying on a bed), return ONLY THAT SINGLE GARMENT in the "garments" list. DO NOT hallucinate or invent a second garment out of the bedsheet!
 
-2. Precise Color Tone, Shade & Fabric Fidelity (SAME-TO-SAME REPLICATION):
+2. Precise Color Tone, Shade, Fabric Texture & Material Forensic Audit (SAME-TO-SAME REPLICATION):
    - Never use broad or generic bright color names like just "green", "olive-green", or "blue".
    - You must forensic-analyze the exact real-world shade, darkness, undertone, and saturation level:
      * If the fabric has a dark, muted, dusty, desaturated, or earthy tone (e.g., dusty army-olive, muted slate-sage, dark khaki-green, charcoal navy, faded terracotta, dusty peach), explicitly specify the EXACT muted shade: "deep muted dusty army-olive with desaturated matte greyish undertones, exactly preserving the dark muted dye tone and saturation of the reference photo without any artificial brightening, neon tint, or oversaturation".
      * If the fabric has a specific weave (e.g., textured cotton slub, raw handloom khadi, matte linen, twill denim, crepe, georgette), describe the exact matte weave and thread texture.
      * If plain solid, explicitly state: "pure solid matte fabric with uniform dye, no prints, no patterns, and no shiny gloss".
+   - FORENSIC TEXTILE & FABRIC TEXTURE AUDIT (DRESSES, SAREES, LEHENGAS, KURTAS, TOPS, PANTS):
+     * Always inspect and declare the microscopic textile texture and drape physics:
+       - Dresses, Sarees, Lehengas & Gowns:
+         * Mulberry Silk / Satin: "lustrous mulberry silk with fluid liquid drape and microscopic satin sheen".
+         * Georgette / Chiffon: "delicate sheer translucent georgette with fine grainy crepe twist and soft floating drape".
+         * Brocade / Jacquard / Zari: "rich woven brocade with raised structural jacquard relief and metallic gold/silver zari threads".
+         * Velvet: "plush dense upright velvet pile with rich deep luminous highlights".
+         * Organic Linen / Khadi: "textured raw linen with visible horizontal slub yarn grain and crisp matte hand".
+         * Cotton Cambric / Poplin: "smooth compact combed cotton poplin with fine plain weave and clean drape".
+       - T-Shirts, Polos & Sportswear:
+         * Combed Jersey: "fine 100% combed cotton single jersey knit with subtle horizontal micro-ribs".
+         * Piqué Knit: "breathable honeycomb waffle piqué knit texture (classic polo)".
+         * Athletic Micro-Mesh: "breathable polyester performance knit with microscopic moisture-wicking pores".
+       - Trousers, Chinos & Denim Jeans:
+         * Denim: "heavy 14oz rigid 3x1 diagonal twill denim with authentic slub yarn grain, authentic wash fading, and contrast topstitching".
+         * Chinos: "smooth compact cotton twill weave with solid uniform dye and clean flat-front finish".
+   - MANDATORY LOGO / BRAND MARK AUDIT & ANTI-HALLUCINATION LOCK:
+     * Declare `has_logo`: true if authentic brand logo, club crest, or graphic emblem is genuinely visible; false if plain/solid/unbranded.
+     * Declare `logo_and_graphics`: exact placement, design, and colors of genuine visible markings, or "none (plain unbranded solid fabric with strictly zero logos, emblems, or text)".
+     * STRICT ANTI-HALLUCINATION RULE: If `has_logo` is false, explicitly state: "STRICTLY ZERO ADDED LOGOS: Fabric is completely plain and unbranded. Do NOT add, invent, or hallucinate any brand logo, Nike/Adidas tick, luxury badge, crest, emblem, or text anywhere."
+     * If genuine logos exist (e.g. club crest, Adidas 3-bars, polo pony): describe exact placement and colors without altering or redesigning.
    - ATHLETIC WEAR, SPORTS KITS & BRANDED APPAREL (CRITICAL ACCENT COLOR & LOGO FIDELITY):
      * NEVER guess or hallucinate colors or logos from brand memory or other product variants!
      * Deconstruct and specify each visible element's exact optical pixel colors:
@@ -202,15 +232,14 @@ Return strictly valid JSON format:
 {
   "garments": [
     {
-      "category": "bangles",
-      "recognized_label": "Pair of Antique 22K Gold Broad Cuff Kada Bangles",
-      "item_count": 2,
-      "piece_descriptor": "exactly 2 matching broad cuff kada bangles (a pair of 2)",
-      "form_factor": "broad thick cuff kada with wide cylindrical band (approx 25-30mm wide) and thick rigid circular walls",
-      "metal_type": "22K Antique Warm Yellow Gold with Matte Relief Luster",
-      "gemstone_type": "none (pure solid gold floral relief carvings, no multicolor enamel)",
-      "box_2d": [200, 100, 800, 900],
-      "garment_description": "A pair of exactly TWO matching antique 22K gold broad cuff kada bangles. Each kada features a wide, thick cylindrical band adorned with intricate hand-carved floral and foliate relief scrollwork, bordered by raised beaded edges and micro-granulation rims."
+      "category": "dress",
+      "recognized_label": "Emerald Green Mulberry Silk Anarkali Dress with Zari Embroidery",
+      "fabric_texture": "lustrous mulberry silk with fluid liquid drape and microscopic satin sheen",
+      "surface_finish": "subtle silk luster with radiant highlights",
+      "has_logo": false,
+      "logo_and_graphics": "none (plain unbranded bodice with hand-embroidered golden zari floral motifs along neckline and hem; strictly zero brand logos or emblems)",
+      "box_2d": [100, 200, 900, 800],
+      "garment_description": "An authentic emerald green mulberry silk Anarkali dress featuring a tailored bodice with delicate golden zari embroidery around the round neckline and full-length sleeves, flowing into a generous flared kali skirt with embroidered border hem."
     }
   ]
 }"""
@@ -238,6 +267,10 @@ def _build_final_prompt(
     item_count: int | None = None,
     piece_descriptor: str | None = None,
     form_factor: str | None = None,
+    fabric_texture: str | None = None,
+    surface_finish: str | None = None,
+    has_logo: bool | None = None,
+    logo_and_graphics: str | None = None,
 ) -> str:
     """Put category-specific 3D ghost-mannequin isolation, e-commerce pose straightening, and fabric lock FIRST."""
     cat = (category or "").strip().lower()
@@ -288,11 +321,47 @@ def _build_final_prompt(
         "Reconstruct ONLY the authentic stitched garment itself."
     )
 
-    if cat == "upper_clothes":
-        desc_clean = (garment_description or "").strip()
-        label_clean = (recognized_label or "").strip()
-        full_text = f"{desc_clean} {label_clean}".lower()
+    desc_clean = (garment_description or "").strip()
+    label_clean = (recognized_label or "").strip()
+    full_text = f"{desc_clean} {label_clean}".lower()
 
+    # Dynamic fabric texture clause
+    fabric_txt = (fabric_texture or "").strip()
+    finish_txt = (surface_finish or "").strip()
+    fabric_parts = []
+    if fabric_txt:
+        fabric_parts.append(f"Authentic fabric texture and weave: {fabric_txt}")
+    if finish_txt:
+        fabric_parts.append(f"Surface finish: {finish_txt}")
+    fabric_clause = (
+        f"EXACT FABRIC TEXTURE LOCK: {'. '.join(fabric_parts)}. "
+        "Reconstruct authentic microscopic textile grain, fiber hand, weave structure, and natural drape weight without smoothing into plastic or artificial gloss. "
+        if fabric_parts
+        else ""
+    )
+
+    # Dynamic logo & brand mark anti-hallucination clause
+    has_explicit_logo = has_logo is True or any(
+        k in full_text
+        for k in ("logo", "crest", "emblem", "graphic", "print", "badge", "patch", "nike", "adidas", "puma", "under armour", "jordan")
+    )
+    if has_logo is False or (has_logo is None and not has_explicit_logo):
+        logo_clause = (
+            "STRICTLY ZERO ADDED LOGOS / UNBRANDED: The fabric is completely solid and unbranded. "
+            "ABSOLUTELY DO NOT add, invent, or hallucinate any brand logo, Nike/Adidas tick, luxury badge, crest, emblem, or text anywhere on this garment. "
+            "Keep the fabric completely plain, pristine, and unbranded. "
+        )
+    elif logo_and_graphics and logo_and_graphics.strip() and not any(k in logo_and_graphics.lower() for k in ("none", "no logo", "unbranded", "plain")):
+        logo_clause = (
+            f"EXACT LOGO & GRAPHICS LOCK: Faithfully preserve and replicate the authentic visible logo/crest/print ({logo_and_graphics.strip()}) "
+            "in its exact scale, position, and colors without alteration, mutation, or distortion. "
+        )
+    else:
+        logo_clause = (
+            "CHEST EMBLEMS & LOGOS: Faithfully preserve and replicate only the authentic logos, badges, embroidery, and crests genuinely visible on the reference photo in their exact relative positions. If plain without logos, do NOT invent or add any. "
+        )
+
+    if cat == "upper_clothes":
         is_pullover = any(
             k in full_text
             for k in (
@@ -335,8 +404,9 @@ def _build_final_prompt(
         garment_lock = (
             "STRICT AUTHENTICITY & DESIGN CLONING (DRESS WAHI REHNA CHAHIYE): "
             "While straightening into the e-commerce studio pose, you MUST preserve the EXACT garment from the reference photo without altering it! "
+            f"{fabric_clause}"
+            f"{logo_clause}"
             "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, pattern motifs, collar shape, buttons, placket, and stitching directly from the reference photo. "
-            "CHEST MARKINGS & BRAND EMBLEMS: Reconstruct all authentic brand logos, club crests, and graphics genuinely visible on the garment in the reference photo in their exact relative positions with sharp embroidery detail. If dual chest emblems exist (such as a brand logo on one side and a team crest on the other), reconstruct both side-by-side with sharp crisp detail. If the garment is plain without logos, do NOT invent or add any. "
             "STRICT COLOR FIDELITY: Retain the authentic real-world colors of all fabric panels, contrast trims, collar borders, and stripes directly from the photo without any artificial hue shift or color substitution."
         )
         return (
@@ -369,6 +439,8 @@ def _build_final_prompt(
         garment_lock = (
             "STRICT AUTHENTICITY & DESIGN CLONING (DRESS WAHI REHNA CHAHIYE): "
             "While straightening the pose into the e-commerce studio display, you MUST preserve the EXACT garment from the reference photo without altering it! "
+            f"{fabric_clause}"
+            f"{logo_clause}"
             "Faithfully replicate the identical real-world dye color, hue, lightness, smooth fabric weave, textile texture, seams, front fly, button closure, belt loops, and pockets directly from the reference photo without changing the garment."
         )
         return (
@@ -376,7 +448,7 @@ def _build_final_prompt(
             f"{pose_rectification} "
             f"{garment_lock} "
             f"{surface_rejection} "
-            f"Exact standalone lower garment to isolate and faithfully reconstruct from reference photo: {garment_description.strip()}. "
+            f"Exact standalone lower garment to isolate and faithfully reconstruct from reference photo: {desc_clean}. "
             f"{LOWER_STUDIO_RULES}"
         )
 
@@ -393,6 +465,8 @@ def _build_final_prompt(
         garment_lock = (
             "STRICT AUTHENTICITY & DESIGN CLONING (DRESS WAHI REHNA CHAHIYE): "
             "While straightening into the e-commerce studio pose, you MUST preserve the EXACT garment from the reference photo without altering it! "
+            f"{fabric_clause}"
+            f"{logo_clause}"
             "Faithfully replicate the identical real-world color, hue, fabric weave, textile texture, embroidery, prints, and construction directly from the reference photo without changing the garment."
         )
         return (
@@ -400,32 +474,100 @@ def _build_final_prompt(
             f"{pose_rectification} "
             f"{garment_lock} "
             f"{surface_rejection} "
-            f"Exact standalone garment to reconstruct from reference photo: {garment_description.strip()}. "
+            f"Exact standalone garment to reconstruct from reference photo: {desc_clean}. "
             f"{FULL_OUTFIT_STUDIO_RULES}"
         )
 
 
-def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, str]]:
+def _fallback_garment_plan(target_garment: str = "all") -> list[dict[str, Any]]:
     """Deterministic fallback prompt if OpenAI API key is absent or unavailable."""
     t = (target_garment or "all").strip().lower()
     mapping = {
-        "upper_clothes": ("upper_clothes", "Top / Shirt / Upper Garment", "the upper-body garment (top, shirt, kurta, jacket, or blouse) with its exact original colors, fabric weave, and print motifs"),
-        "pants": ("pants", "Pants / Jeans / Lower Garment", "the lower-body trousers, pants, or jeans with original color and fit"),
-        "dress": ("dress", "Dress / Kurta / Full Outfit", "the full-length dress, kurta, or outfit preserving exact original prints, embroidery, and neckline"),
-        "skirt": ("skirt", "Skirt", "the skirt with original pattern and borders"),
-        "saree": ("saree", "Saree", "the complete draped saree with borders and pallu print"),
-        "lehenga": ("lehenga", "Lehenga / Ethnic Set", "the complete lehenga ensemble with intricate embroidery and borders"),
+        "upper_clothes": (
+            "upper_clothes",
+            "Top / Shirt / Upper Garment",
+            "the upper-body garment (top, shirt, kurta, jacket, or blouse) with its exact original colors, microscopic fabric weave, and print motifs",
+            "fine combed cotton single jersey knit or crisp poplin weave",
+            "matte natural finish",
+            False,
+            "none (plain solid unbranded fabric with zero added logos)",
+        ),
+        "pants": (
+            "pants",
+            "Pants / Jeans / Lower Garment",
+            "the lower-body trousers, pants, or jeans with original color, authentic twill weave, and tailored fit",
+            "heavy diagonal cotton twill or authentic denim slub weave",
+            "matte natural finish",
+            False,
+            "none (plain unbranded waistband and legs with zero added logos)",
+        ),
+        "dress": (
+            "dress",
+            "Dress / Kurta / Full Outfit",
+            "the full-length dress, kurta, or outfit preserving exact original prints, embroidery, fabric drape, and neckline",
+            "fluid silk, georgette, or fine woven textile with authentic drape and micro-texture",
+            "subtle natural luster",
+            False,
+            "none (authentic embroidery/prints only with zero brand logos)",
+        ),
+        "skirt": (
+            "skirt",
+            "Skirt",
+            "the skirt with original pattern, fabric weave, and borders",
+            "fine woven textile with natural pleats and drape",
+            "matte natural finish",
+            False,
+            "none (plain fabric with zero brand logos)",
+        ),
+        "saree": (
+            "saree",
+            "Saree",
+            "the complete draped saree with borders, pallu print, and authentic silk/georgette weave",
+            "lustrous mulberry silk or fluid sheer georgette with metallic zari borders",
+            "radiant silk sheen",
+            False,
+            "none (traditional zari motifs only with zero modern brand logos)",
+        ),
+        "lehenga": (
+            "lehenga",
+            "Lehenga / Ethnic Set",
+            "the complete lehenga ensemble with intricate embroidery, borders, and authentic fabric drape",
+            "rich brocade jacquard or silk-blend with raised zari threadwork",
+            "luminous festive luster",
+            False,
+            "none (traditional embroidery only with zero brand logos)",
+        ),
     }
-    cat, label, desc = mapping.get(
+    cat, label, desc, tex, finish, has_lg, lg_desc = mapping.get(
         t,
-        ("dress", "Studio Garment", "the primary garment worn by the person preserving exact original colors, textile weave, and print motifs"),
+        (
+            "dress",
+            "Studio Garment",
+            "the primary garment worn by the person preserving exact original colors, textile weave, and print motifs",
+            "fine woven textile with authentic texture and drape",
+            "natural matte finish",
+            False,
+            "none (plain unbranded fabric with zero added logos)",
+        ),
     )
     return [
         {
             "category": cat,
             "recognized_label": label,
             "garment_description": desc,
-            "prompt": _build_final_prompt(desc, cat),
+            "fabric_texture": tex,
+            "surface_finish": finish,
+            "has_logo": has_lg,
+            "logo_and_graphics": lg_desc,
+            "prompt": _build_final_prompt(
+                garment_description=desc,
+                category=cat,
+                recognized_label=label,
+                fabric_texture=tex,
+                surface_finish=finish,
+                has_logo=has_lg,
+                logo_and_graphics=lg_desc,
+            ),
             "prompt_source": "default_fallback",
         }
     ]
@@ -495,7 +637,8 @@ def analyze_garment_and_build_prompts(
         user_instruction = (
             f"Analyze the full {target_norm} in this image. "
             "STRICT BACKGROUND RULE: If placed on a bedsheet, blanket, or floor, IGNORE the background bedsheet completely. "
-            "CRITICAL COLOR FIDELITY: Identify exact real-world dye shades, borders, prints, embroidery, and drape without oversaturating. "
+            "CRITICAL COLOR & FABRIC TEXTURE FIDELITY: Inspect microscopic textile weave (mulberry silk, fluid satin, georgette, chiffon, velvet, linen slubs, brocade zari, cotton cambric). Describe exact fabric texture, surface sheen, and drape weight. "
+            "CRITICAL EMBROIDERY & LOGO AUDIT: Distinguish authentic traditional embroidery, zari borders, prints, and embellishments from modern logos. If plain, declare 'strictly zero logos or brand marks'. If embroidered, specify exact zari motifs and thread colors. "
             "CRITICAL POSE STRAIGHTENING: Reconstruct in a plumb, symmetrical 0-degree straight e-commerce studio catalog display while preserving all authentic garment details."
         )
     else:  # "all"
@@ -573,6 +716,10 @@ def analyze_garment_and_build_prompts(
             item_cnt = int(item.get("item_count", 0) or 0) or None
             piece_desc = str(item.get("piece_descriptor", "")).strip() or None
             form_fact = str(item.get("form_factor", "")).strip() or None
+            fabric_tex = str(item.get("fabric_texture", "")).strip() or None
+            surf_finish = str(item.get("surface_finish", "")).strip() or None
+            has_logo_val = bool(item.get("has_logo", False)) if "has_logo" in item else None
+            logo_gfx = str(item.get("logo_and_graphics", "")).strip() or None
             box_2d = item.get("box_2d")
             if not desc:
                 continue
@@ -588,6 +735,10 @@ def analyze_garment_and_build_prompts(
                     "item_count": item_cnt,
                     "piece_descriptor": piece_desc,
                     "form_factor": form_fact,
+                    "fabric_texture": fabric_tex or "",
+                    "surface_finish": surf_finish or "",
+                    "has_logo": has_logo_val,
+                    "logo_and_graphics": logo_gfx or "",
                     "box_2d": box_2d,
                     "prompt": _build_final_prompt(
                         garment_description=desc,
@@ -598,6 +749,10 @@ def analyze_garment_and_build_prompts(
                         item_count=item_cnt,
                         piece_descriptor=piece_desc,
                         form_factor=form_fact,
+                        fabric_texture=fabric_tex,
+                        surface_finish=surf_finish,
+                        has_logo=has_logo_val,
+                        logo_and_graphics=logo_gfx,
                     ),
                     "prompt_source": f"openai:{model_name}",
                 }
@@ -611,6 +766,10 @@ def analyze_garment_and_build_prompts(
             desc = str(first.get("garment_description", "the primary garment")).strip()
             metal = str(first.get("metal_type", "")).strip() or None
             gemstone = str(first.get("gemstone_type", "")).strip() or None
+            fabric_tex = str(first.get("fabric_texture", "")).strip() or None
+            surf_finish = str(first.get("surface_finish", "")).strip() or None
+            has_logo_val = bool(first.get("has_logo", False)) if "has_logo" in first else None
+            logo_gfx = str(first.get("logo_and_graphics", "")).strip() or None
             box_2d = first.get("box_2d")
             results.append(
                 {
@@ -619,6 +778,10 @@ def analyze_garment_and_build_prompts(
                     "garment_description": desc,
                     "metal_type": metal or "",
                     "gemstone_type": gemstone or "",
+                    "fabric_texture": fabric_tex or "",
+                    "surface_finish": surf_finish or "",
+                    "has_logo": has_logo_val,
+                    "logo_and_graphics": logo_gfx or "",
                     "box_2d": box_2d,
                     "prompt": _build_final_prompt(
                         garment_description=desc,
@@ -626,6 +789,10 @@ def analyze_garment_and_build_prompts(
                         metal_type=metal,
                         gemstone_type=gemstone,
                         recognized_label=label,
+                        fabric_texture=fabric_tex,
+                        surface_finish=surf_finish,
+                        has_logo=has_logo_val,
+                        logo_and_graphics=logo_gfx,
                     ),
                     "prompt_source": f"openai:{model_name}",
                 }

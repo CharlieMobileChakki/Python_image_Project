@@ -520,6 +520,90 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("Adidas 3-bar logo", branded_prompt)
         self.assertIn("without altering, mutating, moving, or redesigning", branded_prompt)
 
+    def test_studio_dress_and_garment_fabric_texture_and_logo_preservation(self):
+        from app.core.flow_b.prompt_generator import (
+            _build_final_prompt,
+            _fallback_garment_plan,
+            analyze_garment_and_build_prompts,
+        )
+
+        # 1. Dress with silk fabric texture and zero logos
+        dress_prompt = _build_final_prompt(
+            garment_description="Anarkali maxi dress with embroidered neckline and long sleeves",
+            category="dress",
+            recognized_label="Mulberry Silk Anarkali Dress",
+            fabric_texture="lustrous mulberry silk with fluid liquid drape and microscopic satin sheen",
+            surface_finish="subtle radiant silk luster",
+            has_logo=False,
+            logo_and_graphics="none (plain unbranded fabric with traditional thread embroidery)",
+        )
+        self.assertIn("EXACT FABRIC TEXTURE LOCK", dress_prompt)
+        self.assertIn("lustrous mulberry silk with fluid liquid drape", dress_prompt)
+        self.assertIn("STRICTLY ZERO ADDED LOGOS / UNBRANDED", dress_prompt)
+        self.assertIn("ABSOLUTELY DO NOT add, invent, or hallucinate any brand logo", dress_prompt)
+        self.assertIn("MANDATORY FABRIC TEXTURE & WEAVE LOCK", dress_prompt)
+        self.assertIn("MANDATORY E-COMMERCE POSE STRAIGHTENING", dress_prompt)
+
+        # 2. Dress / Saree with authentic logo / graphics
+        branded_dress_prompt = _build_final_prompt(
+            garment_description="Contemporary designer tunic dress with signature metallic logo brooch",
+            category="dress",
+            recognized_label="Designer Tunic Dress",
+            fabric_texture="crisp organic linen with natural slub grain",
+            surface_finish="matte",
+            has_logo=True,
+            logo_and_graphics="polished golden monogram emblem on left chest lapel",
+        )
+        self.assertIn("EXACT LOGO & GRAPHICS LOCK", branded_dress_prompt)
+        self.assertIn("polished golden monogram emblem on left chest lapel", branded_dress_prompt)
+        self.assertIn("organic linen with natural slub grain", branded_dress_prompt)
+
+        # 3. Fallback garment plan verification across all apparel categories
+        for cat in ("dress", "saree", "lehenga", "upper_clothes", "pants", "skirt"):
+            plan = _fallback_garment_plan(cat)
+            self.assertEqual(len(plan), 1)
+            item = plan[0]
+            self.assertIn("fabric_texture", item)
+            self.assertTrue(len(item["fabric_texture"]) > 0)
+            self.assertIn("EXACT FABRIC TEXTURE LOCK", item["prompt"])
+            self.assertIn("STRICTLY ZERO ADDED LOGOS / UNBRANDED", item["prompt"])
+
+        # 4. Mocked Vision API response parsing for studio dress
+        mock_vision_data = {
+            "garments": [
+                {
+                    "category": "dress",
+                    "recognized_label": "Emerald Green Mulberry Silk Anarkali Dress",
+                    "fabric_texture": "lustrous mulberry silk with fluid drape and satin sheen",
+                    "surface_finish": "subtle silk luster",
+                    "has_logo": False,
+                    "logo_and_graphics": "none (plain unbranded fabric with traditional gold zari border)",
+                    "box_2d": [100, 200, 900, 800],
+                    "garment_description": "Emerald green silk dress with gold zari embroidery along the neckline and cuffs.",
+                }
+            ]
+        }
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(mock_vision_data)}}]
+        }
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value.post.return_value = mock_resp
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-mock-key"}, clear=False), patch(
+            "app.core.flow_b.prompt_generator.httpx.Client", return_value=mock_client
+        ):
+            img = Image.new("RGB", (256, 256), (30, 120, 60))
+            plans = analyze_garment_and_build_prompts(img, target_garment="dress")
+
+        self.assertEqual(len(plans), 1)
+        p = plans[0]
+        self.assertEqual(p["category"], "dress")
+        self.assertIn("lustrous mulberry silk", p["fabric_texture"])
+        self.assertFalse(p["has_logo"])
+        self.assertIn("EXACT FABRIC TEXTURE LOCK", p["prompt"])
+        self.assertIn("STRICTLY ZERO ADDED LOGOS / UNBRANDED", p["prompt"])
+
 
 if __name__ == "__main__":
     unittest.main()
