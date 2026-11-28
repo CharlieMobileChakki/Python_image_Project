@@ -26,7 +26,10 @@ MAX_TRYON_CONDITION_IMAGES = 10
 
 AVATAR_ANALYSIS_SYSTEM_PROMPT = """You are a forensic facial & portrait biometric analyst preparing identity specifications for studio fashion generation.
 
-Analyze ONLY the person in this photograph (IGNORE the clothing/shirt/background they are currently wearing — only note clothing in `original_worn_clothes` so the generator discards it).
+Analyze ONLY the person in this image (IGNORE the clothing/shirt/background they are currently wearing — only note clothing in `original_worn_clothes` so the generator discards it).
+
+IMPORTANT: SUPPORT BOTH REAL PHOTOS AND STYLIZED AVATAR CARDS.
+The input may be a real photo OR an AI-generated stylized avatar profile card (with a circular pastel halo badge, doodle accents, or clean ivory canvas). If it is a stylized avatar, extract the person's exact facial biometric identity, facial proportions, eye shape, smile, hairline, hairstyle texture, glasses, and exact skin complexion coordinates. Note any circular halo or doodle graphic in `avatar_background_elements` so the generator knows to discard them.
 
 Determine carefully:
 - `avatar_gender`: "male" | "female" — inspect facial bone structure, brow ridge, jawline, facial hair/stubble/mustache, hairstyle, and overall presentation. Never guess blindly; be accurate.
@@ -36,7 +39,7 @@ Determine carefully:
   2. Eyes & Eyewear: eye shape, eyelids, eyebrows thickness and shape. EYEGLASSES: specify exactly whether the person wears prescription glasses or sunglasses directly on their eyes (describe frame material/shape/color, e.g., thin wireframe rectangular metallic glasses with clear lenses), or explicitly state "no glasses worn on face".
   3. Nose, Cheeks & Mouth: nose bridge width/shape, tip shape, cheek contour, smile lines, lip shape, and natural expression (gentle smile, confident, relaxed).
   4. Facial Hair: clean shaven, light 5 o'clock shadow, trimmed mustache, chin goatee, or full beard.
-  5. Skin Complexion: exact natural skin tone and undertone (fair, wheatish, warm tan, deep brown), smooth/natural skin texture.
+  5. Skin Complexion & Color Coordinates: exact natural skin tone and undertone (fair ivory, wheatish, warm peach undertone, golden tan, deep brown), smooth/natural skin texture.
 - `avatar_face_box_2d`: [ymin, xmin, ymax, xmax] integers (0..1000) framing comfortably from TOP OF HAIR down to BASE OF NECK / UPPER COLLARBONE (keep full hair width and both ears inside the box!).
 
 Return STRICTLY valid JSON:
@@ -45,6 +48,7 @@ Return STRICTLY valid JSON:
   "avatar_summary": "...",
   "forensic_face_details": "...",
   "original_worn_clothes": "...",
+  "avatar_background_elements": "...",
   "avatar_face_box_2d": [60, 260, 480, 740]
 }"""
 
@@ -1109,12 +1113,20 @@ def build_qwen_tryon_prompt(
 
     sections = [
         (
-            "STRICT FACE & IDENTITY PRESERVATION (<image1> IDENTICAL PERSON LOCK): "
-            f"The full-length studio fashion model MUST be the EXACT SAME real {gender_person_noun} shown in <image1>. "
+            "STRICT FACE & IDENTITY PRESERVATION (<image1> IDENTICAL PERSON / AVATAR LOCK): "
+            f"The full-length studio fashion model MUST be the EXACT SAME {gender_person_noun} shown in <image1>. "
             f"Biometric reference: {identity_details}. "
             "Copy and preserve the exact face directly from <image1> — keeping the identical eye shape, irises, eyebrows, "
             "nose shape and width, lips, cheek contours, smile lines, jawline, chin, facial hair/mustache/stubble, exact hairline and styled hair pattern, "
-            "true skin tone, and authentic real age 100% faithfully matching <image1>. "
+            "authentic real age, and exact skin complexion 100% faithfully matching <image1>. "
+            "EXACT FACIAL COLOR COORDINATES & COMPLEXION LOCK: "
+            "The facial skin tone, undertones (warm peach, golden wheatish, or fair ivory), and facial color coordinates of the model MUST 100% identically match <image1>. "
+            "Zero color shift, zero artificial whitening, and zero skin hue distortion. Seamless, natural anatomical blending between face, neck, and collar. "
+            "AVATAR REFERENCE SPECIFICATION (SEAMLESS STUDIO CYCLORAMA ONLY): "
+            "If <image1> is an AI-generated stylized avatar profile card featuring a pastel circular halo badge, doodle accents (crown, heart, sparks), or graphic borders behind the head, "
+            "extract 100% of the person's face identity, facial features, hair structure, glasses, and skin color coordinates from <image1>, "
+            "but STRICTLY DISREGARD AND OMIT ANY CIRCULAR HALO BADGES, DOODLE ICONS, OR GRAPHIC CARD BORDERS in the final try-on output. "
+            "The full-length model must be seamlessly rendered in a pristine, continuous, photorealistic studio cyclorama backdrop wearing the requested garments. "
             f"{glasses_directive} "
             "MANDATORY NATURAL FACIAL VOLUME & FULL CHEEK STRUCTURE LOCK (ABSOLUTELY NO ARTIFICIAL FACIAL SLIMMING): "
             "Preserve the EXACT facial width, cheek fullness, jawline contour, and authentic youthful facial volume of <image1>. "
