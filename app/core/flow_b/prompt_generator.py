@@ -189,13 +189,21 @@ CRITICAL RULES:
      * If the piece is solid engraved gold with relief floral work or filigree, describe it as:
        "Intricate solid antique gold relief floral and foliate hand-carvings with beaded borders. No loud multicolor enamel."
 
-7. JEWELRY SETS & MULTI-PIECE PARSING (CRITICAL E-COMMERCE RULE):
-   - If the photograph contains a JEWELRY SET (e.g. a Necklace AND a pair of matching Earrings, or Necklace + Earrings + Ring):
-     YOU MUST RETURN A SEPARATE ENTRY FOR EACH DISTINCT JEWELRY PIECE in the "garments" list!
-     * Entry 1: category "necklace" for the standalone necklace.
-     * Entry 2: category "earrings" for the matching pair of earrings.
-     * Entry 3: category "ring" (if a ring is also part of the set).
-     NEVER omit, drop, or merge the matching earrings or ring in a jewelry set! Both pieces belong to the set and must be recognized and generated!
+7. DEDICATED JEWELRY SETS vs INCIDENTAL JEWELRY DISCRIMINATION (STRICT 85% PROMINENCE RULE):
+   - STRICT INCIDENTAL JEWELRY REJECTION:
+     * When the photograph shows a person, model, or mannequin wearing APPAREL (dress, kurta, top, shirt, suit, pants, saree, lehenga), the user's primary intent is EXCLUSIVELY the clothing/apparel!
+     * Casual or incidental jewelry worn by the person (such as small rings on fingers, ear studs, thin chains, wrist threads, or casual watches) MUST BE COMPLETELY IGNORED AND EXCLUDED!
+     * DO NOT create any entry in the 'garments' list for incidental jewelry worn by an apparel model!
+     * ONLY extract jewelry if:
+       1. The photograph is a dedicated standalone macro jewelry showcase (no dominant apparel model), OR
+       2. The jewelry item is the unmistakable primary hero subject occupying >= 15% of the frame with >= 85% visual clarity and prominence.
+   - DEDICATED JEWELRY SETS (STANDALONE JEWELRY SHOWCASE ONLY):
+     * If and only if the photograph is a dedicated standalone jewelry showcase containing a JEWELRY SET (e.g. Necklace AND matching Earrings, or Necklace + Earrings + Ring on display):
+       Return a separate entry for each distinct jewelry piece in the "garments" list:
+       - Entry 1: category "necklace" for the standalone necklace.
+       - Entry 2: category "earrings" for the matching pair of earrings.
+       - Entry 3: category "ring" (if a ring is also part of the set).
+       Both pieces belong to the set and must be recognized and generated!
 
 8. MANDATORY BOUNDING BOX LOCALIZATION (box_2d) FOR MACRO ZOOM & CROPPING:
    - For every detected piece (especially earrings in a jewelry set, rings, bangles, or necklaces), provide:
@@ -643,24 +651,20 @@ def analyze_garment_and_build_prompts(
         )
     else:  # "all"
         user_instruction = (
-            "Analyze the item(s) (apparel clothing OR precious jewelry ornament) in this image for exact 3D studio catalog reconstruction. "
-            "CRITICAL DOMAIN DISCRIMINATION (APPAREL vs JEWELRY): "
-            "1. If the photo contains a JEWELRY SET (e.g. Necklace AND matching Earrings, or Necklace + Earrings + Ring): "
-            "   YOU MUST RETURN MULTIPLE ENTRIES IN THE 'garments' LIST: "
-            "   - One entry for the necklace ('necklace'). "
-            "   - One entry for the matching pair of earrings ('earrings')! "
-            "   - One entry for the ring ('ring') if present. "
-            "   ABSOLUTELY NEVER DROP OR MERGE THE MATCHING EARRINGS! Both pieces belong to the set and must be recognized and generated! "
-            "2. If single JEWELRY item: Categorize strictly as 'earrings', 'necklace', 'ring', or 'bangles'. "
-            "   PROVIDE A HIGH-PRECISION MASTER GEMOLOGIST FORENSIC DECONSTRUCTION: "
-            "   - Stone & Gemstone Taxonomy (faceted teardrop/oval crystals, diamonds, pearls, rubies, prongs, facets). "
-            "   - Exact metal alloy (warm yellow gold, rose gold, silver rhodium, platinum) and specular polish luster. "
-            "   - Setting architecture (claw prongs, pave halo borders, openwork jaali filigree, articulated V-shaped collar links, jump rings, hanging briolettes). "
+            "Analyze the item(s) in this image for exact 3D studio catalog reconstruction. "
+            "CRITICAL DOMAIN DISCRIMINATION & 85% PROMINENCE RULE (APPAREL vs JEWELRY): "
+            "1. PRIMARY APPAREL LOCK: If the photo shows a model or person wearing APPAREL (dress, kurta, top, suit, shirt, pants, saree, lehenga), "
+            "   extract EXCLUSIVELY the clothing/apparel items! "
+            "   STRICTLY IGNORE and DO NOT extract any casual/incidental jewelry (such as small rings on fingers, ear studs, thin bracelets, wrist threads) worn by the model. "
+            "   Only return genuine clothing categories ('dress', 'upper_clothes', 'pants', 'saree', 'lehenga', 'skirt'). "
+            "2. STANDALONE JEWELRY SHOWCASE: ONLY if the photo is a dedicated macro jewelry showcase (NOT a casual accessory on a clothed person): "
+            "   - If a dedicated jewelry set (e.g. Necklace AND matching Earrings on display): return multiple entries (necklace, earrings, ring). "
+            "   - If single jewelry item: categorize strictly as 'necklace', 'earrings', 'ring', or 'bangles' with high-precision gemologist deconstruction. "
+            "   - Enforce >= 85% prominence: only extract jewelry if it is the primary hero subject with >= 85% visual clarity and prominence. "
             "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
-            "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Inspect both sides of the chest for any authentic brand logos, crests, or emblems and describe all of them without omitting any. Forensic-extract exact colors of trims and stripes directly from visible pixels without shifting hues. "
-            "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves (strictly no dark shadow bleeding from bedsheets or fold crevices). "
-            "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND. "
-            "5. Actual Items Only: Only identify the genuine item(s). If a necklace and earrings are both present, return TWO separate entries."
+            "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Inspect both sides of the chest for any authentic brand logos, crests, or emblems and describe all of them without omitting any. "
+            "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves. "
+            "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND."
         )
     payload: dict[str, Any] = {
         "model": model_name,
@@ -707,7 +711,12 @@ def analyze_garment_and_build_prompts(
 
         target_norm = (target_garment or "all").strip().lower()
         results: list[dict[str, Any]] = []
-        for item in items[:3]:
+
+        APPAREL_CATS = {"dress", "upper_clothes", "pants", "skirt", "saree", "lehenga"}
+        JEWELRY_CATS = {"necklace", "ring", "earrings", "bangles"}
+        has_apparel = any(str(it.get("category", "")).strip().lower() in APPAREL_CATS for it in items)
+
+        for item in items[:4]:
             cat = str(item.get("category", "dress")).strip().lower()
             label = str(item.get("recognized_label", "Studio Garment")).strip()
             desc = str(item.get("garment_description", "")).strip()
@@ -721,6 +730,25 @@ def analyze_garment_and_build_prompts(
             has_logo_val = bool(item.get("has_logo", False)) if "has_logo" in item else None
             logo_gfx = str(item.get("logo_and_graphics", "")).strip() or None
             box_2d = item.get("box_2d")
+
+            # Incidental jewelry filter: when apparel is present, drop minor/incidental jewelry (<85% prominence)
+            if cat in JEWELRY_CATS and has_apparel and target_norm not in JEWELRY_CATS:
+                prominence = int(item.get("prominence_score") or item.get("clarity_percentage") or 0)
+                is_primary = bool(item.get("is_primary_subject", False))
+                box_area = 1.0
+                if isinstance(box_2d, list) and len(box_2d) == 4:
+                    ymin, xmin, ymax, xmax = box_2d
+                    box_area = ((ymax - ymin) / 1000.0) * ((xmax - xmin) / 1000.0)
+                if prominence < 85 or box_area < 0.15 or not is_primary:
+                    logger.info(
+                        "Suppressed incidental jewelry item '%s' (category=%s, prominence=%d, box_area=%.3f) in favor of primary apparel.",
+                        label,
+                        cat,
+                        prominence,
+                        box_area,
+                    )
+                    continue
+
             if not desc:
                 continue
             if target_norm != "all" and cat != target_norm:

@@ -869,7 +869,7 @@ def _determine_dynamic_pose(
     ) or occ == "formal"
 
     watch_clause = (
-        " The arm with the wristwatch is positioned with the wrist exposed so the watch is clearly and elegantly displayed."
+        " The arm wearing the wristwatch has a natural organic bend at the elbow with the hand placed inside the trouser pocket or lightly hooked at the waistband, naturally and effortlessly displaying the watch face on the wrist."
         if has_watch
         else ""
     )
@@ -878,47 +878,53 @@ def _determine_dynamic_pose(
         return (
             "Natural relaxed contrapposto human stance with body weight comfortably shifted onto one leg, "
             "subtle 10-15 degree three-quarter angle to the camera creating natural depth and relaxed silhouette. "
-            "Asymmetric relaxed arm posture: one hand casually resting in the trouser pocket or lightly hooked at the waistband, "
+            "Dynamic asymmetrical arm posture: one hand casually resting deep in the trouser pocket or lightly hooked at the waistband, "
             "the other arm hanging naturally at the side with a soft natural bend at the elbow and relaxed, unclenched fingers. "
-            "Shoulders naturally relaxed and fluid, confident engaging eye contact toward camera."
+            "Shoulders naturally relaxed and fluid, confident engaging eye contact toward camera. "
+            "STRICT POSTURE BAN: ABSOLUTELY NEVER place both arms straight down parallel to the body or standing like a stiff soldier mannequin."
             + watch_clause
         )
 
     if pref in ("confident_executive", "formal") or (pref == "auto" and is_formal):
         return (
-            "Confident modern executive lookbook stance: poised posture with weight subtly on the back leg, "
+            "Confident modern executive lookbook stance: poised posture with weight subtly shifted onto the back leg, "
             "shoulders naturally relaxed and level without military stiffness. "
-            "Subtle asymmetric arm placement with one hand resting naturally near the trouser pocket or adjusting a cuff, "
-            "the other arm hanging with natural drape. Direct, calm, commanding eye contact with the camera lens."
+            "Dynamic asymmetrical arm placement with one hand resting naturally inside the trouser pocket or lightly adjusting a cuff or lapel, "
+            "the other arm hanging with natural drape and soft bend at the elbow. Direct, calm, commanding eye contact with the camera lens. "
+            "STRICT POSTURE BAN: ABSOLUTELY NEVER place both arms straight down parallel to the body."
             + watch_clause
         )
 
     if pref in ("traditional_graceful", "festive", "traditional") or (pref == "auto" and is_traditional):
         if avatar_gender == "female":
             return (
-                "Poised, graceful traditional ethnic stance: body turned at an elegant three-quarter angle, "
+                "Poised, graceful traditional ethnic stance: body turned at an elegant 15-20 degree three-quarter angle with contrapposto weight shift, "
                 "one hand gently resting near the waist or softly guiding the garment fabric to highlight its natural pleats and drape, "
-                "the other arm relaxed at the side with delicate natural hand pose. Poised, warm, expressive facial expression."
+                "the other arm relaxed at the side with delicate natural hand pose and soft curved elbow. Poised, warm, expressive facial expression. "
+                "STRICT POSTURE BAN: ABSOLUTELY NEVER place both arms straight down parallel to the body."
                 + watch_clause
             )
         return (
-            "Regal, stately ethnic lookbook stance: upright dignified posture with natural relaxed shoulders, "
-            "subtle contrapposto weight shift, one hand resting naturally at the side and the other hand relaxed near the waistline. "
-            "Warm confident gaze directly at the camera."
+            "Regal, stately, effortless modern ethnic lookbook stance: natural contrapposto weight shift onto one leg, "
+            "shoulders relaxed at an organic angle with a subtle 10-degree body turn. "
+            "Dynamic asymmetrical arm posture: one hand casually placed inside the trouser or kurta pocket or resting on the hip to display the drape of the kurta, "
+            "the other arm hanging naturally with a soft relaxed bend at the elbow and relaxed fingers (strictly avoid rigid soldier posture, stiff symmetry, or arms glued to the sides). "
+            "Warm confident gaze directly at the camera. "
+            "STRICT POSTURE BAN: ABSOLUTELY NEVER place both arms straight down parallel to the body."
             + watch_clause
         )
 
     if pref == "classic_catalog":
         return (
-            "Clean balanced fashion lookbook stance: upright natural posture with relaxed shoulders, "
-            "arms resting naturally beside the torso with gentle natural bends at elbows and soft relaxed fingers (never stiff or robot-like). "
+            "Clean balanced fashion lookbook stance: upright natural posture with relaxed shoulders and subtle contrapposto weight shift, "
+            "asymmetric arm placement with one hand lightly resting in or near the pocket, the other arm relaxed beside the torso with a gentle natural bend at the elbow and soft relaxed fingers (never stiff, never soldier-like, never arms glued to sides). "
             "Direct level gaze toward camera."
             + watch_clause
         )
 
     return (
         "Natural relaxed contrapposto human fashion stance with weight shifted onto one leg, "
-        "subtle 10-15 degree torso angle for natural depth, relaxed shoulders, and asymmetric natural arm placement. "
+        "subtle 10-15 degree torso angle for natural depth, relaxed shoulders, and dynamic asymmetric arm placement with one hand in pocket. "
         "Engaging confident eye contact looking directly into the camera lens."
         + watch_clause
     )
@@ -1088,7 +1094,7 @@ def build_qwen_tryon_prompt(
     if has_glasses_on_face:
         glasses_directive = (
             "MANDATORY EYEWEAR LOCK: The model MUST wear identical eyeglasses on their eyes exactly matching <image1> "
-            "(reproduce the exact frame shape, frame material/color, and clear transparent prescription lenses). Do NOT omit glasses."
+            "(reproduce the exact frame shape, frame material/color, delicate thin wireframe or acetate, and clear transparent prescription lenses). Do NOT omit glasses, and do NOT alter the frame thickness or lens shape."
         )
     else:
         glasses_directive = (
@@ -1117,7 +1123,7 @@ def build_qwen_tryon_prompt(
             f"Full-length fashion photography of {model_gender_phrase}. "
             f"{dynamic_pose_desc} "
             "The model fills roughly 86-90% of the vertical frame height from top of hair near upper edge down to shoes on the studio floor. "
-            "CRITICAL: The model must look like a real, living, breathing human being captured by a world-class fashion photographer — completely avoid stiff mannequin postures, rigid toy doll aesthetics, or symmetrical arms glued to the sides."
+            "CRITICAL POSTURE MANDATE (ZERO MANNEQUIN / ZERO SOLDIER): The model must look like a real, living, breathing human being captured by a world-class fashion photographer — completely avoid stiff mannequin postures, rigid toy doll aesthetics, standing at attention like a soldier, or symmetrical arms glued to the sides. At least one hand MUST be in a pocket or hooked at the waistband with a clear bend at the elbow."
         ),
         (
             f"COMPLETE GARMENT DRESSING:{anti_old_shirt} "

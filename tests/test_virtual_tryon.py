@@ -615,6 +615,115 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("EXACT FABRIC TEXTURE LOCK", p["prompt"])
         self.assertIn("STRICTLY ZERO ADDED LOGOS / UNBRANDED", p["prompt"])
 
+    def test_studio_incidental_jewelry_suppressed_when_apparel_present(self):
+        """Verify that incidental jewelry (<85% prominence / small box area) is completely suppressed when apparel is present."""
+        from app.core.flow_b.prompt_generator import analyze_garment_and_build_prompts
+
+        mock_vision_data = {
+            "garments": [
+                {
+                    "category": "dress",
+                    "recognized_label": "Light Blue Embroidered Chiffon Suit",
+                    "fabric_texture": "sheer translucent georgette chiffon with delicate thread embroidery",
+                    "surface_finish": "matte",
+                    "has_logo": False,
+                    "logo_and_graphics": "none",
+                    "prominence_score": 96,
+                    "is_primary_subject": True,
+                    "box_2d": [100, 150, 920, 850],
+                    "garment_description": "A light blue embroidered chiffon suit with translucent full sleeves.",
+                },
+                {
+                    "category": "earrings",
+                    "recognized_label": "Incidental Gold Dangle Earrings",
+                    "metal_type": "yellow gold",
+                    "gemstone_type": "crystals",
+                    "prominence_score": 35,
+                    "is_primary_subject": False,
+                    "box_2d": [280, 480, 340, 520],
+                    "garment_description": "Small gold drop earrings visible near earlobe.",
+                },
+                {
+                    "category": "ring",
+                    "recognized_label": "Incidental Diamond Ring",
+                    "metal_type": "silver",
+                    "gemstone_type": "diamond",
+                    "prominence_score": 25,
+                    "is_primary_subject": False,
+                    "box_2d": [820, 680, 860, 720],
+                    "garment_description": "A tiny solitaire ring on the model's hand.",
+                },
+            ]
+        }
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(mock_vision_data)}}]
+        }
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value.post.return_value = mock_resp
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-mock-key"}, clear=False), patch(
+            "app.core.flow_b.prompt_generator.httpx.Client", return_value=mock_client
+        ):
+            img = Image.new("RGB", (256, 256), (180, 210, 240))
+            # When target_garment is "all", incidental jewelry must be filtered out in favor of the primary dress
+            plans = analyze_garment_and_build_prompts(img, target_garment="all")
+
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0]["category"], "dress")
+        self.assertEqual(plans[0]["recognized_label"], "Light Blue Embroidered Chiffon Suit")
+
+    def test_dynamic_pose_eliminates_stiff_soldier_mannequin_posture(self):
+        """Verify dynamic asymmetric pose generation completely bans stiff soldier mannequin posture and straight glued arms."""
+        from app.core.flow_b.tryon_stylist import _determine_dynamic_pose, build_qwen_tryon_prompt
+
+        # 1. Male traditional (Kurta)
+        kurta_garments = [
+            {"title": "White Embroidered Kurta with Churidar", "colors": "pure white", "patterns_and_design": "long white ethnic kurta", "role": "full_outfit"}
+        ]
+        pose_kurta = _determine_dynamic_pose(
+            avatar_gender="male",
+            occasion="smart_casual",
+            selected_garments=kurta_garments,
+            selected_accessories=[],
+            pose_preference="auto",
+        )
+        self.assertIn("STRICT POSTURE BAN", pose_kurta)
+        self.assertIn("contrapposto", pose_kurta)
+        self.assertIn("pocket", pose_kurta)
+        self.assertIn("strictly avoid rigid soldier posture", pose_kurta)
+
+        # 2. Watch clause with natural elbow bend
+        accessories_with_watch = [
+            {
+                "title": "Classic Wristwatch",
+                "accessory_type": "wristwatch",
+                "body_placement": "left wrist",
+                "design_details": "black leather strap with silver round dial",
+            }
+        ]
+        pose_watch = _determine_dynamic_pose(
+            avatar_gender="male",
+            occasion="smart_casual",
+            selected_garments=kurta_garments,
+            selected_accessories=accessories_with_watch,
+            pose_preference="auto",
+        )
+        self.assertIn("natural organic bend at the elbow", pose_watch)
+        self.assertNotIn("arm with the wristwatch is positioned with the wrist exposed", pose_watch)
+
+        # 3. Overall try-on prompt includes posture mandate and eyewear precision
+        prompt, _ = build_qwen_tryon_prompt(
+            avatar_summary="Young man with wireframe glasses and textured side fringe",
+            selected_garments=kurta_garments,
+            selected_accessories=accessories_with_watch,
+            forensic_face_details="thin wireframe rectangular glasses, slight mustache and chin stubble",
+            avatar_gender="male",
+        )
+        self.assertIn("CRITICAL POSTURE MANDATE (ZERO MANNEQUIN / ZERO SOLDIER)", prompt)
+        self.assertIn("MANDATORY EYEWEAR LOCK", prompt)
+        self.assertIn("delicate thin wireframe or acetate", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
