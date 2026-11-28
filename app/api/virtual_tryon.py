@@ -113,6 +113,12 @@ async def virtual_tryon(
         logger.exception("Unexpected error during virtual try-on synthesis")
         raise HTTPException(status_code=500, detail=f"Virtual try-on failed: {exc}") from exc
 
+    first_url = None
+    if result.get("combinations"):
+        first_url = result["combinations"][0].get("url") or result["combinations"][0].get("output_png_url")
+    result.setdefault("image_url", first_url)
+    result.setdefault("output_png_url", first_url)
+
     response.headers["X-Job-Id"] = result["job_id"]
     response.headers["X-Total-Combinations"] = str(result["total_combinations"])
     response.headers["X-Execution-Time-Ms"] = str(result["execution_time_ms"])

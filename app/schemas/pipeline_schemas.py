@@ -104,7 +104,9 @@ class VirtualTryOnResponse(BaseModel):
     status: str = Field(default="success")
     success: bool = Field(default=True)
     job_id: str
-    total_combinations: int
+    image_url: str | None = Field(default=None, description="Direct URL of the generated virtual try-on look")
+    output_png_url: str | None = Field(default=None, description="Direct URL alias for image_url")
+    total_combinations: int = 1
     combinations: list[TryOnCombination] = Field(default_factory=list)
     garment_catalog: list[dict[str, Any]] = Field(default_factory=list)
     accessory_catalog: list[dict[str, Any]] = Field(default_factory=list)
