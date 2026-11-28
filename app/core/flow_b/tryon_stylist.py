@@ -112,6 +112,9 @@ COMBO_CURATION_SYSTEM_PROMPT = """You are a celebrity fashion stylist curating c
 
 Rules:
 - Create up to `max_combinations` distinct, well-coordinated looks matching `avatar_gender`.
+- CRITICAL MULTI-LAYER RULE (OUTERWEAR + INNER SHIRT):
+  When the catalog contains both an Outerwear item (blazer, suit jacket, coat, jacket, cardigan) AND an Inner Top (shirt, dress shirt, t-shirt, polo, sweater), prioritize layering them together in a single look!
+  Select BOTH indices `[outerwear_index, inner_top_index]` (plus bottom index if available) so the model wears the outer jacket over the inner shirt. Outerwear must NEVER be worn without an inner shirt!
 - Pair complementary tops with bottoms (and include full_outfit entries). Order upper/full garments before bottoms.
 - If a look has ONLY upper garments (no bottom, not full_outfit), dynamically include `"complement_bottom"` describing well-matched solid jet-black/dark trousers or black denim suited to the top's style and gender.
 - If a look has ONLY lower garments/pants/jeans (no top, not full_outfit), you MUST dynamically include `"complement_top"` describing a clean, modest, solid neutral upper shirt or fitted crew-neck T-shirt suited to `avatar_gender` so the torso is NEVER shirtless.
@@ -133,7 +136,14 @@ Return STRICTLY valid JSON:
   ]
 }"""
 
-_TOP_HINTS = ("shirt", "tshirt", "t-shirt", "tee", "jersey", "top", "kurta", "jacket", "blazer", "hoodie", "polo", "sweater", "blouse")
+_OUTERWEAR_HINTS = (
+    "blazer", "jacket", "coat", "cardigan", "suit jacket", "tuxedo",
+    "shrug", "bomber", "windbreaker", "overcoat", "nehru jacket", "waistcoat",
+)
+_TOP_HINTS = (
+    "shirt", "tshirt", "t-shirt", "tee", "jersey", "top", "kurta",
+    "hoodie", "polo", "sweater", "blouse",
+)
 _BOTTOM_HINTS = ("pant", "pants", "jean", "jeans", "trouser", "chino", "cargo", "short", "skirt", "joggers", "palazzo")
 _OUTFIT_HINTS = ("dress", "gown", "saree", "lehenga", "jumpsuit", "suit")
 _WOMEN_ITEM_HINTS = (
@@ -142,7 +152,7 @@ _WOMEN_ITEM_HINTS = (
     "blouse", "gown", "kurti", "salwar", "dupatta", "skirt", "nose ring", "maang tikka",
 )
 _MEN_ITEM_HINTS = ("necktie", "bowtie", "bow tie", "mens kada", "cufflink")
-_ROLE_SORT_ORDER = {"full_outfit": 0, "top": 1, "outerwear": 2, "bottom": 3}
+_ROLE_SORT_ORDER = {"outerwear": 0, "top": 1, "bottom": 2, "full_outfit": 3}
 
 
 def _infer_garment_role(item: dict[str, Any], idx: int, total: int) -> str:
@@ -151,12 +161,14 @@ def _infer_garment_role(item: dict[str, Any], idx: int, total: int) -> str:
     if hint in ("top", "bottom", "full_outfit", "outerwear"):
         return hint
     fname = str(item.get("filename") or "").lower()
-    if any(k in fname for k in _OUTFIT_HINTS):
-        return "full_outfit"
-    if any(k in fname for k in _BOTTOM_HINTS):
-        return "bottom"
+    if any(k in fname for k in _OUTERWEAR_HINTS):
+        return "outerwear"
     if any(k in fname for k in _TOP_HINTS):
         return "top"
+    if any(k in fname for k in _BOTTOM_HINTS):
+        return "bottom"
+    if any(k in fname for k in _OUTFIT_HINTS):
+        return "full_outfit"
     if total >= 2 and idx >= (total + 1) // 2:
         return "bottom"
     return "top" if total >= 2 else "full_outfit"
@@ -164,14 +176,14 @@ def _infer_garment_role(item: dict[str, Any], idx: int, total: int) -> str:
 
 def _normalize_role(raw_role: str | None, fallback: str) -> str:
     val = (raw_role or "").strip().lower()
-    if val in ("top", "upper", "upper_clothes", "shirt", "t-shirt", "tshirt", "jersey"):
-        return "top"
-    if val in ("bottom", "pants", "trousers", "lower", "skirt", "jeans"):
-        return "bottom"
-    if val in ("full_outfit", "dress", "outfit", "one_piece"):
-        return "full_outfit"
-    if val in ("outerwear", "jacket", "coat", "blazer"):
+    if val in ("outerwear", "jacket", "coat", "blazer", "cardigan", "suit_jacket", "overcoat", "shrug"):
         return "outerwear"
+    if val in ("top", "upper", "upper_clothes", "shirt", "t-shirt", "tshirt", "jersey", "polo"):
+        return "top"
+    if val in ("bottom", "pants", "trousers", "lower", "skirt", "jeans", "chinos"):
+        return "bottom"
+    if val in ("full_outfit", "dress", "outfit", "one_piece", "saree", "lehenga"):
+        return "full_outfit"
     return fallback
 
 
@@ -250,27 +262,55 @@ def _validate_face_box_2d(raw_box: Any) -> list[int] | None:
 
 
 def _generate_diverse_garment_pairs(garment_catalog: list[dict[str, Any]], max_combinations: int) -> list[list[int]]:
-    """Pair tops with bottoms (and include full outfits), prioritizing distinct items first."""
-    tops = [g["garment_index"] for g in garment_catalog if g["role"] in ("top", "outerwear")]
+    """Pair tops with bottoms, layer outerwear with inner tops, and include full outfits."""
+    outerwears = [g["garment_index"] for g in garment_catalog if g["role"] == "outerwear"]
+    inner_tops = [g["garment_index"] for g in garment_catalog if g["role"] == "top"]
     bottoms = [g["garment_index"] for g in garment_catalog if g["role"] == "bottom"]
     fulls = [g["garment_index"] for g in garment_catalog if g["role"] == "full_outfit"]
 
     candidates: list[list[int]] = []
-    if tops and bottoms:
-        diag_count = min(len(tops), len(bottoms))
+
+    # 1. Layered ensembles: Outerwear + Inner Top (+ Bottom if available)
+    if outerwears and inner_tops:
+        if bottoms:
+            for ow, it, b in zip(outerwears, inner_tops, bottoms):
+                candidates.append([ow, it, b])
+        for ow, it in zip(outerwears, inner_tops):
+            pair = [ow, it]
+            if pair not in candidates:
+                candidates.append(pair)
+
+    # 2. Outerwear + Bottoms (when no inner top uploaded, or alternative look)
+    if outerwears and bottoms:
+        for ow, b in zip(outerwears, bottoms):
+            pair = [ow, b]
+            if pair not in candidates:
+                candidates.append(pair)
+
+    # 3. Standard Tops + Bottoms
+    if inner_tops and bottoms:
+        diag_count = min(len(inner_tops), len(bottoms))
         for i in range(diag_count):
-            candidates.append([tops[i], bottoms[i]])
-        for t, b in product(tops, bottoms):
+            pair = [inner_tops[i], bottoms[i]]
+            if pair not in candidates:
+                candidates.append(pair)
+        for t, b in product(inner_tops, bottoms):
             pair = [t, b]
             if pair not in candidates:
                 candidates.append(pair)
-    elif tops:
-        candidates.extend([[t] for t in tops])
-    elif bottoms:
+
+    # 4. Standalone singles if not already represented
+    if inner_tops and not bottoms and not outerwears:
+        candidates.extend([[t] for t in inner_tops])
+    elif outerwears and not inner_tops and not bottoms:
+        candidates.extend([[ow] for ow in outerwears])
+    elif bottoms and not inner_tops and not outerwears:
         candidates.extend([[b] for b in bottoms])
+
     for f_idx in fulls:
         if [f_idx] not in candidates:
             candidates.append([f_idx])
+
     if not candidates:
         candidates = [[g["garment_index"]] for g in garment_catalog]
     return candidates[:max_combinations]
@@ -385,16 +425,18 @@ def _resolve_combo_complements(
     """Ensure every incomplete combo gets dynamic complementary top or bottom (never bare skin)."""
     has_top = any(g["role"] in ("top", "outerwear", "full_outfit") for g in sel_meta)
     has_bottom = any(g["role"] in ("bottom", "full_outfit") for g in sel_meta)
+    has_inner_top = any(g["role"] in ("top", "full_outfit") for g in sel_meta)
+    has_outerwear_only = any(g["role"] == "outerwear" for g in sel_meta) and not has_inner_top
 
-    comp_top = str(raw_comp_top or "").strip() if not has_top else ""
+    comp_top = str(raw_comp_top or "").strip() if (not has_top or has_outerwear_only) else ""
     comp_bottom = str(raw_comp_bottom or "").strip() if not has_bottom else ""
     note = ""
 
-    if not has_top and not comp_top:
+    if (not has_top or has_outerwear_only) and not comp_top:
         t_title, comp_top = _dynamic_missing_garment("top", sel_meta, avatar_gender, occasion)
-        note = f" styled modestly with {t_title.lower()}"
-    elif not has_top:
-        note = f" styled modestly with {comp_top}"
+        note = f" layered with {t_title.lower()}" if has_outerwear_only else f" styled modestly with {t_title.lower()}"
+    elif not has_top or has_outerwear_only:
+        note = f" layered with {comp_top}" if has_outerwear_only else f" styled modestly with {comp_top}"
     elif not has_bottom and not comp_bottom:
         b_title, comp_bottom = _dynamic_missing_garment("bottom", sel_meta, avatar_gender, occasion)
         note = f" paired with {b_title.lower()}"
@@ -1001,6 +1043,42 @@ def build_qwen_tryon_prompt(
     pose_preference: str = "auto",
 ) -> tuple[str, int]:
     """Build crisp, identity-anchored `<image1>`, `<image2>`, ... multi-image Qwen-2.1 prompt."""
+    # Identify outerwear (blazer/jacket/coat) and inner tops for multi-layer architecture
+    outerwear_entries: list[tuple[str, dict[str, Any]]] = []
+    inner_top_entries: list[tuple[str, dict[str, Any]]] = []
+    for idx_offset, g in enumerate(selected_garments):
+        tag = f"<image{2 + idx_offset}>"
+        r = g.get("role", "")
+        t = f"{g.get('title', '')} {g.get('patterns_and_design', '')}".lower()
+        if r == "outerwear" or any(k in t for k in _OUTERWEAR_HINTS):
+            outerwear_entries.append((tag, g))
+        elif r == "top":
+            inner_top_entries.append((tag, g))
+
+    layering_directive = ""
+    if outerwear_entries and inner_top_entries:
+        outer_tag, outer_g = outerwear_entries[0]
+        inner_tag, inner_g = inner_top_entries[0]
+        layering_directive = (
+            f"MANDATORY MULTI-LAYER STYLING ARCHITECTURE (OUTERWEAR JACKET LAYERED OVER INNER SHIRT): "
+            f"The model is dressed in a sophisticated 2-piece layered upper outfit: "
+            f"1. INNER BASE LAYER: The model wears {inner_tag} ({inner_g['title']}) directly as the inner shirt, neatly tucked into the waistband. "
+            f"The authentic collar, collar buttons, chest placket, and {inner_g['colors']} textile fabric of {inner_tag} MUST BE CLEARLY VISIBLE at the open neck and down the center chest! "
+            f"2. OUTER JACKET / BLAZER: The model wears {outer_tag} ({outer_g['title']}) as the OUTER JACKET layered cleanly OVER {inner_tag}. "
+            f"The jacket is worn with natural drape (unfastened or single-button fastened), cleanly framing and displaying the inner shirt {inner_tag} underneath. "
+            f"CRITICAL INNER SHIRT REPLACEMENT MANDATE: If the original reference photo of {outer_tag} showed a different inner shirt, t-shirt, or necktie (such as a black shirt, red tie, or mannequin), "
+            f"YOU MUST COMPLETELY DISREGARD AND REMOVE THAT ORIGINAL INNER SHIRT/TIE! "
+            f"The inner shirt worn under the jacket MUST 100% BE {inner_tag} ({inner_g['title']})! "
+            f"ABSOLUTELY DO NOT copy, paint, or keep the old inner shirt or old tie from the {outer_tag} reference photo! "
+        )
+    elif outerwear_entries and not inner_top_entries:
+        outer_tag, outer_g = outerwear_entries[0]
+        top_desc = complement_top.strip() or _dynamic_missing_garment("top", selected_garments, avatar_gender, occasion)[1]
+        layering_directive = (
+            f"MANDATORY MULTI-LAYER DRESSING: Since only an outerwear jacket was provided, layer {outer_tag} ({outer_g['title']}) over a clean, modest {top_desc} "
+            f"neatly visible at the collar and chest. The jacket must be worn over this clean inner top, never bare skin. "
+        )
+
     garment_clauses: list[str] = []
     next_tag_idx = 2
     for g in selected_garments:
@@ -1029,12 +1107,21 @@ def build_qwen_tryon_prompt(
                 f"no crest, no emblem, no brand mark, no embroidery patch, and no text anywhere. Do NOT add, invent, or hallucinate any logo or brand symbol on this garment."
             )
 
+        extra_layer_note = ""
+        if outerwear_entries and inner_top_entries:
+            outer_tag, outer_g = outerwear_entries[0]
+            inner_tag, inner_g = inner_top_entries[0]
+            if tag == outer_tag:
+                extra_layer_note = f" (MANDATORY: Layer this outer jacket OVER the inner shirt {inner_tag}. Discard any inner shirt or tie from {outer_tag} itself — the inner shirt underneath MUST 100% come from {inner_tag})."
+            elif tag == inner_tag:
+                extra_layer_note = f" (MANDATORY: Wear this inner shirt directly under the outer jacket {outer_tag}. Keep its collar, buttons, and upper chest placket clearly visible under the jacket lapels)."
+
         garment_clauses.append(
             f"Dress the model's {g['role']} EXCLUSIVELY in the EXACT {g['title']} shown in {tag}: "
             f"colors {g['colors']}; silhouette & cut: {g['patterns_and_design']}. "
             f"EXACT FABRIC TEXTURE LOCK: Faithfully reproduce the authentic physical textile weave of {tag} — {tex}{finish_str}{stitch_str}. "
             f"Render realistic fabric tension, natural folds, and authentic micro-texture on the material. "
-            f"{logo_instruction}"
+            f"{logo_instruction}{extra_layer_note}"
         )
 
     accessory_clauses: list[str] = []
@@ -1148,6 +1235,7 @@ def build_qwen_tryon_prompt(
         ),
         (
             f"COMPLETE GARMENT DRESSING:{anti_old_shirt} "
+            + (f"{layering_directive} " if layering_directive else "")
             + " ".join(garment_clauses)
             + (" " + " ".join(complement_clauses) if complement_clauses else "")
             + (" " + tuck_note if tuck_note else "")

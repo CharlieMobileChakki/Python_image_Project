@@ -751,6 +751,63 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         refined_img = refine_facial_micro_clarity(cleaned_img)
         self.assertEqual(refined_img.size, (500, 500))
 
+    def test_outerwear_and_shirt_layering_tryon(self):
+        """Verify outerwear blazer + shirt are paired together in Look 1 and Qwen prompt enforces layering."""
+        from app.core.flow_b.tryon_stylist import analyze_wardrobe_and_plan_tryon, build_qwen_tryon_prompt
+
+        avatar = Image.new("RGB", (256, 384), (215, 185, 165))
+        garments = [
+            {"index": 0, "image": Image.new("RGB", (200, 200), (20, 20, 20)), "role_hint": "auto", "filename": "black_suit_blazer.jpg"},
+            {"index": 1, "image": Image.new("RGB", (200, 200), (250, 250, 250)), "role_hint": "auto", "filename": "white_dress_shirt.jpg"},
+        ]
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            plan = analyze_wardrobe_and_plan_tryon(
+                avatar_img=avatar,
+                garments=garments,
+                accessories=[],
+                max_combinations=2,
+                occasion="smart_casual",
+            )
+
+        self.assertGreaterEqual(len(plan["combinations"]), 1)
+        combo1 = plan["combinations"][0]
+        # Verify both blazer (0) and shirt (1) are paired together in Look 1
+        self.assertEqual(combo1["selected_garment_indices"], [0, 1])
+
+        # Verify Qwen prompt enforces multi-layer styling architecture
+        prompt, total_refs = build_qwen_tryon_prompt(
+            avatar_summary=plan["avatar_summary"],
+            selected_garments=[plan["garments"][0], plan["garments"][1]],
+            selected_accessories=[],
+            occasion="smart_casual",
+            avatar_gender="male",
+        )
+        self.assertEqual(total_refs, 3)
+        self.assertIn("MANDATORY MULTI-LAYER STYLING ARCHITECTURE", prompt)
+        self.assertIn("INNER BASE LAYER", prompt)
+        self.assertIn("OUTER JACKET / BLAZER", prompt)
+        self.assertIn("CRITICAL INNER SHIRT REPLACEMENT MANDATE", prompt)
+        self.assertIn("ABSOLUTELY DO NOT copy, paint, or keep the old inner shirt or old tie", prompt)
+
+    def test_standalone_outerwear_studio_hollow_aperture(self):
+        """Verify outerwear blazer in studio ghost mannequin extractor strictly forbids fused inner shirt."""
+        from app.core.flow_b.prompt_generator import _build_final_prompt
+
+        prompt = _build_final_prompt(
+            garment_description="tailored black two-button wool blazer with notch lapels and structured shoulders",
+            category="upper_clothes",
+            recognized_label="Studio Blazer",
+            fabric_texture="fine wool blend twill",
+            surface_finish="matte natural finish",
+            has_logo=False,
+            logo_and_graphics="none",
+        )
+        self.assertIn("CRITICAL HOLLOW APERTURE MANDATE", prompt)
+        self.assertIn("ZERO FUSED INNER SHIRT", prompt)
+        self.assertIn("ABSOLUTELY DO NOT generate, paint, or add any inner shirt", prompt)
+        self.assertIn("DO NOT fill or color the chest opening in the jacket's own color", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

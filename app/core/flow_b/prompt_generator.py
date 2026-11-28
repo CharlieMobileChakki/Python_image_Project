@@ -19,6 +19,18 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # Fixed backend studio rules (empty 3D invisible ghost-mannequin product shot, Myntra/Meesho style)
+OUTERWEAR_STUDIO_RULES = (
+    "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Hugo Boss / SuitSupply fashion hero shot): "
+    "EXCLUSIVELY THE STANDALONE BLAZER / SUIT JACKET / COAT: "
+    "CRITICAL HOLLOW APERTURE (ABSOLUTELY ZERO INNER SHIRT / ZERO T-SHIRT / ZERO TIE): "
+    "This is an empty 3D ghost mannequin of ONLY the outerwear jacket. The chest opening, neckline, and space between the lapels MUST BE A HOLLOW, OPEN 3D APERTURE showing only the jacket's inner silk/viscose lining and open interior with zero human body and zero inner clothing. "
+    "CRITICAL NEGATIVE RULE: ABSOLUTELY DO NOT generate, paint, or add any inner shirt, t-shirt, collared dress shirt, crew-neck, tie, or chest fabric fused inside the jacket! "
+    "DO NOT fill the chest aperture with the jacket's own color! The jacket must be completely empty and hollow inside with its authentic lapel roll and structured tailored shoulders. "
+    "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, level horizontal shoulders, both tailored sleeves hanging straight down along both sides at symmetrical matching angles, crisp pressed lapels, and level bottom hemline. "
+    "MANDATORY FABRIC TEXTURE & WEAVE LOCK: Reconstruct the authentic suit wool, linen blend, cotton twill, or velvet weave with genuine tailored structure, structured shoulder pads, and authentic lapel roll. "
+    "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
+)
+
 UPPER_STUDIO_RULES = (
     "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Amazon Fashion hero shot): "
     "Empty hollow 3D inner neckline aperture, empty open sleeve cuffs, and empty open bottom hem showing the hollow interior with zero human body inside. "
@@ -148,6 +160,17 @@ CRITICAL RULES:
    - Slits & Hemline: Straight hemline, athletic curved hem, etc.
 
 5. Outfit Mode & Separates (STRICT REALITY RULE):
+   - LAYERED APPAREL (BLAZER / COAT / JACKET OVER SHIRT / T-SHIRT):
+     * If the person in the photo is wearing a LAYERED OUTFIT (e.g. an outerwear blazer, suit jacket, coat, or cardigan worn over an inner collared shirt, t-shirt, or top):
+       YOU MUST EXTRACT THEM AS SEPARATE GARMENTS in the "garments" list!
+       1. Standalone Outerwear Entry: Category "upper_clothes" for the blazer/jacket alone.
+          - Set `recognized_label`: "Studio Blazer" or "Studio Jacket".
+          - In `garment_description`, describe ONLY the outer jacket (lapels, collar, button stance, exterior pockets, outer fabric weave, and inner lining).
+          - Explicitly specify: "STANDALONE OUTERWEAR: The interior between the lapels must be an open, empty 3D hollow aperture showing only the jacket's inner lining. ABSOLUTELY NO inner shirt, NO t-shirt, NO tie, and NO fused chest fabric inside the jacket."
+       2. Standalone Inner Top Entry: Category "upper_clothes" for the shirt/t-shirt alone.
+          - Set `recognized_label`: "Studio Shirt" or "Studio T-Shirt".
+          - In `garment_description`, reconstruct the COMPLETE standalone shirt/t-shirt with both shoulders, full chest panel, neckline, and sleeves completely unoccluded as if worn by itself without any jacket.
+       3. Lower garment (if present): Category "pants".
    - IF AND ONLY IF the person is actually wearing contrasting separates (e.g. shirt + jeans) OR two distinct garments are clearly laid out:
      Output separate entries for the upper garment ("upper_clothes") and lower garment ("pants").
    - IF ONLY ONE GARMENT IS VISIBLE OR LAID OUT (e.g., a single kurta, a single dress, a single shirt):
@@ -370,7 +393,14 @@ def _build_final_prompt(
         )
 
     if cat == "upper_clothes":
-        is_pullover = any(
+        is_outerwear = any(
+            k in full_text
+            for k in (
+                "blazer", "suit jacket", "jacket", "coat", "cardigan", "tuxedo",
+                "shrug", "overcoat", "waistcoat", "nehru jacket", "bomber"
+            )
+        )
+        is_pullover = not is_outerwear and any(
             k in full_text
             for k in (
                 "t-shirt", "tshirt", "t shirt", "tee", "jersey", "polo", "hoodie", "sweatshirt",
@@ -378,26 +408,45 @@ def _build_final_prompt(
             )
         )
 
-        isolation_header = (
-            "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Amazon fashion hero shot) showing EXCLUSIVELY the standalone "
-            "upper-body shirt / top / kurta floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
-            "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
-            "CRITICAL ISOLATION RULE: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, waistline, or legs! "
-            "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet. "
-        )
-
-        if is_pullover:
-            closure_item = (
-                "3. PULLOVER SOLID FRONT PANEL (ZERO FULL-LENGTH BUTTONS): This is an athletic pullover T-shirt / sports jersey. "
-                "The front torso across the chest, stomach, and belly MUST BE a solid, continuous, seamless fabric panel. "
-                "ABSOLUTELY NO full-length front buttons, NO vertical button placket running down the front, NO front zipper, and NO button-down shirt opening! "
-                "If there is a collar closure at the throat (such as a henley slit, small polo tab, or mandarin collar button), it is strictly a short 1-to-2 inch neck opening only; "
-                "below the neck opening, the entire chest, stomach, and torso MUST be 100% solid, smooth, seamless pullover fabric."
+        if is_outerwear:
+            isolation_header = (
+                "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Hugo Boss fashion hero shot) showing EXCLUSIVELY the standalone "
+                "outerwear blazer / suit jacket / coat floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+                "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
+                "CRITICAL HOLLOW APERTURE MANDATE (ZERO FUSED INNER SHIRT / ZERO T-SHIRT / ZERO TIE): "
+                "This is an empty 3D ghost mannequin of ONLY the outerwear jacket itself! "
+                "The interior space between the lapels, collar, and chest MUST BE AN OPEN, EMPTY 3D HOLLOW APERTURE showing only the jacket's inner silk/viscose lining with zero human body and zero inner clothing! "
+                "CRITICAL: ABSOLUTELY DO NOT generate, paint, or add any inner shirt, collared dress shirt, t-shirt, crew-neck, tie, or chest fabric fused inside the jacket! "
+                "ABSOLUTELY DO NOT fill or color the chest opening in the jacket's own color! The jacket must look like an authentic standalone unfastened or single-button jacket on an invisible 3D ghost mannequin with an empty hollow interior! "
+                "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet, and NO pants. "
             )
+            closure_item = (
+                "3. Tailored lapels (notch, peak, or shawl) pressing cleanly and symmetrically; "
+                "jacket front closure cleanly presented (either open showing hollow interior or single button fastened) with plumb center vertical alignment. "
+                "The chest opening MUST BE 100% EMPTY, hollow, and open showing the jacket's inner lining — ABSOLUTELY ZERO inner shirt, ZERO t-shirt, ZERO necktie, and ZERO fused chest fabric."
+            )
+            studio_rules_to_use = OUTERWEAR_STUDIO_RULES
         else:
-            closure_item = (
-                "3. Front placket, buttons, or zipper (if present on the original garment) must run in a plumb, perfectly vertical straight line down the center."
+            isolation_header = (
+                "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Amazon fashion hero shot) showing EXCLUSIVELY the standalone "
+                "upper-body shirt / top / kurta floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+                "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
+                "CRITICAL ISOLATION RULE: COMPLETELY EXCLUDE, REMOVE, AND DO NOT GENERATE any pants, jeans, trousers, belt, waistline, or legs! "
+                "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet. "
             )
+            if is_pullover:
+                closure_item = (
+                    "3. PULLOVER SOLID FRONT PANEL (ZERO FULL-LENGTH BUTTONS): This is an athletic pullover T-shirt / sports jersey. "
+                    "The front torso across the chest, stomach, and belly MUST BE a solid, continuous, seamless fabric panel. "
+                    "ABSOLUTELY NO full-length front buttons, NO vertical button placket running down the front, NO front zipper, and NO button-down shirt opening! "
+                    "If there is a collar closure at the throat (such as a henley slit, small polo tab, or mandarin collar button), it is strictly a short 1-to-2 inch neck opening only; "
+                    "below the neck opening, the entire chest, stomach, and torso MUST be 100% solid, smooth, seamless pullover fabric."
+                )
+            else:
+                closure_item = (
+                    "3. Front placket, buttons, or zipper (if present on the original garment) must run in a plumb, perfectly vertical straight line down the center."
+                )
+            studio_rules_to_use = UPPER_STUDIO_RULES
 
         pose_rectification = (
             "MANDATORY E-COMMERCE POSE STRAIGHTENING: "
@@ -423,7 +472,7 @@ def _build_final_prompt(
             f"{garment_lock} "
             f"{surface_rejection} "
             f"Exact standalone upper garment to isolate and faithfully reconstruct from reference photo: {desc_clean}. "
-            f"{UPPER_STUDIO_RULES}"
+            f"{studio_rules_to_use}"
         )
 
     elif cat in ("pants", "skirt"):
