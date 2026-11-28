@@ -954,7 +954,7 @@ def _determine_photography_style(
             "Editorial studio photography shot on Hasselblad H6D-100c with 85mm portrait prime lens at f/3.2. "
             "Sculptural three-point lighting: large diffused key octabox from high 45-degree angle creating flattering facial bone structure definition, "
             "gentle ambient fill light, subtle rim light separating hair from background, and natural soft grounding floor shadows beneath both shoes "
-            "against a clean, seamless warm alabaster studio backdrop (#F4F1EC)."
+            "against a spotless seamless warm alabaster infinity cyclorama backdrop (#F4F1EC) with zero wall seams, zero panel grooves, and zero vertical lines."
         )
 
     if style in ("streetwear_lifestyle", "lifestyle"):
@@ -962,7 +962,7 @@ def _determine_photography_style(
             "Modern Streetwear Lookbook",
             "Contemporary lookbook photography with crisp, punchy fashion lighting: wide diffused beauty dish key light "
             "rendering rich contrast, authentic fabric weave textures, vivid colors, and soft natural ambient floor shadows "
-            "against a clean warm alabaster studio wall (#F4F1EC)."
+            "against a spotless seamless warm alabaster infinity cyclorama backdrop (#F4F1EC) with zero wall seams, zero panel grooves, and zero vertical lines."
         )
 
     if style in ("traditional_royal", "royal", "festive"):
@@ -970,7 +970,7 @@ def _determine_photography_style(
             "Luxury Ethnic Studio Portrait",
             "Luminous luxury studio portraiture with warm golden-hour key light accentuating rich fabric luster, "
             "intricate embroidery reflections, gold zari sheen, and jewelry sparkle, with gentle flattering fill "
-            "on face and hair against a clean seamless warm alabaster studio backdrop (#F4F1EC)."
+            "on face and hair against a spotless seamless warm alabaster infinity cyclorama backdrop (#F4F1EC) with zero wall seams, zero panel grooves, and zero vertical lines."
         )
 
     return (
@@ -978,7 +978,7 @@ def _determine_photography_style(
         "Commercial fashion catalog photograph shot with an 85mm portrait lens with edge-to-edge optical sharpness. "
         "Flattering large softbox key lighting providing even, soft illumination across the entire body, "
         "crisp micro-textures on skin pores and textile fibers, realistic floor contact shadows under both shoes, "
-        "and clean seamless warm alabaster backdrop (#F4F1EC)."
+        "and spotless seamless warm alabaster infinity cyclorama backdrop (#F4F1EC) with zero wall seams, zero panel grooves, and zero vertical lines."
     )
 
 
@@ -1015,8 +1015,9 @@ def build_qwen_tryon_prompt(
         logo_details = (g.get("logo_and_graphics") or "").strip()
         if has_logo and logo_details and "strictly none" not in logo_details.lower():
             logo_instruction = (
-                f"EXACT LOGO / GRAPHIC LOCK: Replicate the EXACT {logo_details} shown on {tag} "
-                f"at its exact chest/sleeve position, scale, proportions, and authentic colors without altering, mutating, moving, or redesigning the logo/graphics."
+                f"EXACT LOGO / GRAPHIC LOCK & EMBLEM INTEGRITY: Replicate the EXACT {logo_details} shown on {tag} "
+                f"at its exact chest/sleeve position, scale, proportions, and authentic colors without altering, mutating, moving, or redesigning the logo/graphics. "
+                f"Render sharp, crisp, vector-like precision on all badges, club crests, sponsor typography, and sleeve stripes — strictly avoid melted lettering, illegible gibberish, distorted crest crowns, or bleeding pigment."
             )
         else:
             logo_instruction = (
@@ -1115,6 +1116,9 @@ def build_qwen_tryon_prompt(
             "nose shape and width, lips, cheek contours, smile lines, jawline, chin, facial hair/mustache/stubble, exact hairline and styled hair pattern, "
             "true skin tone, and authentic real age 100% faithfully matching <image1>. "
             f"{glasses_directive} "
+            "RAZOR-SHARP 8K FACIAL CLARITY (ZERO BLUR / ZERO TEARING / ZERO GRAIN FATNA): Crystal-clear 8K focus on the model's face, eyes, and hair. "
+            "Render perfectly sharp, glossy pupils with crisp specular catchlights, clearly defined individual eyelashes, sharp eyebrow hairs, "
+            "clean mustache/stubble follicle texture, and natural smooth skin pores without blurriness, pixelation, noisy grain, or waxy smoothing. "
             "The face must be seamlessly integrated with the neck and shoulders with 100% natural anatomical blending and zero cutout lines or pasting artifacts. "
             "Keep the face sharp, unretouched, and evenly studio-lit so the person is unmistakably recognizable as the exact individual in <image1>."
         ),
@@ -1131,6 +1135,13 @@ def build_qwen_tryon_prompt(
             + (" " + " ".join(complement_clauses) if complement_clauses else "")
             + (" " + tuck_note if tuck_note else "")
             + " Preserve exact garment fabric textures, authentic denim twill weave, cotton knit, stitching, prints, and logo placements."
+        ),
+        (
+            "FLAWLESS SEAMLESS STUDIO BACKDROP & ZERO ARTIFACT GUARANTEE: "
+            "The background MUST be a pure, spotless, completely continuous and seamless infinity cyclorama studio backdrop in uniform soft warm alabaster (#F4F1EC). "
+            "STRICT NEGATIVE ARTIFACT BAN: ABSOLUTELY ZERO vertical wall seams, ZERO vertical lines, ZERO wall panel slats, ZERO drywall grooves, ZERO pillar edges, ZERO curtain folds, and ZERO vertical stripes or banding anywhere in the background. "
+            "STRICT FABRIC PURITY & ANTI-COLOR-BLEED LOCK: Colors, pigments, dyes, and accent trims from the shirt (such as crimson shoulder stripes, club crests, or collar bands) must remain 100% strictly confined to the upper garment. "
+            "ABSOLUTELY ZERO dye bleed, ZERO pink/purple smudges, ZERO dark gradient patches, and ZERO stains onto the trousers or the studio floor. Both trouser legs must have completely clean, uniform, pristine fabric from waistband to hem."
         ),
     ]
     if accessory_clauses:

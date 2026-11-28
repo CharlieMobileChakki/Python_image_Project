@@ -12,7 +12,7 @@ from typing import Any
 import uuid
 
 import numpy as np
-from PIL import Image, ImageEnhance, ImageStat
+from PIL import Image, ImageEnhance, ImageFilter, ImageStat
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +32,105 @@ import os
 
 TRYON_OUTPUT_WIDTH = int(os.getenv("TRYON_OUTPUT_WIDTH", "832"))
 TRYON_OUTPUT_HEIGHT = int(os.getenv("TRYON_OUTPUT_HEIGHT", "1152"))
-TRYON_DEFAULT_STEPS = int(os.getenv("TRYON_INFERENCE_STEPS", "12"))
+TRYON_DEFAULT_STEPS = int(os.getenv("TRYON_INFERENCE_STEPS", "14"))
 TRYON_DEFAULT_GUIDANCE = float(os.getenv("TRYON_GUIDANCE_SCALE", "1.4"))
 
 QUALITY_PRESETS: dict[str, dict[str, Any]] = {
-    "standard": {"width": 832, "height": 1152, "steps": 10, "guidance_scale": 1.2},
+    "standard": {"width": 832, "height": 1152, "steps": 12, "guidance_scale": 1.3},
     "high": {"width": 896, "height": 1280, "steps": 14, "guidance_scale": 1.5},
     "ultra": {"width": 1024, "height": 1344, "steps": 18, "guidance_scale": 1.8},
 }
+
+
+def clean_studio_backdrop(img: Image.Image) -> Image.Image:
+    """Eliminate vertical wall seams, vertical line artifacts, and dirty gradient streaks from seamless studio cyclorama."""
+    try:
+        arr = np.array(img, dtype=np.float32)
+        h, w, _ = arr.shape
+        if h < 200 or w < 200:
+            return img
+
+        # Sample studio background tone from top corners (strictly away from head/subject)
+        corner_w = max(20, int(w * 0.15))
+        corner_h = max(20, int(h * 0.10))
+        top_left = arr[:corner_h, :corner_w]
+        top_right = arr[:corner_h, -corner_w:]
+        bg_target = (top_left.mean(axis=(0, 1)) + top_right.mean(axis=(0, 1))) / 2.0
+
+        # Distance in RGB space from true background
+        color_dist = np.sqrt(np.sum((arr - bg_target) ** 2, axis=-1))
+        luma = arr.mean(axis=-1)
+
+        # Grounding shadow and subject protection:
+        # Only target bright background pixels (luma > 208, color_dist < 34)
+        bg_affinity = np.clip((34.0 - color_dist) / 16.0, 0.0, 1.0) * np.clip((luma - 208.0) / 25.0, 0.0, 1.0)
+
+        # Ground contact shadow protection: lower 18% floor area where feet contact the ground
+        y_coords = np.arange(h).astype(np.float32) / max(1.0, float(h))
+        floor_mask = np.clip((y_coords - 0.88) / 0.10, 0.0, 1.0)[..., None]
+        bg_affinity = bg_affinity * (1.0 - floor_mask * np.clip((230.0 - luma) / 30.0, 0.0, 1.0))
+
+        if bg_affinity.max() > 0.05:
+            # Softly blend background towards clean target to eliminate vertical seams
+            homogenized = bg_target.reshape(1, 1, 3)
+            weight = (bg_affinity[..., None] * 0.82)
+            cleaned = arr * (1.0 - weight) + homogenized * weight
+            return Image.fromarray(np.clip(cleaned, 0, 255).astype(np.uint8))
+        return img
+    except Exception as exc:
+        logger.debug("Studio backdrop cleaning skipped: %s", exc)
+        return img
+
+
+def refine_facial_micro_clarity(img: Image.Image) -> Image.Image:
+    """Refine facial micro-clarity: removes compression pixelation/tearing while boosting iris, lash, and hair crispness."""
+    try:
+        w, h = img.size
+        if w < 256 or h < 256:
+            return img
+
+        # Target head region: centered horizontally, top 1% to 24% of vertical height
+        hx1 = max(0, int(w * 0.32))
+        hy1 = max(0, int(h * 0.01))
+        hx2 = min(w, int(w * 0.68))
+        hy2 = min(h, int(h * 0.24))
+
+        hw = hx2 - hx1
+        hh = hy2 - hy1
+        if hw < 32 or hh < 32:
+            return img
+
+        head_crop = img.crop((hx1, hy1, hx2, hy2))
+        head_np = np.array(head_crop)
+
+        # Edge-preserving bilateral filter to eliminate pixelation and noise tearing on flat skin
+        try:
+            import cv2
+            smooth = cv2.bilateralFilter(head_np, 5, 26, 26)
+            detail = head_np.astype(np.float32) - smooth.astype(np.float32)
+            refined = np.clip(smooth.astype(np.float32) + detail * 1.30, 0, 255)
+        except Exception:
+            smooth_pil = head_crop.filter(ImageFilter.GaussianBlur(radius=1.2))
+            smooth = np.array(smooth_pil, dtype=np.float32)
+            detail = head_np.astype(np.float32) - smooth
+            refined = np.clip(smooth + detail * 1.30, 0, 255)
+
+        # 2D Cosine window feathering for 100% seamless, invisible integration
+        yy, xx = np.mgrid[0:hh, 0:hw].astype(np.float32)
+        margin_x = max(1.0, float(hw) * 0.12)
+        margin_y = max(1.0, float(hh) * 0.12)
+        fade_x = np.clip(np.minimum(xx, hw - 1 - xx) / margin_x, 0.0, 1.0)
+        fade_y = np.clip(np.minimum(yy, hh - 1 - yy) / margin_y, 0.0, 1.0)
+        alpha = (0.5 - 0.5 * np.cos(np.pi * np.minimum(fade_x, fade_y)))[..., None]
+
+        blended = (head_np.astype(np.float32) * (1.0 - alpha) + refined * alpha).astype(np.uint8)
+
+        full_arr = np.array(img)
+        full_arr[hy1:hy2, hx1:hx2] = blended
+        return Image.fromarray(full_arr)
+    except Exception as exc:
+        logger.debug("Facial micro-clarity refinement skipped: %s", exc)
+        return img
 
 
 def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | None:
@@ -259,10 +350,16 @@ def process_virtual_tryon_pipeline(
             height=out_h,
         )
 
-        # Subtle micro-contrast sharpness polish to lift natural hair, eyes, and textile details
+        # 1. Clean studio backdrop: eliminates vertical wall seams, panel stripes, and background smudges
+        out_img = clean_studio_backdrop(out_img)
+
+        # 2. Targeted facial micro-clarity: removes compression pixelation/tearing ("fatna") and sharpens iris, lashes, and hair
+        out_img = refine_facial_micro_clarity(out_img)
+
+        # 3. Gentle micro-contrast polish
         try:
             enhancer = ImageEnhance.Sharpness(out_img)
-            out_img = enhancer.enhance(1.08)
+            out_img = enhancer.enhance(1.05)
         except Exception:
             pass
 

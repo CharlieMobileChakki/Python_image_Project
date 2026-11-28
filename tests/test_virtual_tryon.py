@@ -723,6 +723,33 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("CRITICAL POSTURE MANDATE (ZERO MANNEQUIN / ZERO SOLDIER)", prompt)
         self.assertIn("MANDATORY EYEWEAR LOCK", prompt)
         self.assertIn("delicate thin wireframe or acetate", prompt)
+        self.assertIn("FLAWLESS SEAMLESS STUDIO BACKDROP & ZERO ARTIFACT GUARANTEE", prompt)
+        self.assertIn("RAZOR-SHARP 8K FACIAL CLARITY", prompt)
+
+    def test_studio_backdrop_cleaning_and_facial_clarity_refinement(self):
+        """Verify seamless cyclorama background streak removal and facial micro-clarity anti-tearing."""
+        from app.core.pipeline.virtual_tryon import clean_studio_backdrop, refine_facial_micro_clarity
+        import numpy as np
+
+        # 1. Create a 500x500 image with warm alabaster background (244, 241, 236) and a vertical stripe at x=400
+        arr = np.full((500, 500, 3), [244, 241, 236], dtype=np.uint8)
+        # Introduce a vertical stripe artifact (intensity dip to 230)
+        arr[:, 395:405] = [230, 228, 222]
+        test_img = Image.fromarray(arr)
+
+        cleaned_img = clean_studio_backdrop(test_img)
+        cleaned_arr = np.array(cleaned_img)
+
+        # The vertical stripe at x=400 should be homogenized significantly closer to 244
+        orig_dip = arr[200, 400, 0]
+        cleaned_val = cleaned_arr[200, 400, 0]
+        self.assertEqual(orig_dip, 230)
+        self.assertGreater(cleaned_val, orig_dip)
+        self.assertGreaterEqual(cleaned_val, 235)
+
+        # 2. Facial micro-clarity refinement executes without error and preserves resolution
+        refined_img = refine_facial_micro_clarity(cleaned_img)
+        self.assertEqual(refined_img.size, (500, 500))
 
 
 if __name__ == "__main__":
