@@ -245,12 +245,23 @@ def process_virtual_tryon_pipeline(
         res_str = f"{out_img.width}x{out_img.height}"
         b64_uri = image_to_base64_data_uri(out_img) if include_base64 else None
 
+        def _format_garment_item_details(g: dict[str, Any]) -> str:
+            parts = [f"{g['colors']}; {g['patterns_and_design']}"]
+            tex = g.get("fabric_texture") or g.get("fabric_type")
+            if tex and tex.lower() not in g.get("patterns_and_design", "").lower():
+                parts.append(f"Texture: {tex}")
+            if g.get("has_logo") and g.get("logo_and_graphics") and "strictly none" not in g.get("logo_and_graphics", "").lower():
+                parts.append(f"Logo/Marks: {g['logo_and_graphics']}")
+            elif g.get("has_logo") is False:
+                parts.append("Logo/Marks: None (Solid Plain Unbranded)")
+            return " | ".join(parts)
+
         garment_details = [
             {
                 "role": g["role"],
                 "index": g["garment_index"],
                 "label": g["title"],
-                "details": f"{g['colors']}; {g['patterns_and_design']}",
+                "details": _format_garment_item_details(g),
                 "body_placement": None,
                 "is_complementary": False,
             }

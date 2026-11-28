@@ -462,6 +462,64 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("contrapposto", prompt.lower())
         self.assertNotIn("0-degree direct front-facing studio lookbook photograph", prompt)
 
+    def test_exact_fabric_texture_and_logo_preservation(self):
+        from app.core.flow_b.tryon_stylist import build_qwen_tryon_prompt
+
+        plain_shirt = {
+            "role": "top",
+            "title": "Solid Matte Black Button-Down Shirt",
+            "colors": "solid pitch black",
+            "fabric_texture": "fine 80s poplin cotton with crisp smooth weave",
+            "surface_finish": "matte",
+            "has_logo": False,
+            "logo_and_graphics": "STRICTLY NONE: 100% plain unbranded solid fabric with zero logos",
+            "stitching_and_hardware": "tonal single-needle stitching, black resin buttons",
+            "patterns_and_design": "classic spread collar, long sleeves with buttoned cuffs",
+        }
+        denim_jeans = {
+            "role": "bottom",
+            "title": "Raw Indigo Denim Jeans",
+            "colors": "deep raw indigo blue",
+            "fabric_texture": "heavy 14oz rigid 3x1 diagonal twill denim with visible slub grain",
+            "surface_finish": "raw unwashed denim finish",
+            "has_logo": False,
+            "logo_and_graphics": "",
+            "stitching_and_hardware": "contrast golden-tan heavy topstitching along seams, copper rivets",
+            "patterns_and_design": "straight-leg fit, 5-pocket construction",
+        }
+        prompt, _ = build_qwen_tryon_prompt(
+            avatar_summary="Young Indian male",
+            selected_garments=[plain_shirt, denim_jeans],
+            selected_accessories=[],
+        )
+        self.assertIn("EXACT FABRIC TEXTURE LOCK", prompt)
+        self.assertIn("poplin cotton", prompt)
+        self.assertIn("heavy 14oz rigid 3x1 diagonal twill denim", prompt)
+        self.assertIn("contrast golden-tan heavy topstitching", prompt)
+        self.assertIn("STRICTLY ZERO LOGOS / UNBRANDED", prompt)
+        self.assertIn("Do NOT add, invent, or hallucinate any logo", prompt)
+
+        branded_jersey = {
+            "role": "top",
+            "title": "White Madrid Football Jersey",
+            "colors": "optic white, gold, dark navy",
+            "fabric_texture": "breathable athletic performance polyester jersey knit with honeycomb micro-mesh",
+            "surface_finish": "subtle athletic sheen",
+            "has_logo": True,
+            "logo_and_graphics": "left chest: gold embroidered Madrid club crest with crown, right chest: dark navy Adidas 3-bar logo",
+            "stitching_and_hardware": "crew-neck ribbed collar, reinforced shoulder seams with red 3-stripes",
+            "patterns_and_design": "short-sleeve athletic cut with ribbed cuffs",
+        }
+        branded_prompt, _ = build_qwen_tryon_prompt(
+            avatar_summary="Young Indian male",
+            selected_garments=[branded_jersey],
+            selected_accessories=[],
+        )
+        self.assertIn("EXACT LOGO / GRAPHIC LOCK", branded_prompt)
+        self.assertIn("gold embroidered Madrid club crest", branded_prompt)
+        self.assertIn("Adidas 3-bar logo", branded_prompt)
+        self.assertIn("without altering, mutating, moving, or redesigning", branded_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

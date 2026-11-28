@@ -48,17 +48,27 @@ Return STRICTLY valid JSON:
   "avatar_face_box_2d": [60, 260, 480, 740]
 }"""
 
-GARMENT_ANALYSIS_SYSTEM_PROMPT = """You are a master e-commerce textile and apparel catalog director performing a deep pixel-by-pixel inspection of ONE standalone garment image.
+GARMENT_ANALYSIS_SYSTEM_PROMPT = """You are a master e-commerce textile, fabric texture, and apparel forensic inspector performing a deep pixel-by-pixel inspection of ONE standalone garment image.
 
 Classify:
 - `role`: "top" | "bottom" | "full_outfit" | "outerwear" (honor caller `role_hint` if valid unless clearly contradicted).
 - `target_gender`: "men" | "women" | "unisex" (e.g., sarees, lehengas, female kurtis/crop-tops/gowns -> "women"; standard t-shirts, jeans, chinos, hoodies -> "unisex" unless tailored distinctively for "men" or "women").
 
-Inspect EVERY visual pixel carefully:
-- `title`: Specific product title (e.g., "Optic White Crimson-Trimmed Athletic Football Jersey T-Shirt", "Beige Slim-Fit Cotton Chinos", "Stonewashed Indigo Raw Denim Jeans").
-- `colors`: Exact dye hues, trim colors, striping colors, and undertones (never vague generic names).
-- `fabric_type`: Fabric physical structure (e.g., heavy twill denim with contrast copper stitching, lightweight breathable cotton jersey, crisp poplin cotton, fluid silk/chiffon with natural drape, fine knit wool).
-- `patterns_and_design`: Exhaustive pixel-level description covering silhouette/fit, exact neckline or collar construction (e.g., crew-neck round collar vs V-neck vs classic button-down collar, buttoned or strictly pullover/buttonless), sleeve length & cuffs, chest/side graphics, logos/crests (exact side left/right, color, shape), prints, embroidery, weave/knit texture, pockets, waistband/hem.
+Inspect EVERY visual pixel with extreme precision:
+1. `title`: Specific product title (e.g., "Optic White Crimson-Trimmed Athletic Football Jersey T-Shirt", "Beige Slim-Fit Cotton Chinos", "Stonewashed Indigo Raw Denim Jeans").
+2. `colors`: Exact dye hues, trim colors, contrast stitching colors, and undertones.
+3. `fabric_texture`: Microscopic textile weave and tactile structure:
+   * Denim: specify exact twill structure (e.g., heavy diagonal 3x1 twill), authentic slub yarn grain, stonewashed fading/whiskering, or rigid raw indigo.
+   * Cotton / T-Shirts / Polos: specify exact knit (e.g., fine 100% combed cotton single jersey knit, piqué textured honeycomb knit, waffle knit, 2x2 rib knit, smooth poplin).
+   * Shirts / Tailored: specify weave (e.g., fine broadcloth poplin, oxford basketweave, twill weave, linen slubs).
+   * Ethnic / Formal / Silk: specify drape & luster (e.g., lustrous mulberry silk with liquid drape, sheer georgette, fluid satin, crepe).
+4. `surface_finish`: "matte", "subtle natural sheen", "stonewashed / faded", "brushed soft fleece", "high-gloss lustrous satin", "distressed / raw".
+5. `has_logo`: boolean (true ONLY if there is an explicit visible brand mark, chest crest, emblem, embroidered logo, patch, or graphic print; false if the garment is plain, solid, unbranded, or blank).
+6. `logo_and_graphics`:
+   * If `has_logo` is true: Describe the EXACT placement (e.g., "left chest: gold embroidered club crest with crown, right chest: dark navy Adidas 3-bar logo"), exact shapes, symbols, text, and colors.
+   * If `has_logo` is false: Write "STRICTLY NONE: 100% plain, unbranded solid fabric with zero chest logos, zero crests, zero patches, and zero text".
+7. `stitching_and_hardware`: Seams, topstitching (e.g., "contrast golden-tan heavy topstitching along seams and pockets", "tonal single-needle clean stitching"), buttons (shank metal buttons, resin buttons), zippers, rivets, and cuffs.
+8. `patterns_and_design`: Exhaustive pixel-level description covering silhouette/fit, exact neckline or collar construction (e.g., crew-neck round collar vs V-neck vs classic button-down collar, buttoned or strictly pullover/buttonless), sleeve length & cuffs, chest/side graphics, prints, embroidery, weave/knit texture, pockets, waistband/hem.
 
 Return STRICTLY valid JSON:
 {
@@ -66,7 +76,11 @@ Return STRICTLY valid JSON:
   "target_gender": "unisex",
   "title": "...",
   "colors": "...",
-  "fabric_type": "...",
+  "fabric_texture": "...",
+  "surface_finish": "...",
+  "has_logo": false,
+  "logo_and_graphics": "...",
+  "stitching_and_hardware": "...",
   "patterns_and_design": "..."
 }"""
 
@@ -262,13 +276,28 @@ def _build_fallback_garment_item(g: dict[str, Any], idx: int, total: int) -> dic
     role = _infer_garment_role(g, idx, total)
     raw_name = str(g.get("filename") or f"Garment {idx + 1}")
     stem = os.path.splitext(raw_name)[0].replace("_", " ").replace("-", " ").strip()
+    is_denim = any(k in stem.lower() for k in ("jean", "denim"))
+    is_jersey = any(k in stem.lower() for k in ("jersey", "sport", "athletic"))
+    has_logo = is_jersey or any(k in stem.lower() for k in ("logo", "crest", "graphic", "print"))
+
+    tex = (
+        "heavy diagonal twill denim with authentic slub weave"
+        if is_denim
+        else ("breathable athletic jersey knit with micro-mesh texture" if is_jersey else "fine woven textile fabric")
+    )
     return {
         "garment_index": idx,
         "role": role,
         "target_gender": _normalize_target_gender("auto", stem),
         "title": stem.title() or f"Garment #{idx + 1} ({role})",
         "colors": "authentic original colors from reference image",
-        "patterns_and_design": f"exact garment fabric, print patterns, neckline/collar cut, logos, silhouette, and construction visible in Garment #{idx + 1}",
+        "fabric_type": tex,
+        "fabric_texture": tex,
+        "surface_finish": "authentic finish matching reference",
+        "has_logo": has_logo,
+        "logo_and_graphics": "authentic logo/crest from reference" if has_logo else "",
+        "stitching_and_hardware": "authentic stitching and seam construction",
+        "patterns_and_design": f"exact garment fabric, print patterns, neckline/collar cut, silhouette, and construction visible in Garment #{idx + 1}",
     }
 
 
@@ -433,13 +462,13 @@ def _call_openai_json(
     return json.loads(data["choices"][0]["message"]["content"])
 
 
-def _vision_message_for_image(instruction: str, image: Image.Image) -> list[dict[str, Any]]:
+def _vision_message_for_image(instruction: str, image: Image.Image, max_edge: int = 768) -> list[dict[str, Any]]:
     return [
         {"type": "text", "text": instruction},
         {
             "type": "image_url",
             "image_url": {
-                "url": f"data:image/jpeg;base64,{_encode_image_for_vision(image, max_edge=768)}",
+                "url": f"data:image/jpeg;base64,{_encode_image_for_vision(image, max_edge=max_edge)}",
                 "detail": "high",
             },
         },
@@ -503,25 +532,48 @@ def _analyze_garment_single(
         parsed = _call_openai_json(
             GARMENT_ANALYSIS_SYSTEM_PROMPT,
             _vision_message_for_image(
-                f"[GARMENT_{idx}] (caller role_hint={hint}). Analyze ONLY this garment's colors, target_gender, collar/neckline, buttons/pullover front, graphics/logos, prints, and fabric weave in extreme pixel detail.",
+                f"[GARMENT_{idx}] (caller role_hint={hint}). Analyze ONLY this garment in extreme pixel detail: "
+                "1. EXACT TEXTURE & WEAVE (denim twill, single jersey knit, piqué, poplin, linen, silk, ribbing). "
+                "2. LOGO / BRAND MARK AUDIT: Does it have ANY logo/crest/graphic, or is it 100% PLAIN and UNBRANDED? "
+                "3. Collar, buttons, stitching, and colors.",
                 g_entry["image"],
+                max_edge=1024,
             ),
             api_key,
             model_name,
             base_url,
-            max_tokens=550,
+            max_tokens=650,
         )
         title = str(parsed.get("title") or fallback["title"]).strip()
         patterns = str(parsed.get("patterns_and_design") or fallback["patterns_and_design"]).strip()
-        fabric = str(parsed.get("fabric_type") or "").strip()
-        if fabric and fabric.lower() not in patterns.lower():
-            patterns = f"{patterns}. Fabric: {fabric}".strip(". ")
+        fabric_tex = str(parsed.get("fabric_texture") or parsed.get("fabric_type") or fallback["fabric_texture"]).strip()
+        surface_finish = str(parsed.get("surface_finish") or fallback["surface_finish"]).strip()
+        has_logo = bool(parsed.get("has_logo", fallback["has_logo"]))
+        logo_graphics = str(parsed.get("logo_and_graphics") or fallback["logo_and_graphics"]).strip()
+        stitching = str(parsed.get("stitching_and_hardware") or fallback["stitching_and_hardware"]).strip()
+
+        # Audit logo consistency
+        lower_patterns = patterns.lower()
+        if not has_logo and any(k in lower_patterns for k in ("crest", "logo", "graphic print", "emblem")):
+            if not any(k in lower_patterns for k in ("no logo", "unbranded", "plain", "zero logo", "without logo")):
+                has_logo = True
+                logo_graphics = logo_graphics or "visible logo / graphic motif"
+
+        if fabric_tex and fabric_tex.lower() not in patterns.lower():
+            patterns = f"{patterns}. Fabric: {fabric_tex}".strip(". ")
+
         return {
             "garment_index": idx,
             "role": _normalize_role(parsed.get("role"), fallback["role"]),
             "target_gender": _normalize_target_gender(parsed.get("target_gender"), f"{title} {patterns}"),
             "title": title,
             "colors": str(parsed.get("colors") or fallback["colors"]).strip(),
+            "fabric_type": fabric_tex,
+            "fabric_texture": fabric_tex,
+            "surface_finish": surface_finish,
+            "has_logo": has_logo,
+            "logo_and_graphics": logo_graphics,
+            "stitching_and_hardware": stitching,
             "patterns_and_design": patterns,
         }
     except Exception as exc:
@@ -944,10 +996,34 @@ def build_qwen_tryon_prompt(
     for g in selected_garments:
         tag = f"<image{next_tag_idx}>"
         next_tag_idx += 1
+
+        # 1. Exact Fabric Texture & Weave Specification
+        tex = g.get("fabric_texture") or g.get("fabric_type") or "authentic textile fabric"
+        finish = g.get("surface_finish", "")
+        finish_str = f", surface finish: {finish}" if finish else ""
+        stitch = g.get("stitching_and_hardware", "")
+        stitch_str = f"; construction & stitching: {stitch}" if stitch else ""
+
+        # 2. Strict Logo / Brand Mark Rule (Preserve existing logo, forbid hallucinating absent logo)
+        has_logo = g.get("has_logo", False)
+        logo_details = (g.get("logo_and_graphics") or "").strip()
+        if has_logo and logo_details and "strictly none" not in logo_details.lower():
+            logo_instruction = (
+                f"EXACT LOGO / GRAPHIC LOCK: Replicate the EXACT {logo_details} shown on {tag} "
+                f"at its exact chest/sleeve position, scale, proportions, and authentic colors without altering, mutating, moving, or redesigning the logo/graphics."
+            )
+        else:
+            logo_instruction = (
+                f"STRICTLY ZERO LOGOS / UNBRANDED: This {g['title']} is completely plain and unbranded with ABSOLUTELY NO chest logo, "
+                f"no crest, no emblem, no brand mark, no embroidery patch, and no text anywhere. Do NOT add, invent, or hallucinate any logo or brand symbol on this garment."
+            )
+
         garment_clauses.append(
             f"Dress the model's {g['role']} EXCLUSIVELY in the EXACT {g['title']} shown in {tag}: "
-            f"colors {g['colors']}; {g['patterns_and_design']}. "
-            f"Reproduce every authentic wash, stripe, topstitch, crest, logo, pattern motif, collar/neckline shape, sleeve length, and fabric weave from {tag}."
+            f"colors {g['colors']}; silhouette & cut: {g['patterns_and_design']}. "
+            f"EXACT FABRIC TEXTURE LOCK: Faithfully reproduce the authentic physical textile weave of {tag} — {tex}{finish_str}{stitch_str}. "
+            f"Render realistic fabric tension, natural folds, and authentic micro-texture on the material. "
+            f"{logo_instruction}"
         )
 
     accessory_clauses: list[str] = []
