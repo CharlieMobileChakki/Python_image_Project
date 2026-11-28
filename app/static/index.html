@@ -41,6 +41,10 @@
         <span>👗</span> Virtual Try-On &amp; Outfit Stylist
         <span class="mode-badge-new">MULTI-GARMENT</span>
       </button>
+      <button id="modeBtnAvatar" class="mode-switch-btn" onclick="switchWorkspaceMode('avatar')">
+        <span>🎨</span> AI Avatar Studio
+        <span class="mode-badge-new">NEW PFP</span>
+      </button>
     </div>
 
     <div id="studioWorkspace">
@@ -395,6 +399,144 @@
               <h4 id="tryonProgressTitle" style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Styling &amp; Generating Try-On Looks...</h4>
               <p id="tryonProgressSubtitle" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Analyzing avatar face, clothing patterns &amp; accessories via ChatGPT Vision</p>
               <span id="tryonElapsedTimer" style="display: inline-block; margin-top: 12px; font-size: 11px; font-family: monospace; color: var(--accent-primary);">Time: 0.0s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="avatarWorkspace" style="display: none;">
+      <div class="unified-studio-banner">
+        <div class="banner-content">
+          <div class="banner-icon">🎨</div>
+          <div class="banner-details">
+            <h3>AI Stylized Avatar Profile Picture Generator ("Avatar Studio")</h3>
+            <p>Upload any user photo (selfie, portrait, or casual). Generates a stylized 2D digital vector art avatar card with circular pastel halo badge &amp; minimalist doodle accents (Exact Face, Hair, Glasses &amp; Outfit Lock).</p>
+          </div>
+        </div>
+        <div class="banner-tags">
+          <span class="mode-pill flow-b">2D Vector Art</span>
+          <span class="mode-pill flow-a">Pastel Halo + Doodles (1024×1024)</span>
+        </div>
+      </div>
+
+      <div class="control-bar">
+        <div class="control-group">
+          <div class="setting-item">
+            <label for="avatarStyleSelect">Art Style:</label>
+            <select id="avatarStyleSelect" class="studio-select" style="min-width: 150px;">
+              <option value="vector_art" selected>🎨 2D Modern Vector Art</option>
+              <option value="digital_illustration">🖌️ Rich Digital Painting</option>
+              <option value="anime_portrait">✨ Anime / Webtoon Hero</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label for="avatarHaloSelect">Pastel Halo:</label>
+            <select id="avatarHaloSelect" class="studio-select" style="min-width: 145px;">
+              <option value="auto" selected>⚡ Auto-Select</option>
+              <option value="soft_blue">Soft Sky Blue (#D4E6FA)</option>
+              <option value="periwinkle">Periwinkle (#DFE3F8)</option>
+              <option value="lavender">Soft Lavender (#E7DFF7)</option>
+              <option value="blush_pink">Pastel Blush Pink (#FCDFE4)</option>
+              <option value="mint_green">Pastel Sage Mint (#D8F1E5)</option>
+              <option value="warm_amber">Buttercream Amber (#FCECD7)</option>
+              <option value="soft_grey">Dove Grey (#E8EAED)</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label for="avatarDoodleSelect">Doodle Accent:</label>
+            <select id="avatarDoodleSelect" class="studio-select" style="min-width: 140px;">
+              <option value="auto" selected>⚡ Auto (Crown/Heart)</option>
+              <option value="crown">👑 Crown Doodle</option>
+              <option value="heart">♡ Outlined Heart</option>
+              <option value="sparks">✨ Sparks &amp; Dashes</option>
+              <option value="stars">⭐ Twinkle Stars</option>
+              <option value="none">Clean Halo Only</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label for="avatarCustomPrompt">Styling Note:</label>
+            <input id="avatarCustomPrompt" type="text" class="tryon-text-input" placeholder="Optional: e.g. gold rim glasses, extra smile..." />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <button id="avatarGenerateBtn" class="btn-primary" onclick="generateStylizedAvatar()" disabled>
+            <span>✨</span> Generate Avatar
+          </button>
+          <button id="avatarDownloadBtn" class="btn-secondary" onclick="downloadAvatarPng()" disabled>
+            <span>⬇</span> Download PNG
+          </button>
+          <button class="btn-secondary" style="color: var(--text-muted);" onclick="clearAvatarWorkspace()">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div class="tryon-grid">
+        <div class="studio-panel">
+          <div class="panel-header">
+            <h3>1. Upload Photo</h3>
+            <span style="font-size: 11px; color: var(--text-muted);">Selfie / Portrait / Full Photo</span>
+          </div>
+
+          <div class="tryon-inputs-scroll">
+            <div class="tryon-section-box">
+              <div class="tryon-section-head">
+                <h4>User Photo (Face &amp; Outfit Lock) *</h4>
+                <span id="avatarUploadStatus" style="font-size: 11px; color: var(--text-muted);">Required</span>
+              </div>
+              <input type="file" id="avatarFileInput" accept="image/jpeg,image/png,image/webp" style="display: none;" onchange="handleAvatarFileSelect(event)" />
+              <div id="avatarDropzone" class="tryon-mini-dropzone" onclick="document.getElementById('avatarFileInput').click()">
+                📸 Click or Drop Photo (Selfie, Portrait, Casual Picture)
+              </div>
+              <div id="avatarPreviewWrap" class="tryon-avatar-preview-wrap" style="display: none;">
+                <img id="avatarPreviewImg" alt="Avatar Photo Preview" />
+                <button class="tryon-remove-btn" onclick="clearAvatarPhoto()" title="Remove Photo">×</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="studio-panel">
+          <div class="panel-header">
+            <h3>2. Stylized Avatar Output (1024×1024)</h3>
+            <div class="view-tabs">
+              <button class="view-tab avatar-view-tab active" data-view="avatar" onclick="switchAvatarOutputView('avatar')">Stylized Avatar</button>
+              <button class="view-tab avatar-view-tab" data-view="compare" onclick="switchAvatarOutputView('compare')">Before / After Slider</button>
+            </div>
+          </div>
+
+          <div class="panel-body studio-output-bg" style="flex-direction: column;">
+            <div id="avatarPlaceholder" style="text-align: center; color: var(--text-muted);">
+              <div style="font-size: 38px; margin-bottom: 8px; opacity: 0.45;">🎨</div>
+              <p style="font-size: 13px; font-weight: 500;">Upload a user photo and click "Generate Avatar".</p>
+              <p style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">Generates an illustrated vector avatar with your exact face, hair, glasses, and outfit framed in a pastel circular halo badge.</p>
+            </div>
+
+            <div id="avatarResultContainer" style="display: none; width: 100%; flex-direction: column; align-items: center;">
+              <img id="avatarActiveImg" class="viewport-img" alt="Stylized Vector Avatar" />
+
+              <div id="avatarCompareContainer" class="compare-container" style="display: none;">
+                <img id="avatarCompareBefore" class="compare-img" alt="Original Photo" />
+                <div id="avatarCompareOverlay" class="compare-overlay">
+                  <img id="avatarCompareAfter" class="compare-img" alt="Stylized Vector Avatar" />
+                </div>
+                <div id="avatarCompareHandle" class="compare-handle">⟨ ⟩</div>
+              </div>
+
+              <div class="telemetry-row" id="avatarTelemetryRow"></div>
+              <div id="avatarIdentityCard" class="tryon-stylist-card" style="display: none;"></div>
+            </div>
+
+            <div id="avatarProgressContainer" class="progress-card" style="display: none;">
+              <div class="pulse-spinner"></div>
+              <h4 id="avatarProgressTitle" style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Designing Stylized Vector Avatar...</h4>
+              <p id="avatarProgressSubtitle" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Extracting facial identity, hair texture &amp; rendering pastel halo card via Qwen-2.1-Turbo</p>
+              <span id="avatarElapsedTimer" style="display: inline-block; margin-top: 12px; font-size: 11px; font-family: monospace; color: var(--accent-primary);">Time: 0.0s</span>
             </div>
           </div>
         </div>
@@ -1039,11 +1181,15 @@
     };
 
     function switchWorkspaceMode(mode) {
-      const isStudio = mode !== 'tryon';
+      const isStudio = mode === 'studio';
+      const isTryon = mode === 'tryon';
+      const isAvatar = mode === 'avatar';
       document.getElementById('studioWorkspace').style.display = isStudio ? 'block' : 'none';
-      document.getElementById('tryonWorkspace').style.display = isStudio ? 'none' : 'block';
+      document.getElementById('tryonWorkspace').style.display = isTryon ? 'block' : 'none';
+      document.getElementById('avatarWorkspace').style.display = isAvatar ? 'block' : 'none';
       document.getElementById('modeBtnStudio').classList.toggle('active', isStudio);
-      document.getElementById('modeBtnTryon').classList.toggle('active', !isStudio);
+      document.getElementById('modeBtnTryon').classList.toggle('active', isTryon);
+      document.getElementById('modeBtnAvatar').classList.toggle('active', isAvatar);
     }
 
     function updateTryonButtons() {
@@ -1318,6 +1464,187 @@
       const a = document.createElement('a');
       a.href = active.output_png_url || active.url;
       a.download = `virtual_tryon_look_${active.combination_index}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    // -----------------------------------------------------------------------
+    // AI Stylized Avatar Studio State & Event Handlers
+    // -----------------------------------------------------------------------
+    const avatarState = {
+      file: null,
+      previewUrl: null,
+      result: null,
+      viewMode: 'avatar',
+      busy: false,
+      timerId: null,
+    };
+
+    function handleAvatarFileSelect(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      setAvatarPhoto(file);
+    }
+
+    function setAvatarPhoto(file) {
+      if (avatarState.previewUrl) URL.revokeObjectURL(avatarState.previewUrl);
+      avatarState.file = file;
+      avatarState.previewUrl = URL.createObjectURL(file);
+
+      document.getElementById('avatarDropzone').style.display = 'none';
+      const wrap = document.getElementById('avatarPreviewWrap');
+      wrap.style.display = 'block';
+      document.getElementById('avatarPreviewImg').src = avatarState.previewUrl;
+      document.getElementById('avatarUploadStatus').textContent = `Ready (${file.name})`;
+      document.getElementById('avatarUploadStatus').style.color = 'var(--accent-success)';
+      document.getElementById('avatarGenerateBtn').disabled = false;
+    }
+
+    function clearAvatarPhoto() {
+      if (avatarState.previewUrl) URL.revokeObjectURL(avatarState.previewUrl);
+      avatarState.file = null;
+      avatarState.previewUrl = null;
+      document.getElementById('avatarFileInput').value = '';
+      document.getElementById('avatarDropzone').style.display = 'block';
+      document.getElementById('avatarPreviewWrap').style.display = 'none';
+      document.getElementById('avatarUploadStatus').textContent = 'Required';
+      document.getElementById('avatarUploadStatus').style.color = 'var(--text-muted)';
+      document.getElementById('avatarGenerateBtn').disabled = true;
+    }
+
+    function clearAvatarWorkspace() {
+      if (avatarState.busy) return;
+      clearAvatarPhoto();
+      avatarState.result = null;
+      document.getElementById('avatarResultContainer').style.display = 'none';
+      document.getElementById('avatarPlaceholder').style.display = 'block';
+      document.getElementById('avatarDownloadBtn').disabled = true;
+    }
+
+    function switchAvatarOutputView(view) {
+      avatarState.viewMode = view;
+      document.querySelectorAll('.avatar-view-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.view === view);
+      });
+      const singleImg = document.getElementById('avatarActiveImg');
+      const compareBox = document.getElementById('avatarCompareContainer');
+      if (view === 'compare') {
+        singleImg.style.display = 'none';
+        compareBox.style.display = 'block';
+        bindCompareSlider('avatarCompareContainer', 'avatarCompareOverlay', 'avatarCompareHandle');
+      } else {
+        singleImg.style.display = 'block';
+        compareBox.style.display = 'none';
+      }
+    }
+
+    async function generateStylizedAvatar() {
+      if (!avatarState.file || avatarState.busy) return;
+      avatarState.busy = true;
+
+      const genBtn = document.getElementById('avatarGenerateBtn');
+      const downBtn = document.getElementById('avatarDownloadBtn');
+      const placeholder = document.getElementById('avatarPlaceholder');
+      const resultBox = document.getElementById('avatarResultContainer');
+      const progressBox = document.getElementById('avatarProgressContainer');
+      const timerSpan = document.getElementById('avatarElapsedTimer');
+
+      genBtn.disabled = true;
+      downBtn.disabled = true;
+      placeholder.style.display = 'none';
+      resultBox.style.display = 'none';
+      progressBox.style.display = 'flex';
+
+      const tStart = performance.now();
+      avatarState.timerId = setInterval(() => {
+        const sec = ((performance.now() - tStart) / 1000).toFixed(1);
+        timerSpan.textContent = `Time: ${sec}s`;
+      }, 100);
+
+      const fd = new FormData();
+      fd.append('file', avatarState.file);
+      fd.append('style', document.getElementById('avatarStyleSelect').value);
+      fd.append('halo_color', document.getElementById('avatarHaloSelect').value);
+      fd.append('doodle_accent', document.getElementById('avatarDoodleSelect').value);
+      const customPrompt = document.getElementById('avatarCustomPrompt').value.trim();
+      if (customPrompt) fd.append('custom_prompt', customPrompt);
+
+      try {
+        const res = await fetch('/api/generate-avatar', {
+          method: 'POST',
+          body: fd,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server error (${res.status})`);
+        }
+
+        const data = await res.json();
+        avatarState.result = data;
+
+        // Render result image
+        const imgUrl = data.avatar_url || data.output_png_url;
+        document.getElementById('avatarActiveImg').src = imgUrl;
+        document.getElementById('avatarCompareBefore').src = avatarState.previewUrl;
+        document.getElementById('avatarCompareAfter').src = imgUrl;
+
+        // Render Telemetry
+        const telemetryRow = document.getElementById('avatarTelemetryRow');
+        telemetryRow.innerHTML = `
+          <span class="telemetry-item">Resolution: <strong>${data.resolution || '1024×1024'}</strong></span>
+          <span class="telemetry-item">Style: <strong>${data.style || 'vector_art'}</strong></span>
+          <span class="telemetry-item">Halo: <strong>${data.halo_color || 'soft_blue'}</strong></span>
+          <span class="telemetry-item">Doodle: <strong>${data.doodle_accent || 'crown'}</strong></span>
+          <span class="telemetry-item">Time: <strong>${data.processing_time_sec || ((performance.now() - tStart) / 1000).toFixed(1)}s</strong></span>
+          <span class="telemetry-item">Engine: <strong>${data.gpu_name || data.engine || 'Qwen-2.1-Turbo'}</strong></span>
+        `;
+
+        // Render Identity Breakdown Card
+        const idCard = document.getElementById('avatarIdentityCard');
+        if (data.identity_features) {
+          const idf = data.identity_features;
+          idCard.style.display = 'block';
+          idCard.innerHTML = `
+            <div style="font-weight: 700; color: var(--accent-primary); margin-bottom: 6px;">
+              🎨 Avatar Identity Lock &amp; Feature Breakdown
+            </div>
+            <ul style="margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.6; color: var(--text-secondary);">
+              <li><strong>Hair:</strong> ${idf.hair_details || 'Authentic textured hair volume preserved'}</li>
+              <li><strong>Expression:</strong> ${idf.expression || 'Natural warm smile'}</li>
+              ${idf.eyewear ? `<li><strong>Eyewear:</strong> ${idf.eyewear}</li>` : ''}
+              ${idf.facial_hair ? `<li><strong>Facial Hair:</strong> ${idf.facial_hair}</li>` : ''}
+              <li><strong>Outfit:</strong> ${idf.upper_garment || 'Stylized upper clothing faithfully retained'}</li>
+              ${idf.distinctive_features ? `<li><strong>Distinctive Marks:</strong> ${idf.distinctive_features}</li>` : ''}
+            </ul>
+          `;
+        } else {
+          idCard.style.display = 'none';
+        }
+
+        switchAvatarOutputView(avatarState.viewMode);
+        resultBox.style.display = 'flex';
+        downBtn.disabled = false;
+      } catch (err) {
+        alert(`Avatar Generation Failed: ${err.message}`);
+        placeholder.style.display = 'block';
+      } finally {
+        clearInterval(avatarState.timerId);
+        avatarState.timerId = null;
+        avatarState.busy = false;
+        progressBox.style.display = 'none';
+        genBtn.disabled = false;
+      }
+    }
+
+    function downloadAvatarPng() {
+      if (!avatarState.result) return;
+      const url = avatarState.result.avatar_url || avatarState.result.output_png_url;
+      if (!url) return;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `avatar_${avatarState.result.job_id || 'stylized'}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();

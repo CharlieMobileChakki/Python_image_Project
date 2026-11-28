@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from app.api.avatar import avatar_router
 from app.api.reconstruction import reconstruction_router
 from app.api.routes import router as api_router
 from app.api.virtual_tryon import virtual_tryon_router
@@ -87,6 +88,7 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api")
 app.include_router(reconstruction_router, prefix="/api")
 app.include_router(virtual_tryon_router, prefix="/api")
+app.include_router(avatar_router, prefix="/api")
 
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
 
