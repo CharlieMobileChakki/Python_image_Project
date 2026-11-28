@@ -35,13 +35,6 @@ avatar_router = APIRouter(tags=["Avatar Studio"])
         "Preserves exact facial identity, hair texture/volume, eyeglasses, facial hair, and upper outfit."
     ),
 )
-@avatar_router.post(
-    "/avatar-studio",
-    response_model=AvatarGenerationResponse,
-    response_model_exclude_none=True,
-    summary="Generate Stylized 2D Vector Avatar Profile Picture (Alias)",
-    include_in_schema=False,
-)
 async def generate_avatar_endpoint(
     request: Request,
     file: UploadFile = File(..., description="User photo (portrait, selfie, or full photo)"),
