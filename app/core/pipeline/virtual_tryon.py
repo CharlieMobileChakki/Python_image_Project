@@ -134,29 +134,38 @@ def refine_facial_micro_clarity(img: Image.Image) -> Image.Image:
 
 
 def _detect_face_box_cv(avatar_rgb: Image.Image) -> tuple[int, int, int, int] | None:
-    """Detect primary frontal face ``(x1, y1, x2, y2)`` via OpenCV Haar cascade when available."""
+    """Detect primary face ``(x1, y1, x2, y2)`` via OpenCV YuNet neural detector with robust portrait fallback."""
+    w, h = avatar_rgb.size
     try:
         import cv2
         import numpy as np
 
-        gray = cv2.cvtColor(np.array(avatar_rgb), cv2.COLOR_RGB2GRAY)
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        if cascade.empty():
-            return None
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
-        if len(faces) == 0:
-            return None
-        x, y, fw, fh = max(faces, key=lambda b: int(b[2]) * int(b[3]))
-        w, h = avatar_rgb.size
-        return (
-            max(0, int(x - 0.35 * fw)),
-            max(0, int(y - 0.45 * fh)),
-            min(w, int(x + 1.35 * fw)),
-            min(h, int(y + 1.18 * fh)),
-        )
+        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "face_detection_yunet_2023mar.onnx")
+        if os.path.exists(model_path) and hasattr(cv2, "FaceDetectorYN_create"):
+            detector = cv2.FaceDetectorYN_create(model_path, "", (w, h), 0.55, 0.3, 5000)
+            arr = cv2.cvtColor(np.array(avatar_rgb), cv2.COLOR_RGB2BGR)
+            _, faces = detector.detect(arr)
+            if faces is not None and len(faces) > 0:
+                best = max(faces, key=lambda f: float(f[2]) * float(f[3]))
+                x, y, fw, fh = (float(v) for v in best[:4])
+                pad_x = fw * 0.30
+                pad_y = fh * 0.40
+                return (
+                    max(0, int(x - pad_x)),
+                    max(0, int(y - pad_y)),
+                    min(w, int(x + fw + pad_x)),
+                    min(h, int(y + fh + 0.25 * fh)),
+                )
     except Exception as exc:
-        logger.debug("OpenCV face detection skipped: %s", exc)
-        return None
+        logger.debug("YuNet face detection skipped: %s", exc)
+
+    # Robust intelligent portrait/selfie center-upper fallback (never leave face uncropped)
+    return (
+        max(0, int(w * 0.14)),
+        max(0, int(h * 0.02)),
+        min(w, int(w * 0.86)),
+        min(h, int(h * 0.72)),
+    )
 
 
 def prepare_face_identity_ref(
