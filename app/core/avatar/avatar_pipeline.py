@@ -16,7 +16,7 @@ import time
 from typing import Any
 import uuid
 
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 
 from app.core.avatar.avatar_cropper import crop_bust_up_portrait
 from app.core.avatar.avatar_stylist import (
@@ -29,6 +29,21 @@ from app.core.pipeline.pipeline_config import OUTPUT_DIR
 from app.schemas.avatar_schemas import AvatarIdentityFeatures
 
 logger = logging.getLogger(__name__)
+
+
+def refine_avatar_vibrance_and_crispness(img: Image.Image) -> Image.Image:
+    """Polish avatar: lifts dull/muddy tones, enriches skin vibrance, and sharpens vector outlines."""
+    try:
+        # 1. Gentle color vibrance boost (+8%) to eliminate washed out / dull grey/olive skin casts
+        vibrant = ImageEnhance.Color(img).enhance(1.08)
+        # 2. Subtle contrast boost (+4%) to ensure crisp whites on dress shirts and deep blacks on suits
+        contrasted = ImageEnhance.Contrast(vibrant).enhance(1.04)
+        # 3. Fine vector outline sharpening (+12%) for crisp eyeglasses, hair strands, and line art
+        sharpened = ImageEnhance.Sharpness(contrasted).enhance(1.12)
+        return sharpened
+    except Exception as exc:
+        logger.debug("Avatar vibrance refinement skipped: %s", exc)
+        return img
 
 
 def process_avatar_pipeline(
@@ -99,11 +114,12 @@ def process_avatar_pipeline(
         logger.error("GPU worker synthesis failed for avatar | job_id=%s error=%s", job_id, exc)
         raise RuntimeError(f"Avatar synthesis failed on GPU worker: {exc}") from exc
 
-    # 6. Save generated 1024x1024 PNG to outputs directory
+    # 6. Apply vibrance polish and save generated 1024x1024 PNG
+    polished_img = refine_avatar_vibrance_and_crispness(generated_img)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_filename = f"{job_id}_avatar.png"
     out_path = OUTPUT_DIR / out_filename
-    generated_img.save(out_path, format="PNG", optimize=True)
+    polished_img.save(out_path, format="PNG", optimize=True)
 
     elapsed_sec = round(time.perf_counter() - t_start, 2)
     elapsed_ms = round(elapsed_sec * 1000.0, 1)
@@ -115,7 +131,7 @@ def process_avatar_pipeline(
         elapsed_sec,
     )
 
-    base64_uri = image_to_base64_data_uri(generated_img) if include_base64 else None
+    base64_uri = image_to_base64_data_uri(polished_img) if include_base64 else None
 
     identity_obj = AvatarIdentityFeatures(
         gender=avatar_info.get("gender", "unspecified"),

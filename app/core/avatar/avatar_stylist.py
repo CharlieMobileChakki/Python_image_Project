@@ -1,7 +1,7 @@
 """Styling and prompt engineering engine for AI Stylized Avatar Profile Pictures.
 
 Specialized for generating modern 2D digital vector art avatar profile cards
-with circular pastel halo backdrops and cute minimalist hand-drawn doodle accents.
+with circular pastel halo backdrops, vibrant luminous skin tones, and cute minimalist doodles.
 """
 from __future__ import annotations
 
@@ -15,66 +15,66 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Standard pastel halo color palette
+# Premium pastel halo color palette (vibrant, clean, flattering)
 HALO_PALETTE: dict[str, dict[str, str]] = {
     "soft_blue": {
         "name": "soft_blue",
-        "label": "soft pastel sky blue",
-        "hex": "#D4E6FA",
-        "desc": "soft luminous pastel sky blue circular disc badge (#D4E6FA)",
+        "label": "luminous pastel sky blue",
+        "hex": "#C6DDFB",
+        "desc": "large, prominent luminous soft pastel sky blue circular disc badge (#C6DDFB) framing the head and upper torso",
     },
     "periwinkle": {
         "name": "periwinkle",
         "label": "soft pastel periwinkle",
-        "hex": "#DFE3F8",
-        "desc": "gentle pastel periwinkle circular disc badge (#DFE3F8)",
+        "hex": "#CCD8FA",
+        "desc": "large, prominent soft pastel periwinkle-blue circular disc badge (#CCD8FA) framing the head and upper torso",
     },
     "lavender": {
         "name": "lavender",
         "label": "soft pastel lavender",
-        "hex": "#E7DFF7",
-        "desc": "charming soft pastel lavender circular disc badge (#E7DFF7)",
+        "hex": "#E6DDF8",
+        "desc": "large, prominent soft pastel lavender circular disc badge (#E6DDF8) framing the head and upper torso",
     },
     "blush_pink": {
         "name": "blush_pink",
         "label": "soft pastel blush pink",
-        "hex": "#FCDFE4",
-        "desc": "delicate soft pastel blush pink circular disc badge (#FCDFE4)",
+        "hex": "#FCDDE4",
+        "desc": "large, prominent soft pastel blush pink circular disc badge (#FCDDE4) framing the head and upper torso",
     },
     "mint_green": {
         "name": "mint_green",
         "label": "soft pastel mint green",
-        "hex": "#D8F1E5",
-        "desc": "fresh soft pastel sage mint circular disc badge (#D8F1E5)",
+        "hex": "#D4F0E2",
+        "desc": "large, prominent soft pastel sage mint circular disc badge (#D4F0E2) framing the head and upper torso",
     },
     "warm_amber": {
         "name": "warm_amber",
         "label": "soft pastel buttercream amber",
-        "hex": "#FCECD7",
-        "desc": "warm soft pastel buttercream amber circular disc badge (#FCECD7)",
+        "hex": "#FCEBD5",
+        "desc": "large, prominent soft pastel buttercream amber circular disc badge (#FCEBD5) framing the head and upper torso",
     },
     "soft_grey": {
         "name": "soft_grey",
         "label": "soft pastel dove grey",
-        "hex": "#E8EAED",
-        "desc": "neutral soft pastel dove grey circular disc badge (#E8EAED)",
+        "hex": "#E8EAEF",
+        "desc": "large, prominent soft pastel dove grey circular disc badge (#E8EAEF) framing the head and upper torso",
     },
 }
 
 DOODLE_STYLES: dict[str, str] = {
     "crown": (
-        "a cute minimalist hand-drawn outlined 3-point king/queen crown doodle floating playfully above the hair "
-        "near the top-left, accompanied by two delicate radiating action dashes"
+        "an iconic minimalist hand-drawn outlined 3-point king crown doodle with 3 tiny circular dots at the crown tips "
+        "floating playfully above the hair on the upper-left, accompanied by two crisp delicate diagonal action dashes on the right"
     ),
     "heart": (
-        "a cute minimalist hand-drawn outlined heart doodle floating playfully beside the character on the circular badge, "
-        "accompanied by two delicate accent dashes"
+        "a cute minimalist hand-drawn outlined heart doodle (♡) floating playfully beside the character on the circular badge, "
+        "accompanied by two delicate radiating accent dashes"
     ),
     "sparks": (
         "playful minimalist hand-drawn sparkle star doodles and radiating energetic accent dashes around the circular badge"
     ),
     "stars": (
-        "minimalist hand-drawn twinkling 4-point star doodles and subtle accent lines"
+        "minimalist hand-drawn twinkling 4-point star doodles and subtle delicate accent lines"
     ),
     "none": "",
 }
@@ -83,27 +83,29 @@ AVATAR_VISION_PROMPT = """You are a master digital character designer and art di
 
 Inspect the person's photo with extreme forensic precision:
 1. `gender`: "female" | "male" | "unspecified"
-2. `expression`: Exact facial expression (e.g., "warm genuine smile showing upper teeth", "subtle confident closed-lip smile", "neutral composed gaze").
-3. `hair_details`: Exact hair style, texture, volume, parting, bangs/fringe, length, and color (e.g. "thick voluminous textured dark hair with styled fringe falling naturally over forehead", "long silky straight-wavy dark hair parted in center cascading over shoulders").
-4. `eyewear`: If eyeglasses are present, describe exact frame shape, frame material/color (e.g., "thin square wireframe silver spectacles with clear transparent lenses"), or null if NO glasses.
-5. `facial_hair`: Describe mustache, stubble, or beard (e.g. "neat dark mustache and light groomed chin stubble"), or null if clean shaven.
-6. `upper_garment`: Exact description of upper clothing (e.g. "dark navy floral printed top with cream-yellow flowers and square neckline", "sharp tailored black blazer, crisp white collared dress shirt, vibrant red necktie, and black pocket square").
-7. `distinctive_features`: Small bindi, forehead marks, earrings, necklace, or null.
-8. `recommended_halo_color`: Best complementary pastel halo color from ("soft_blue", "periwinkle", "lavender", "blush_pink", "mint_green", "warm_amber").
-9. `recommended_doodle`: "crown" (for regal/confident/masculine), "heart" (for charming/sweet/feminine), or "sparks".
-10. `face_box_2d`: [ymin, xmin, ymax, xmax] integers scaled 0 to 1000 tightly around the face.
+2. `expression`: Exact facial expression (e.g., "warm genuine smile showing upper teeth", "subtle confident closed-lip smile", "friendly composed gaze").
+3. `skin_tone`: Exact natural skin tone and undertone (e.g. "radiant warm golden-peachy skin", "fair luminous skin with subtle rosy undertones", "rich warm honey-bronze").
+4. `hair_details`: Exact hair style, texture, volume, parting, fringe/bangs, and flow (e.g. "thick voluminous textured dark hair with styled fringe swept forward over forehead", "long silky straight-wavy dark hair parted in middle cascading past shoulders").
+5. `eyewear`: If eyeglasses are present, describe exact frame shape, frame material/color (e.g., "sleek thin rectangular wireframe silver/black spectacles with crystal-clear non-reflective lenses"), or null if NO glasses.
+6. `facial_hair`: Describe mustache, stubble, or beard (e.g. "neat manicured dark mustache and light groomed jawline stubble"), or null if clean shaven.
+7. `upper_garment`: Exact description of upper clothing (e.g. "dark navy floral printed top with cream-yellow flowers and square neckline", "sharp tailored black blazer, crisp white collared dress shirt, vibrant crimson red necktie, and black pocket square").
+8. `distinctive_features`: Small bindi, forehead marks, earrings, necklace, or null.
+9. `recommended_halo_color`: Default to "soft_blue" or "periwinkle" unless garment strongly demands another color.
+10. `recommended_doodle`: "crown" (for men/confident styling), "heart" (for women/charming styling), or "sparks".
+11. `face_box_2d`: [ymin, xmin, ymax, xmax] integers scaled 0 to 1000 tightly around the face.
 
 Return STRICTLY valid JSON:
 {
-  "gender": "female",
-  "expression": "warm radiant smile showing teeth",
-  "hair_details": "...",
-  "eyewear": null,
-  "facial_hair": null,
-  "upper_garment": "...",
-  "distinctive_features": "small dark bindi on center of forehead",
-  "recommended_halo_color": "periwinkle",
-  "recommended_doodle": "heart",
+  "gender": "male",
+  "expression": "confident subtle warm smile",
+  "skin_tone": "radiant warm golden-peachy skin with healthy glow",
+  "hair_details": "thick voluminous dark hair with textured fringe styled over forehead",
+  "eyewear": "sleek thin rectangular wireframe spectacles with clear transparent lenses",
+  "facial_hair": "neat dark mustache and light groomed chin stubble",
+  "upper_garment": "tailored black suit jacket, crisp white collared shirt, vibrant red necktie, and black pocket square",
+  "distinctive_features": null,
+  "recommended_halo_color": "soft_blue",
+  "recommended_doodle": "crown",
   "face_box_2d": [120, 280, 520, 720]
 }"""
 
@@ -113,8 +115,9 @@ def _build_fallback_identity(avatar_img: Image.Image) -> dict[str, Any]:
     w, h = avatar_img.size
     return {
         "gender": "unspecified",
-        "expression": "natural warm smile",
-        "hair_details": "naturally styled hair with rich textured strands and authentic volume",
+        "expression": "natural warm friendly smile",
+        "skin_tone": "radiant healthy warm peachy-golden complexion with soft natural glow",
+        "hair_details": "naturally styled dark hair with rich textured layered strands and authentic volume",
         "eyewear": None,
         "facial_hair": None,
         "upper_garment": "stylish upper garment faithfully matching the uploaded photo",
@@ -168,6 +171,7 @@ def analyze_avatar_identity(
         return {
             "gender": gender,
             "expression": str(parsed.get("expression") or "warm friendly smile").strip(),
+            "skin_tone": str(parsed.get("skin_tone") or "radiant warm golden-peachy skin").strip(),
             "hair_details": str(parsed.get("hair_details") or "authentically styled hair").strip(),
             "eyewear": str(parsed.get("eyewear")).strip() if parsed.get("eyewear") else None,
             "facial_hair": str(parsed.get("facial_hair")).strip() if parsed.get("facial_hair") else None,
@@ -212,7 +216,13 @@ def build_avatar_stylized_prompt(
 ) -> tuple[str, str, str]:
     """Construct the specialized Qwen prompt for 2D stylized avatar profile illustration.
     
-    Returns (prompt, resolved_halo_name, resolved_doodle_name).
+    Guarantees:
+    - Radiant peachy-golden luminous skin tone with subtle rosy warmth (NO dull olive/grey/yellow).
+    - Bright alert captivating eyes with glossy catchlights.
+    - Sleek, symmetrical thin wireframe eyeglasses (if present) with crystal-clear lenses.
+    - Volumetric layered dark hair with rich highlights.
+    - Crisp vector tailored clothing (suit, collar, vibrant red tie, floral dress).
+    - Large circular pastel halo badge framed by crisp minimalist doodles.
     """
     halo_entry, doodle_desc = resolve_halo_and_doodle(avatar_info, halo_color, doodle_accent)
     resolved_halo_name = halo_entry["name"]
@@ -237,20 +247,23 @@ def build_avatar_stylized_prompt(
         )
     else:  # default: vector_art
         style_direction = (
-            "Masterpiece 2D modern digital vector art avatar illustration, crisp clean vector line art, "
-            "smooth luminous cel-shading, vibrant stylized colors, polished professional avatar profile card aesthetic."
+            "Masterpiece 2D modern digital vector art avatar illustration. Premium polished editorial character portrait, "
+            "razor-sharp clean vector line art, luminous smooth cel-shading, vibrant radiant digital color palette, "
+            "high-end social media profile picture (PFP) aesthetic."
         )
 
     # Gender noun
     gender = avatar_info.get("gender", "unspecified")
-    gender_noun = "woman" if gender == "female" else ("man" if gender == "male" else "person")
+    gender_noun = "man" if gender == "male" else ("woman" if gender == "female" else "person")
 
-    # Eyewear clause
+    # Eyewear clause: enforce sleek thin symmetrical wireframe
     eyewear = avatar_info.get("eyewear")
     if eyewear and "no glass" not in eyewear.lower():
         glasses_clause = (
-            f"MANDATORY EYEWEAR LOCK: The character MUST wear identical eyeglasses exactly matching <image1> "
-            f"({eyewear}). Reproduce the exact frame geometry, thin wireframe borders, and transparent clear lenses."
+            f"MANDATORY EYEWEAR LOCK: The character MUST wear identical eyeglasses exactly matching <image1> ({eyewear}). "
+            "The glasses MUST be rendered with sleek, ultra-thin, perfectly symmetrical metallic wireframe rims, "
+            "a crisp straight horizontal bridge, and crystal-clear transparent anti-reflective lenses showing sharp alert eyes behind them. "
+            "ABSOLUTELY NO thick wobbly frames, and NO warped or bent glasses."
         )
     else:
         glasses_clause = "EYEWEAR: No eyeglasses worn on the eyes in <image1>; do not add any unprompted glasses or sunglasses."
@@ -258,9 +271,12 @@ def build_avatar_stylized_prompt(
     # Facial hair clause
     facial_hair = avatar_info.get("facial_hair")
     if facial_hair:
-        beard_clause = f"FACIAL HAIR LOCK: Render the exact {facial_hair} with clean stylized vector strokes."
+        beard_clause = (
+            f"FACIAL HAIR LOCK: Render the exact {facial_hair} with clean, sharp, manicured vector strokes "
+            "and natural hair texture along the lip and jawline."
+        )
     else:
-        beard_clause = "FACIAL HAIR: Clean-shaven face matching <image1> without unprompted beard or stubble."
+        beard_clause = "FACIAL HAIR: Clean-shaven face matching <image1> with smooth jawline and zero unprompted stubble."
 
     # Distinctive marks
     distinctive = avatar_info.get("distinctive_features")
@@ -268,15 +284,16 @@ def build_avatar_stylized_prompt(
 
     # Upper outfit
     outfit = avatar_info.get("upper_garment") or "stylish upper garment from <image1>"
+    skin_tone_desc = avatar_info.get("skin_tone") or "radiant healthy warm peachy-golden complexion with natural glow"
 
     # Doodle clause
     if doodle_desc:
         doodle_clause = (
             f"MINIMALIST HAND-DRAWN DOODLE ACCENTS: Adorn the avatar card with {doodle_desc}, "
-            "drawn in charming, clean, delicate minimalist vector lines."
+            "drawn in charming, crisp, single-stroke black vector lines with zero shakiness or duplicate strokes."
         )
     else:
-        doodle_clause = "DOODLE ACCENTS: Minimalist, clean graphic styling."
+        doodle_clause = "DOODLE ACCENTS: Clean minimalist graphic badge styling."
 
     sections = [
         (
@@ -284,35 +301,43 @@ def build_avatar_stylized_prompt(
             f"Transform the real {gender_noun} in <image1> into an iconic, charming 2D digital vector art avatar illustration. "
             f"Style: {style_direction} "
             "EXACT FACIAL LIKENESS MANDATE: The illustrated character MUST be unmistakably recognizable as the exact same person from <image1>. "
-            f"Preserve their exact facial proportions, authentic eye shape, irises, eyebrow arch, nose contour, and genuine expression ({avatar_info.get('expression', 'warm smile')}). "
-            f"Preserve their exact hairstyle: {avatar_info.get('hair_details', 'authentically styled hair')}, "
-            "rendered with detailed graphic vector strokes, smooth highlights, and stylized hair volume. "
+            f"Preserve their exact facial proportions, authentic eye shape, irises, eyebrow arch, nose bridge and tip, and genuine expression ({avatar_info.get('expression', 'warm smile')}). "
+            f"VIBRANT LUMINOUS WARM SKIN TONE & GLOWING COMPLEXION: Render {skin_tone_desc} with luminous smooth cel-shaded vector gradients, "
+            "subtle soft rosy blush on the cheeks and lips, and bright studio beauty illumination. "
+            "STRICT COLOR GRADING BAN: ABSOLUTELY ZERO dull grey shadows, ZERO muddy olive/greenish/yellowish tint, and ZERO dark circles or sunken under-eye bags. "
+            "Under-eye area must be clean, smooth, youthful, and naturally lit. "
+            "BRIGHT ALERT CAPTIVATING EYES: Eyes must be wide, alert, engaging, and friendly, with pure brilliant white sclera, sharp deep irises, and crisp white specular catchlights. "
             f"{glasses_clause} "
+            f"RICH VOLUMETRIC LAYERED HAIR: Render the hairstyle ({avatar_info.get('hair_details', 'styled textured hair')}) "
+            "with rich dimensional layered vector brushstrokes, fine individual strand texture, deep dark-espresso tones, "
+            "and glossy volumetric highlights across the crest of the hair. Avoid flat solid black clumps. "
             f"{beard_clause} "
             f"{distinctive_clause} "
             "STRICT PROPORTION & NATURAL CHEEK LOCK (ABSOLUTELY NO ARTIFICIAL FACIAL SLIMMING): "
             "Preserve the authentic face width, cheek fullness, and natural jaw contour of <image1>. "
-            "DO NOT artificially slim the face, DO NOT narrow the jaw, and DO NOT exaggerate into an unnatural V-line."
+            "DO NOT artificially slim the face, DO NOT narrow the jaw, and DO NOT carve an unnatural V-line."
         ),
         (
             f"UPPER OUTFIT VECTOR STYLING: "
             f"Illustrate a faithful stylized vector rendition of the upper garment worn in <image1>: {outfit}. "
-            "Preserve the exact garment colors, print patterns (e.g. floral blossoms, stripes, or tailored lapels and tie), "
-            "crisp collar lines, and tailored silhouette with clean vector outlines and smooth shading."
+            "Render tailored blazer/suit jackets with crisp vector crease lines and subtle satin lapel sheen, "
+            "standing sharp against a bright, clean white dress shirt collar. Red neckties must be a vibrant crimson-red satin with a crisp, dimensional knot. "
+            "Preserve exact fabric prints, blossom patterns, collar lines, and silhouette with clean vector outlines and rich smooth shading."
         ),
         (
             f"CIRCULAR HALO BADGE & COMPOSITION: "
             "Centered bust-up portrait (head, hair volume, neck, shoulders, and upper chest) cleanly centered in the square canvas. "
             f"Directly behind the character's head and upper shoulders is a prominent, clean, large circular disc badge rendered in {halo_entry['desc']}. "
             f"{doodle_clause} "
-            "OUTER CANVAS: Pristine, spotless, solid uniform ivory/off-white background canvas (#FAF8F5) surrounding the circular badge."
+            "OUTER CANVAS: Pristine, spotless, solid uniform ivory/off-white background canvas (#FAF9F6) surrounding the circular badge."
         ),
         (
             "QUALITY & GRAPHIC RENDERING STANDARDS: "
-            "Crisp 1024x1024 digital artwork, sharp vector linework, vibrant luminous palette, smooth cel-shading, perfect graphic balance, "
+            "Crisp 1024x1024 digital artwork, razor-sharp vector linework, vibrant luminous palette, smooth cel-shading, perfect graphic balance, "
             "appealing modern social media profile picture (PFP). "
-            "STRICT NEGATIVE EXCLUSIONS: ABSOLUTELY NO photorealistic skin pores, NO waxy 3D plastic mannequin, NO uncanny CGI doll, "
-            "NO cluttered photographic background, NO photographic noise, NO distorted fingers, NO watermark, NO logo overlay."
+            "STRICT NEGATIVE EXCLUSIONS: ABSOLUTELY NO photorealistic skin pores, NO waxy 3D plastic mannequin, NO muddy or dull grey skin, "
+            "NO yellowish/olive sallow cast, NO dark under-eye circles, NO warped bent glasses, NO double-line shaky doodles, NO cluttered photographic background, "
+            "NO watermark, NO logo overlay."
         ),
     ]
 
