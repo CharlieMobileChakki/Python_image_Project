@@ -494,23 +494,46 @@ def _build_final_prompt(
         )
 
         if is_outerwear:
-            isolation_header = (
-                "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Hugo Boss fashion hero shot) showing EXCLUSIVELY the standalone "
-                "outerwear blazer / suit jacket / coat floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
-                "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
-                "CRITICAL HOLLOW APERTURE MANDATE (ZERO FUSED INNER SHIRT / ZERO T-SHIRT / ZERO TIE): "
-                "This is an empty 3D ghost mannequin of ONLY the outerwear jacket itself! "
-                "The interior space between the lapels, collar, and chest MUST BE AN OPEN, EMPTY 3D HOLLOW APERTURE showing only the jacket's inner silk/viscose lining with zero human body and zero inner clothing! "
-                "CRITICAL: ABSOLUTELY DO NOT generate, paint, or add any inner shirt, collared dress shirt, t-shirt, crew-neck, tie, or chest fabric fused inside the jacket! "
-                "ABSOLUTELY DO NOT fill or color the chest opening in the jacket's own color! The jacket must look like an authentic standalone unfastened or single-button jacket on an invisible 3D ghost mannequin with an empty hollow interior! "
-                "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet, and NO pants. "
+            wants_styled_ensemble = bool(
+                re.search(r'\bwith\s+([a-z\s]+)?(tie|bowtie|necktie)\b', label_clean.lower())
+                or re.search(r'\b(suit\s+and\s+tie|jacket\s+and\s+tie)\b', label_clean.lower())
+                or re.search(r'\bwith\s+([a-z\s]+)?(tie|bowtie|necktie)\b', desc_clean.lower())
+                or re.search(r'\b(suit\s+and\s+tie|jacket\s+and\s+tie)\b', desc_clean.lower())
             )
-            closure_item = (
-                "3. Tailored lapels (notch, peak, or shawl) pressing cleanly and symmetrically; "
-                "jacket front closure cleanly presented (either open showing hollow interior or single button fastened) with plumb center vertical alignment. "
-                "The chest opening MUST BE 100% EMPTY, hollow, and open showing the jacket's inner lining — ABSOLUTELY ZERO inner shirt, ZERO t-shirt, ZERO necktie, and ZERO fused chest fabric."
-            )
-            studio_rules_to_use = OUTERWEAR_STUDIO_RULES
+            if wants_styled_ensemble:
+                isolation_header = (
+                    "Generate a pristine 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Hugo Boss fashion hero shot) showing EXCLUSIVELY the "
+                    "tailored suit jacket layered over the crisp collared dress shirt and matching formal necktie / bowtie floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+                    "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
+                    "CRITICAL TIE & COLLAR INTEGRATION: The tailored jacket cleanly frames the crisp inner collared dress shirt and the styled necktie tied in an elegant knot at the throat and draped vertically down the center placket directly matching the reference photo! "
+                    "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet, and NO pants. "
+                )
+                closure_item = (
+                    "3. Tailored lapels pressing cleanly and symmetrically, cleanly framing the crisp collared dress shirt and the styled necktie tied at the throat with plumb center vertical alignment."
+                )
+                studio_rules_to_use = (
+                    "Pristine e-commerce 3D ghost-mannequin catalog presentation (Zara / Myntra / Hugo Boss fashion hero shot): "
+                    "Reconstruct the tailored suit jacket and its styled inner collared shirt and necktie directly matching the reference photo. "
+                    "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
+                )
+            else:
+                isolation_header = (
+                    "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Hugo Boss fashion hero shot) showing EXCLUSIVELY the standalone "
+                    "outerwear blazer / suit jacket / coat floating upright in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+                    "The bottom half of the image MUST BE 100% EMPTY, clean pure solid white. "
+                    "CRITICAL HOLLOW APERTURE MANDATE (ZERO FUSED INNER SHIRT / ZERO T-SHIRT / ZERO TIE): "
+                    "This is an empty 3D ghost mannequin of ONLY the outerwear jacket itself! "
+                    "The interior space between the lapels, collar, and chest MUST BE AN OPEN, EMPTY 3D HOLLOW APERTURE showing only the jacket's inner silk/viscose lining with zero human body and zero inner clothing! "
+                    "CRITICAL: ABSOLUTELY DO NOT generate, paint, or add any inner shirt, collared dress shirt, t-shirt, crew-neck, tie, or chest fabric fused inside the jacket! "
+                    "ABSOLUTELY DO NOT fill or color the chest opening in the jacket's own color! The jacket must look like an authentic standalone unfastened or single-button jacket on an invisible 3D ghost mannequin with an empty hollow interior! "
+                    "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet, and NO pants. "
+                )
+                closure_item = (
+                    "3. Tailored lapels (notch, peak, or shawl) pressing cleanly and symmetrically; "
+                    "jacket front closure cleanly presented (either open showing hollow interior or single button fastened) with plumb center vertical alignment. "
+                    "The chest opening MUST BE 100% EMPTY, hollow, and open showing the jacket's inner lining — ABSOLUTELY ZERO inner shirt, ZERO t-shirt, ZERO necktie, and ZERO fused chest fabric."
+                )
+                studio_rules_to_use = OUTERWEAR_STUDIO_RULES
         else:
             isolation_header = (
                 "Generate an empty 3D ghost-mannequin e-commerce studio catalog product photograph (Zara / Myntra / Amazon fashion hero shot) showing EXCLUSIVELY the standalone "
@@ -788,15 +811,20 @@ def analyze_garment_and_build_prompts(
         user_instruction = (
             "Analyze the item(s) in this image for exact 3D studio catalog reconstruction. "
             "CRITICAL DOMAIN DISCRIMINATION & 85% PROMINENCE RULE (APPAREL vs JEWELRY): "
-            "1. PRIMARY APPAREL LOCK: If the photo shows a model or person wearing APPAREL (dress, kurta, top, suit, shirt, pants, saree, lehenga), "
-            "   extract EXCLUSIVELY the clothing/apparel items! "
+            "1. PRIMARY APPAREL & ACCESSORIES LOCK: If the photo shows a model or person wearing APPAREL (dress, kurta, top, suit, shirt, pants, saree, lehenga, tie), "
+            "   extract the clothing and apparel accessory items! "
+            "   CRITICAL SUIT EXTRACTION MANDATE: For formal suits/blazers worn with an inner shirt and necktie/bowtie, "
+            "   extract ALL 3 DISTINCT ITEMS SEPARATELY so each can be viewed and extracted independently: "
+            "     - Entry 1: category 'upper_clothes', recognized_label: 'Formal Black Suit Jacket' (or 'Studio Blazer'). "
+            "     - Entry 2: category 'upper_clothes', recognized_label: 'White Dress Shirt'. "
+            "     - Entry 3: category 'tie', recognized_label: 'Red Silk Necktie' (or 'Red Tie'). "
             "   STRICTLY IGNORE and DO NOT extract any casual/incidental jewelry (such as small rings on fingers, ear studs, thin bracelets, wrist threads) worn by the model. "
-            "   Only return genuine clothing categories ('dress', 'upper_clothes', 'pants', 'saree', 'lehenga', 'skirt'). "
+            "   Allowed categories: 'dress', 'upper_clothes', 'pants', 'saree', 'lehenga', 'skirt', 'tie'. "
             "2. STANDALONE JEWELRY SHOWCASE: ONLY if the photo is a dedicated macro jewelry showcase (NOT a casual accessory on a clothed person): "
             "   - If a dedicated jewelry set (e.g. Necklace AND matching Earrings on display): return multiple entries (necklace, earrings, ring). "
             "   - If single jewelry item: categorize strictly as 'necklace', 'earrings', 'ring', or 'bangles' with high-precision gemologist deconstruction. "
             "   - Enforce >= 85% prominence: only extract jewelry if it is the primary hero subject with >= 85% visual clarity and prominence. "
-            "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', or 'lehenga' with full textile weave, dye darkness, and pose straightening. "
+            "3. If the photo contains APPAREL: Categorize as 'upper_clothes', 'pants', 'dress', 'skirt', 'saree', 'lehenga', or 'tie' with full textile weave, dye darkness, and pose straightening. "
             "   CRITICAL PULLOVER vs SHIRT & COLOR LOCK: If it is a T-shirt, athletic jersey, or polo, classify it strictly as a PULLOVER with a solid seamless front panel (ZERO buttons down torso). Inspect both sides of the chest for any authentic brand logos, crests, or emblems and describe all of them without omitting any. "
             "   CRITICAL DE-FOLDING & SPOTLESS FABRIC: If the garment is folded diagonally or crumpled on a bed/floor, command full de-folding into a complete symmetrical 3D garment with pristine unsmudged sleeves. "
             "4. Surface Rejection: If placed on a bedsheet, blanket, table, or floor, the surface is 100% BACKGROUND."
@@ -847,7 +875,7 @@ def analyze_garment_and_build_prompts(
         target_norm = (target_garment or "all").strip().lower()
         results: list[dict[str, Any]] = []
 
-        APPAREL_CATS = {"dress", "upper_clothes", "pants", "skirt", "saree", "lehenga"}
+        APPAREL_CATS = {"dress", "upper_clothes", "pants", "skirt", "saree", "lehenga", "tie"}
         JEWELRY_CATS = {"necklace", "ring", "earrings", "bangles"}
         has_apparel = any(str(it.get("category", "")).strip().lower() in APPAREL_CATS for it in items)
 

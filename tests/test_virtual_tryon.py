@@ -828,7 +828,7 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("sharp pointed triangular arrowhead blade tip at the bottom", prompt)
 
     def test_outerwear_with_tie_phrase_retains_coat_and_does_not_become_tie(self):
-        """Verify label 'Black Suit Jacket with Red Tie' generates standalone coat and does NOT vanish into a tie."""
+        """Verify label 'Black Suit Jacket with Red Tie' generates tailored suit jacket with integrated tie."""
         from app.core.flow_b.prompt_generator import _build_final_prompt
 
         prompt = _build_final_prompt(
@@ -840,10 +840,28 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
             has_logo=False,
             logo_and_graphics="none",
         )
-        self.assertIn("EXCLUSIVELY the standalone outerwear blazer / suit jacket / coat", prompt)
-        self.assertIn("CRITICAL HOLLOW APERTURE MANDATE", prompt)
+        self.assertIn("tailored suit jacket layered over the crisp collared dress shirt and matching formal necktie", prompt)
+        self.assertIn("CRITICAL TIE & COLLAR INTEGRATION", prompt)
         self.assertIn("STRICT COAT/JACKET TAILORING FIDELITY", prompt)
         self.assertNotIn("EXCLUSIVELY THE STANDALONE FORMAL NECKTIE", prompt)
+
+    def test_outerwear_standalone_jacket_enforces_hollow_aperture(self):
+        """Verify label 'Formal Black Suit Jacket' generates standalone jacket with hollow aperture and zero tie/shirt."""
+        from app.core.flow_b.prompt_generator import _build_final_prompt
+
+        prompt = _build_final_prompt(
+            garment_description="tailored formal black suit jacket featuring satin shawl lapels and welt breast pocket with pocket square",
+            category="upper_clothes",
+            recognized_label="Formal Black Suit Jacket",
+            fabric_texture="structured wool suiting with subtle satin lapel sheen",
+            surface_finish="matte wool with contrast satin lapels",
+            has_logo=False,
+            logo_and_graphics="none",
+        )
+        self.assertIn("EXCLUSIVELY the standalone outerwear blazer / suit jacket / coat", prompt)
+        self.assertIn("CRITICAL HOLLOW APERTURE MANDATE", prompt)
+        self.assertIn("ZERO FUSED INNER SHIRT / ZERO T-SHIRT / ZERO TIE", prompt)
+        self.assertIn("STRICT COAT/JACKET TAILORING FIDELITY", prompt)
 
 
 if __name__ == "__main__":
