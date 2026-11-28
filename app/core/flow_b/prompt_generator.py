@@ -410,9 +410,38 @@ def _build_final_prompt(
             "CHEST EMBLEMS & LOGOS: Faithfully preserve and replicate only the authentic logos, badges, embroidery, and crests genuinely visible on the reference photo in their exact relative positions. If plain without logos, do NOT invent or add any. "
         )
 
-    is_necktie = cat in ("tie", "necktie", "bowtie") or (
-        bool(re.search(r'\b(necktie|bowtie|bow tie|formal tie|silk tie|red tie|black tie|suit tie)\b', full_text))
-        or (bool(re.search(r'\btie\b', full_text)) and not bool(re.search(r'\b(tie-dye|tie dye|tie-front|tie front|tie waist|tie neck blouse)\b', full_text)))
+    is_outerwear = any(
+        k in full_text
+        for k in (
+            "blazer", "suit jacket", "jacket", "coat", "cardigan", "tuxedo",
+            "shrug", "overcoat", "waistcoat", "nehru jacket", "bomber", "suit"
+        )
+    ) or any(
+        k in label_clean.lower()
+        for k in (
+            "blazer", "suit jacket", "jacket", "coat", "cardigan", "tuxedo",
+            "shrug", "overcoat", "waistcoat", "nehru jacket", "bomber", "suit"
+        )
+    )
+
+    is_pullover = not is_outerwear and any(
+        k in full_text
+        for k in (
+            "t-shirt", "tshirt", "t shirt", "tee", "jersey", "polo", "hoodie", "sweatshirt",
+            "pullover", "football", "soccer", "cricket", "basketball", "athletic", "track top"
+        )
+    )
+
+    is_necktie = not is_outerwear and not is_pullover and (
+        cat in ("tie", "necktie", "bowtie")
+        or (
+            any(k in label_clean.lower() for k in ("necktie", "bowtie", "bow tie", "tie"))
+            and not any(k in label_clean.lower() for k in ("jacket", "blazer", "coat", "suit", "tuxedo", "shirt", "top", "kurta", "dress"))
+        )
+        or (
+            any(k in full_text for k in ("standalone necktie", "standalone tie", "pure silk tie", "red silk tie"))
+            and not is_outerwear
+        )
     )
 
     if is_necktie:
@@ -516,10 +545,11 @@ def _build_final_prompt(
         )
         garment_lock = (
             "STRICT AUTHENTICITY & DESIGN CLONING (DRESS WAHI REHNA CHAHIYE): "
-            "While straightening into the e-commerce studio pose, you MUST preserve the EXACT garment from the reference photo without altering it! "
+            "While straightening into the e-commerce studio pose, you MUST preserve the EXACT garment design, silhouette, cut, and fabric texture from the reference photo without altering it! "
             f"{fabric_clause}"
             f"{logo_clause}"
             "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, pattern motifs, collar shape, buttons, placket, and stitching directly from the reference photo. "
+            "STRICT COAT/JACKET TAILORING FIDELITY: If the garment is an outerwear coat or suit jacket, you MUST faithfully clone the exact lapel design (whether satin shawl lapel, peak lapel, or notch lapel), exact breast welt pocket with folded pocket square (if present in the photo), exterior flap pockets, button stance, structured shoulder pads, and tailored suiting drape directly from the reference photo without altering the design! "
             "STRICT COLOR FIDELITY: Retain the authentic real-world colors of all fabric panels, contrast trims, collar borders, and stripes directly from the photo without any artificial hue shift or color substitution."
         )
         return (

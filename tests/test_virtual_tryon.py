@@ -827,6 +827,24 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertNotIn("upper-body shirt / top / kurta floating upright", prompt)
         self.assertIn("sharp pointed triangular arrowhead blade tip at the bottom", prompt)
 
+    def test_outerwear_with_tie_phrase_retains_coat_and_does_not_become_tie(self):
+        """Verify label 'Black Suit Jacket with Red Tie' generates standalone coat and does NOT vanish into a tie."""
+        from app.core.flow_b.prompt_generator import _build_final_prompt
+
+        prompt = _build_final_prompt(
+            garment_description="tailored black suit jacket worn over collared shirt with red tie, featuring satin shawl lapels and welt breast pocket with pocket square",
+            category="upper_clothes",
+            recognized_label="Black Suit Jacket with Red Tie",
+            fabric_texture="structured wool suiting with subtle satin lapel sheen",
+            surface_finish="matte wool with contrast satin lapels",
+            has_logo=False,
+            logo_and_graphics="none",
+        )
+        self.assertIn("EXCLUSIVELY the standalone outerwear blazer / suit jacket / coat", prompt)
+        self.assertIn("CRITICAL HOLLOW APERTURE MANDATE", prompt)
+        self.assertIn("STRICT COAT/JACKET TAILORING FIDELITY", prompt)
+        self.assertNotIn("EXCLUSIVELY THE STANDALONE FORMAL NECKTIE", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
