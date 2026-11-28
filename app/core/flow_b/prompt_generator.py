@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import os
+import re
 from typing import Any
 
 import httpx
@@ -29,6 +30,18 @@ OUTERWEAR_STUDIO_RULES = (
     "MANDATORY POSE STRAIGHTENING: Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on, level horizontal shoulders, both tailored sleeves hanging straight down along both sides at symmetrical matching angles, crisp pressed lapels, and level bottom hemline. "
     "MANDATORY FABRIC TEXTURE & WEAVE LOCK: Reconstruct the authentic suit wool, linen blend, cotton twill, or velvet weave with genuine tailored structure, structured shoulder pads, and authentic lapel roll. "
     "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, bed, mattress, bedsheet, blanket, carpet, floor, furniture, or shadows."
+)
+
+TIE_STUDIO_RULES = (
+    "Pristine luxury menswear accessories e-commerce catalog photography (Hugo Boss / Brooks Brothers / SuitSupply fashion hero shot): "
+    "EXCLUSIVELY THE STANDALONE FORMAL NECKTIE / TIE FLOATING UPRIGHT: "
+    "CRITICAL ISOLATION RULE (ABSOLUTELY ZERO SHIRT, ZERO SUIT, ZERO COLLAR, ZERO MANNEQUIN BODY): "
+    "Reconstruct ONLY the standalone necktie itself! "
+    "ABSOLUTELY DO NOT generate, paint, or add any shirt, button-down collar, dress shirt, jacket, sleeves, lapels, buttons, or human/mannequin torso! "
+    "MANDATORY TIE GEOMETRY & ANATOMY: Centered perfectly upright facing straight-on, displaying an elegant tailored knot at the top (four-in-hand or half-windsor knot), "
+    "a clean vertical drape down the center, crisp pressed folded diagonal edges, and a sharp pointed triangular arrowhead blade tip at the bottom. "
+    "MANDATORY FABRIC WEAVE & LUSTER LOCK: Reconstruct the authentic high-density silk weave, satin finish, micro-jacquard texture, or woven twill hand with natural fabric luster and subtle light reflection matching the reference image. "
+    "Pure solid white background (#FFFFFF), completely free of any person, model, face, hair, neck, skin, arms, hands, legs, shirt, collar, suit, or shadows."
 )
 
 UPPER_STUDIO_RULES = (
@@ -160,7 +173,7 @@ CRITICAL RULES:
    - Slits & Hemline: Straight hemline, athletic curved hem, etc.
 
 5. Outfit Mode & Separates (STRICT REALITY RULE):
-   - LAYERED APPAREL (BLAZER / COAT / JACKET OVER SHIRT / T-SHIRT):
+   - LAYERED APPAREL (BLAZER / COAT / JACKET OVER SHIRT / T-SHIRT WITH OR WITHOUT TIE):
      * If the person in the photo is wearing a LAYERED OUTFIT (e.g. an outerwear blazer, suit jacket, coat, or cardigan worn over an inner collared shirt, t-shirt, or top):
        YOU MUST EXTRACT THEM AS SEPARATE GARMENTS in the "garments" list!
        1. Standalone Outerwear Entry: Category "upper_clothes" for the blazer/jacket alone.
@@ -170,7 +183,11 @@ CRITICAL RULES:
        2. Standalone Inner Top Entry: Category "upper_clothes" for the shirt/t-shirt alone.
           - Set `recognized_label`: "Studio Shirt" or "Studio T-Shirt".
           - In `garment_description`, reconstruct the COMPLETE standalone shirt/t-shirt with both shoulders, full chest panel, neckline, and sleeves completely unoccluded as if worn by itself without any jacket.
-       3. Lower garment (if present): Category "pants".
+       3. Standalone Necktie / Bowtie Entry (if worn): Category "tie".
+          - Set `recognized_label`: e.g. "Red Silk Necktie" or "Studio Necktie".
+          - In `garment_description`, describe ONLY the standalone necktie (knot at top, plumb vertical blade drape, pointed arrowhead tip, silk weave and color).
+          - Explicitly specify: "STANDALONE NECKTIE: Reconstruct ONLY the standalone necktie itself on pure white background. ABSOLUTELY NO shirt, NO collar, NO suit jacket, and NO sleeves."
+       4. Lower garment (if present): Category "pants".
    - IF AND ONLY IF the person is actually wearing contrasting separates (e.g. shirt + jeans) OR two distinct garments are clearly laid out:
      Output separate entries for the upper garment ("upper_clothes") and lower garment ("pants").
    - IF ONLY ONE GARMENT IS VISIBLE OR LAID OUT (e.g., a single kurta, a single dress, a single shirt):
@@ -257,6 +274,7 @@ CRITICAL RULES:
 
 12. Allowed category values:
    - For Apparel: "upper_clothes", "pants", "dress", "skirt", "saree", "lehenga"
+   - For Neckwear / Accessories: "tie"
    - For Jewelry: "necklace", "ring", "earrings", "bangles"
 
 Return strictly valid JSON format:
@@ -390,6 +408,44 @@ def _build_final_prompt(
     else:
         logo_clause = (
             "CHEST EMBLEMS & LOGOS: Faithfully preserve and replicate only the authentic logos, badges, embroidery, and crests genuinely visible on the reference photo in their exact relative positions. If plain without logos, do NOT invent or add any. "
+        )
+
+    is_necktie = cat in ("tie", "necktie", "bowtie") or (
+        bool(re.search(r'\b(necktie|bowtie|bow tie|formal tie|silk tie|red tie|black tie|suit tie)\b', full_text))
+        or (bool(re.search(r'\btie\b', full_text)) and not bool(re.search(r'\b(tie-dye|tie dye|tie-front|tie front|tie waist|tie neck blouse)\b', full_text)))
+    )
+
+    if is_necktie:
+        isolation_header = (
+            "Generate an empty 3D e-commerce studio catalog product photograph (Hugo Boss / Brooks Brothers / SuitSupply fashion hero shot) showing EXCLUSIVELY the standalone "
+            "formal necktie / silk tie floating upright vertically in a direct 0-degree straight front-facing view on a pure solid white background (#FFFFFF). "
+            "CRITICAL ISOLATION RULE (ABSOLUTELY ZERO SHIRT / ZERO COLLAR / ZERO SUIT / ZERO BODY / ZERO SLEEVES): "
+            "Reconstruct ONLY the standalone necktie itself! "
+            "ABSOLUTELY DO NOT generate, paint, or add any shirt, button-down collar, dress shirt, suit jacket, blazer, sleeves, buttons, torso, or human/mannequin body! "
+            "The output must show ONLY the elegant standalone necktie with its top knot, plumb vertical blade drape, and pointed arrowhead tip at the bottom. "
+            "No human body, NO head, NO face, NO hair, NO neck, NO skin, NO arms, NO hands, NO legs, NO feet, NO shirt, NO jacket."
+        )
+        pose_rectification = (
+            "MANDATORY E-COMMERCE POSE STRAIGHTENING: "
+            "1. Centered upright, perfectly straight 0-degree direct frontal shot facing the camera straight-on. "
+            "2. Tailored necktie anatomy: Elegant knot at the top (four-in-hand or windsor knot), perfectly straight plumb vertical blade drape down the center line, crisp pressed borders, and sharp symmetrical pointed arrowhead tip at bottom. "
+            "3. Floating standalone on pure white background (#FFFFFF) with zero shirt and zero mannequin body. "
+        )
+        garment_lock = (
+            "STRICT AUTHENTICITY & DESIGN CLONING: "
+            "While isolating the necktie, you MUST preserve the EXACT tie from the reference photo without altering it! "
+            f"{fabric_clause}"
+            f"{logo_clause}"
+            "Faithfully replicate the identical real-world dye color, hue, lightness, textile weave, satin sheen, and pattern motifs directly from the reference photo. "
+            "STRICT COLOR FIDELITY: Retain the authentic real-world color directly from the photo without any artificial hue shift."
+        )
+        return (
+            f"{isolation_header} "
+            f"{pose_rectification} "
+            f"{garment_lock} "
+            f"{surface_rejection} "
+            f"Exact standalone necktie to isolate and faithfully reconstruct from reference photo: {desc_clean}. "
+            f"{TIE_STUDIO_RULES}"
         )
 
     if cat == "upper_clothes":

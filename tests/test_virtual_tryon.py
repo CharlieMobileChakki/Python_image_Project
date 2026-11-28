@@ -808,6 +808,25 @@ class TestTryonStylistAndPipeline(unittest.TestCase):
         self.assertIn("ABSOLUTELY DO NOT generate, paint, or add any inner shirt", prompt)
         self.assertIn("DO NOT fill or color the chest opening in the jacket's own color", prompt)
 
+    def test_standalone_necktie_studio_isolation(self):
+        """Verify red tie or necktie category strictly generates standalone tie and forbids shirt/jacket."""
+        from app.core.flow_b.prompt_generator import _build_final_prompt
+
+        prompt = _build_final_prompt(
+            garment_description="vibrant silk necktie in crimson red with subtle woven micro-texture",
+            category="upper_clothes",
+            recognized_label="Red Tie",
+            fabric_texture="smooth woven silk satin",
+            surface_finish="subtle satin sheen",
+            has_logo=False,
+            logo_and_graphics="none",
+        )
+        self.assertIn("EXCLUSIVELY THE STANDALONE FORMAL NECKTIE", prompt)
+        self.assertIn("CRITICAL ISOLATION RULE (ABSOLUTELY ZERO SHIRT", prompt)
+        self.assertIn("ABSOLUTELY DO NOT generate, paint, or add any shirt, button-down collar", prompt)
+        self.assertNotIn("upper-body shirt / top / kurta floating upright", prompt)
+        self.assertIn("sharp pointed triangular arrowhead blade tip at the bottom", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
