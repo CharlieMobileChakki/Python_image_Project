@@ -479,15 +479,20 @@ def _call_http_worker_generate(
 
 
 def generate_garment_via_gpu(
-    reference_image: Image.Image | list[Image.Image],
-    prompt: str,
+    reference_image: Image.Image | list[Image.Image] | None = None,
+    prompt: str = "",
     steps: int = 12,
     guidance_scale: float = 1.4,
     seed: int | None = None,
     width: int | None = None,
     height: int | None = None,
+    **kwargs: Any,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """Generate studio PNG via configured GPU backend (single or multi-image RunPod/HTTP cluster)."""
+    if reference_image is None:
+        reference_image = kwargs.get("condition_images") or kwargs.get("condition_image")
+    if reference_image is None:
+        raise ValueError("reference_image must be provided.")
     configured, msg = is_gpu_worker_configured()
     if not configured:
         raise RuntimeError(msg)

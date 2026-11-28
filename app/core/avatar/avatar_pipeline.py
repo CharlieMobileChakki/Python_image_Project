@@ -88,9 +88,8 @@ def process_avatar_pipeline(
 
     try:
         generated_img, diagnostics = generate_garment_via_gpu(
+            reference_image=cropped_ref,
             prompt=prompt,
-            condition_image=cropped_ref,
-            condition_images=[cropped_ref],
             steps=steps,
             guidance_scale=guidance,
             width=1024,
